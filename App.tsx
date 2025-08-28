@@ -75,7 +75,9 @@ const App: React.FC = () => {
 
         if (sessionsToLoad.length > 0) {
             setChatSessions(sessionsToLoad);
-            setActiveChatId(sessionsToLoad[0].id);
+            const savedActiveId = localStorage.getItem('activeChatId');
+            const activeSessionExists = savedActiveId && sessionsToLoad.some(s => s.id === savedActiveId);
+            setActiveChatId(activeSessionExists ? savedActiveId : sessionsToLoad[0].id);
         }
 
         // --- Load other settings ---
@@ -95,14 +97,17 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Save sessions to localStorage whenever they change
+  // Save sessions and active chat ID to localStorage whenever they change
   useEffect(() => {
     try {
         localStorage.setItem('chatSessions', JSON.stringify(chatSessions));
+        if (activeChatId) {
+          localStorage.setItem('activeChatId', activeChatId);
+        }
     } catch (error) {
-        console.error("Failed to save sessions to localStorage", error);
+        console.error("Failed to save state to localStorage", error);
     }
-  }, [chatSessions]);
+  }, [chatSessions, activeChatId]);
 
   // Save model and background color to localStorage
   useEffect(() => {
@@ -164,6 +169,7 @@ const App: React.FC = () => {
       title: 'New Chat',
       messages: [{ role: 'model', text: 'Hello! How can I help you today?', timestamp: Date.now() }],
       model: model, // Use the current default model
+      isFavorite: false,
     };
     setChatSessions(prev => [newChat, ...prev]);
     setActiveChatId(newChat.id);
@@ -183,11 +189,22 @@ const App: React.FC = () => {
                 setActiveChatId(newSessions[0].id);
             } else {
                 setActiveChatId(null);
+                 localStorage.removeItem('activeChatId');
             }
         }
         return newSessions;
     });
   }, [activeChatId]);
+
+  const toggleFavorite = useCallback((idToToggle: string) => {
+    setChatSessions(prev => 
+        prev.map(session => 
+            session.id === idToToggle 
+            ? { ...session, isFavorite: !session.isFavorite } 
+            : session
+        )
+    );
+  }, []);
 
   const handleSetAttachments = (files: FileList | null) => {
     if (!files) return;
@@ -249,37 +266,40 @@ const App: React.FC = () => {
   const toggleDeepThink = () => setIsDeepThinkEnabled(prev => !prev);
 
 
-  const sendMessage = async (messageText: string) => {
+  const sendMessage = async (messageText: string, messageAttachments = attachments, customHistory?: Message[]) => {
     if (!activeChatId) return;
 
     const currentChat = chatSessions.find(c => c.id === activeChatId);
     if (!currentChat) return;
+    
+    const historyForAPI = customHistory || [...currentChat.messages];
 
-    const userMessage: Message = {
-      role: 'user',
-      text: messageText,
-      timestamp: Date.now(),
-      ...(attachments.length > 0 && { attachments }),
-    };
+    // Only add a new user message if we are not using a custom history (i.e., not an edit/refresh)
+    if (!customHistory) {
+      const userMessage: Message = {
+        role: 'user',
+        text: messageText,
+        timestamp: Date.now(),
+        ...(messageAttachments.length > 0 && { attachments: messageAttachments }),
+      };
 
-    const historyForAPI = [...currentChat.messages];
-    setChatSessions(prev =>
-      prev.map(s =>
-        s.id === activeChatId
-          ? {
-              ...s,
-              title: s.messages.length === 1 ? messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '') : s.title,
-              messages: [...s.messages, userMessage],
-            }
-          : s
-      )
-    );
+      setChatSessions(prev =>
+        prev.map(s =>
+          s.id === activeChatId
+            ? {
+                ...s,
+                title: s.messages.length === 1 ? messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '') : s.title,
+                messages: [...s.messages, userMessage],
+              }
+            : s
+        )
+      );
+    }
     
     setIsLoading(true);
-    const currentAttachments = attachments;
     const webSearch = isWebSearchEnabled;
     const deepThink = isDeepThinkEnabled;
-    setAttachments([]);
+    setAttachments([]); // Clear attachments after sending
     setIsWebSearchEnabled(false);
     setIsDeepThinkEnabled(false);
 
@@ -297,7 +317,7 @@ const App: React.FC = () => {
             finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
         }
 
-        const stream = await streamModelResponse(finalModel, historyForAPI, messageText, currentAttachments, webSearch, deepThink);
+        const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink);
         let isFirstChunk = true;
         let modelResponse = '';
 
@@ -351,6 +371,55 @@ const App: React.FC = () => {
       setThinkingStatus(null);
     }
   };
+  
+  const handleEditMessage = async (messageIndex: number, newText: string) => {
+      if (!activeChatId) return;
+      
+      let sessionToUpdate: ChatSession | undefined;
+      
+      setChatSessions(prev => prev.map(s => {
+          if (s.id === activeChatId) {
+              const truncatedMessages = s.messages.slice(0, messageIndex);
+              const editedMessage: Message = {
+                  ...s.messages[messageIndex],
+                  text: newText,
+                  timestamp: Date.now(),
+              };
+              sessionToUpdate = { ...s, messages: [...truncatedMessages, editedMessage] };
+              return sessionToUpdate;
+          }
+          return s;
+      }));
+
+      if (sessionToUpdate) {
+        // We use the history *before* the edited message to generate a new response
+        const historyForApi = sessionToUpdate.messages.slice(0, messageIndex); 
+        await sendMessage(newText, sessionToUpdate.messages[messageIndex].attachments, historyForApi);
+      }
+  };
+
+  const handleRefreshResponse = async (messageIndex: number) => {
+    if (!activeChatId || messageIndex === 0) return;
+    
+    let sessionToUpdate: ChatSession | undefined;
+    let userPrompt: Message | undefined;
+
+    setChatSessions(prev => prev.map(s => {
+        if (s.id === activeChatId) {
+            // Remove the model's response and any subsequent messages
+            const truncatedMessages = s.messages.slice(0, messageIndex);
+            userPrompt = truncatedMessages[truncatedMessages.length - 1];
+            sessionToUpdate = { ...s, messages: truncatedMessages };
+            return sessionToUpdate;
+        }
+        return s;
+    }));
+
+    if (sessionToUpdate && userPrompt && userPrompt.role === 'user') {
+        const historyForApi = sessionToUpdate.messages.slice(0, messageIndex - 1);
+        await sendMessage(userPrompt.text, userPrompt.attachments, historyForApi);
+    }
+  };
 
   const activeChat = chatSessions.find(c => c.id === activeChatId);
 
@@ -370,6 +439,7 @@ const App: React.FC = () => {
         startNewChat={startNewChat}
         setActiveChat={setActiveChat}
         deleteChat={deleteChat}
+        toggleFavorite={toggleFavorite}
         onSettingsClick={() => setIsSettingsOpen(true)}
         onUserClick={() => setIsLoginModalOpen(true)}
         isGuestUser={isGuestUser}
@@ -378,6 +448,8 @@ const App: React.FC = () => {
         <ChatView
           activeChat={activeChat || null}
           sendMessage={sendMessage}
+          handleEditMessage={handleEditMessage}
+          handleRefreshResponse={handleRefreshResponse}
           isLoading={isLoading}
           thinkingStatus={thinkingStatus}
           attachments={attachments}
@@ -392,6 +464,7 @@ const App: React.FC = () => {
           chatBgColor={chatBgColor}
           defaultModel={model}
           notifications={notifications}
+          setNotifications={setNotifications}
           clearNotifications={() => setNotifications([])}
         />
       </main>
