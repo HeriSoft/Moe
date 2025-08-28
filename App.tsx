@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } from './components/ImageSettingsModal';
+import { MediaGalleryModal } from './components/MediaGalleryModal';
 import {
   streamModelResponse,
   generateImage,
@@ -78,6 +79,11 @@ const App: React.FC = () => {
   const [imageGenerationSettings, setImageGenerationSettings] = useState<ImageGenerationSettings | null>(null);
   const [imageEditingSettings, setImageEditingSettings] = useState<ImageEditingSettings | null>(null);
   const [commandToPrepend, setCommandToPrepend] = useState('');
+  
+  // New state for new features
+  const [promptForNewChat, setPromptForNewChat] = useState<string | null>(null);
+  const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
+
 
 
   const loadChatsFromDrive = useCallback(async () => {
@@ -198,10 +204,10 @@ const App: React.FC = () => {
     }
   }, [model, activeChatId, isLoggedIn]);
 
-  const startNewChat = useCallback(async () => {
+  const startNewChat = useCallback(async (): Promise<string | null> => {
     if (!isLoggedIn) {
         setIsLoginModalOpen(true);
-        return;
+        return null;
     }
     const newChat: ChatSession = {
       id: Date.now().toString(),
@@ -217,12 +223,25 @@ const App: React.FC = () => {
         setChatSessions(prev => [savedChat, ...prev]);
         setActiveChatId(savedChat.id);
         setIsSidebarOpen(false);
+        return savedChat.id;
     } catch (error) {
         console.error("Failed to start new chat:", error);
         const errorMessage = error instanceof Error ? error.message : "Could not create new chat.";
         setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+        return null;
     }
   }, [model, isLoggedIn]);
+  
+  const startChatWithPrompt = useCallback(async (prompt: string) => {
+      if (!isLoggedIn) {
+          setIsLoginModalOpen(true);
+          return;
+      }
+      const newChatId = await startNewChat();
+      if (newChatId) {
+          setPromptForNewChat(prompt);
+      }
+  }, [isLoggedIn, startNewChat]);
 
   const setActiveChat = useCallback((id: string) => {
     setActiveChatId(id);
@@ -426,7 +445,7 @@ const App: React.FC = () => {
 
     if (!customHistory) {
       const isFirstMessage = currentChat.messages.length <= 1;
-      const newTitle = isFirstMessage ? messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '') : currentChat.title;
+      const newTitle = isFirstMessage && messageText ? messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '') : currentChat.title;
       currentChat = {
         ...currentChat,
         title: newTitle,
@@ -482,37 +501,40 @@ const App: React.FC = () => {
 
             for await (const chunk of stream) {
                 if (chunk.status) setThinkingStatus(chunk.status);
-                if (chunk.text) { 
-                    if (isFirstChunk) setThinkingStatus(null);
-                    modelResponse += chunk.text;
-                    setChatSessions(prev =>
-                        prev.map(s => {
-                            if (s.id === activeChatId) {
-                                let newMessages = [...s.messages];
-                                if (isFirstChunk) {
-                                    const newModelMessage: Message = {
-                                        role: 'model',
-                                        text: modelResponse,
-                                        timestamp: Date.now(),
-                                    };
-                                    // Pass Drive file context if it exists
-                                    if (sourceDriveAttachment) {
-                                        newModelMessage.sourceDriveFileId = sourceDriveAttachment.driveFileId;
-                                        newModelMessage.sourceDriveFileName = sourceDriveAttachment.fileName;
-                                        newModelMessage.sourceDriveFileMimeType = sourceDriveAttachment.mimeType;
-                                    }
-                                    newMessages.push(newModelMessage);
-                                    isFirstChunk = false;
-                                } else if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'model') {
-                                   newMessages[newMessages.length - 1].text = modelResponse;
-                                }
-                                finalChatState = { ...s, messages: newMessages }; // keep track of the latest state
-                                return finalChatState;
-                            }
-                            return s;
-                        })
-                    );
-                }
+
+                setChatSessions(prev =>
+                    prev.map(s => {
+                        if (s.id !== activeChatId) return s;
+
+                        let newMessages = [...s.messages];
+                        let currentModelMessage = newMessages[newMessages.length - 1];
+
+                        if (isFirstChunk && chunk.text) {
+                             const newMsg: Message = { role: 'model', text: '', timestamp: Date.now() };
+                             if (sourceDriveAttachment) {
+                                 newMsg.sourceDriveFileId = sourceDriveAttachment.driveFileId;
+                                 newMsg.sourceDriveFileName = sourceDriveAttachment.fileName;
+                                 newMsg.sourceDriveFileMimeType = sourceDriveAttachment.mimeType;
+                             }
+                             newMessages.push(newMsg);
+                             currentModelMessage = newMsg;
+                             isFirstChunk = false;
+                             setThinkingStatus(null);
+                        }
+
+                        if (chunk.text && currentModelMessage?.role === 'model') {
+                            modelResponse += chunk.text;
+                            currentModelMessage.text = modelResponse;
+                        }
+                        
+                        if (chunk.groundingMetadata && currentModelMessage?.role === 'model') {
+                            currentModelMessage.groundingMetadata = chunk.groundingMetadata;
+                        }
+
+                        finalChatState = { ...s, messages: newMessages };
+                        return finalChatState;
+                    })
+                );
             }
         }
         await googleDriveService.saveSession(finalChatState);
@@ -537,6 +559,17 @@ const App: React.FC = () => {
     }
   };
   
+  useEffect(() => {
+    if (promptForNewChat && activeChatId) {
+        const currentChat = sessionsRef.current.find(c => c.id === activeChatId);
+        if (currentChat && currentChat.messages.length === 1 && currentChat.messages[0].role === 'model') {
+            sendMessage(promptForNewChat);
+            setPromptForNewChat(null);
+        }
+    }
+  }, [promptForNewChat, activeChatId]);
+
+
   const handleEditMessage = async (messageIndex: number, newText: string) => {
       if (!activeChatId || !isLoggedIn) return;
       
@@ -568,6 +601,20 @@ const App: React.FC = () => {
         await sendMessage(userPrompt.text, userPrompt.attachments, historyForApi);
     }
   };
+  
+  const recentMedia = useMemo(() => {
+    return chatSessions
+        .flatMap(session => 
+            session.messages.map(message => ({ ...message, chatId: session.id }))
+        )
+        .filter(message => message.attachments && message.attachments.length > 0)
+        .flatMap(message => 
+            message.attachments!.map(att => ({ ...att, chatId: message.chatId, timestamp: message.timestamp }))
+        )
+        .filter(att => att.mimeType.startsWith('image/'))
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 50); // Limit to latest 50 for performance
+  }, [chatSessions]);
 
   const activeChat = chatSessions.find(c => c.id === activeChatId);
 
@@ -629,6 +676,8 @@ const App: React.FC = () => {
           clearCommandToPrepend={() => setCommandToPrepend('')}
           onAttachFromDrive={handleAttachFromDrive}
           onSaveToDrive={handleSaveToDrive}
+          startChatWithPrompt={startChatWithPrompt}
+          onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
         />
       </main>
       <SettingsModal
@@ -654,6 +703,12 @@ const App: React.FC = () => {
         onClose={() => setIsImageSettingsModalOpen(false)}
         onApply={handleApplyImageSettings}
         mode={imageModalMode}
+      />
+      <MediaGalleryModal
+          isOpen={isMediaGalleryOpen}
+          onClose={() => setIsMediaGalleryOpen(false)}
+          mediaItems={recentMedia}
+          setActiveChat={setActiveChat}
       />
     </div>
   );

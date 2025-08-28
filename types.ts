@@ -5,6 +5,15 @@ export interface Attachment {
   driveFileId?: string; // Google Drive's unique file ID
 }
 
+// NEW: Define the structure for a single web search source
+export interface GroundingChunk {
+  web: {
+    uri: string;
+    title: string;
+  };
+}
+
+
 export interface Message {
   role: 'user' | 'model';
   text: string;
@@ -13,6 +22,7 @@ export interface Message {
   sourceDriveFileId?: string; // The Drive file ID that was the source for this message
   sourceDriveFileName?: string; // The name of the source Drive file
   sourceDriveFileMimeType?: string; // The MIME type of the source Drive file
+  groundingMetadata?: GroundingChunk[]; // To store web search sources
 }
 
 export interface ChatSession {
