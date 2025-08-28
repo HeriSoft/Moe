@@ -1,13 +1,13 @@
-Flask==2.2.2
+Flask==3.0.3
 onnxruntime==1.17.3
-opencv-python-headless==4.8.1.78
-numpy==1.24.4
+opencv-python-headless==4.9.0.80
+numpy==1.26.4
 insightface==0.7.3
-requests==2.31.0
+requests==2.32.3
 gfpgan==1.3.8
 basicsr==1.4.2
 facexlib==0.3.0
 # We need to install torch and torchvision for gfpgan, but we specify CPU-only versions
-# to keep the slug size smaller for Vercel's limits.
-torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
-torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cpu
+# to keep the slug size smaller for Vercel's limits. Updated to Python 3.12 compatible versions.
+torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu
