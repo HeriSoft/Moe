@@ -1,6 +1,8 @@
+
 // File: api/dev-server.js
 // This server wrapper is for local development ONLY.
 // It allows the Vercel function in proxy.js to be run with a standard Node.js process.
+// It also forwards requests intended for the python service.
 import http from 'http';
 import handler from './proxy.js';
 
@@ -27,25 +29,39 @@ const server = http.createServer(async (req, res) => {
 
     // 3. Mock the Vercel Response object
     const vercelRes = {
+        _res: res, // Keep a reference to the original response object
+        _headers: {},
+        _statusCode: 200,
+
         status(statusCode) {
-            res.statusCode = statusCode;
-            return this; // Allow chaining, e.g., res.status(404).json(...)
+            this._statusCode = statusCode;
+            return this;
         },
         json(body) {
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(body));
+            this.setHeader('Content-Type', 'application/json');
+            this._res.writeHead(this._statusCode, this._headers);
+            this._res.end(JSON.stringify(body));
         },
         setHeader(key, value) {
-            res.setHeader(key, value);
+            this._headers[key.toLowerCase()] = value;
+            this._res.setHeader(key, value); // Also set on the real response
         },
         write(chunk) {
-            res.write(chunk);
+            if (!res.headersSent) {
+                this._res.writeHead(this._statusCode, this._headers);
+            }
+            this._res.write(chunk);
         },
         end(chunk) {
-            res.end(chunk);
+            if (!res.headersSent) {
+                this._res.writeHead(this._statusCode, this._headers);
+            }
+            this._res.end(chunk);
         },
         flushHeaders() {
-            // In Node's native http server, headers are flushed automatically. This is a no-op for compatibility.
+            if (!res.headersSent) {
+                 this._res.writeHead(this._statusCode, this._headers);
+            }
         }
     };
 
@@ -54,9 +70,12 @@ const server = http.createServer(async (req, res) => {
         await handler(vercelReq, vercelRes);
     } catch (error) {
         console.error('Error in local API dev server:', error);
-        res.statusCode = 500;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Internal Server Error in dev-server.js wrapper', details: error.message }));
+        // Ensure headers are not already sent before writing error response
+        if (!res.headersSent) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Internal Server Error in dev-server.js wrapper', details: error.message }));
+        }
     }
 });
 
@@ -65,6 +84,7 @@ const server = http.createServer(async (req, res) => {
 server.keepAliveTimeout = 300000; // 5 minutes
 
 server.listen(PORT, () => {
-    console.log(`[API] Local dev server listening on http://localhost:${PORT}`);
+    console.log(`[API] Local Node.js dev server listening on http://localhost:${PORT}`);
     console.log(`[Vite] Frontend should be proxying /api requests to this server.`);
+    console.log('[Python] For face swapping, make sure the Python dev server is also running (e.g., on port 3001).');
 });
