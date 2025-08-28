@@ -18,8 +18,8 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
-// Using appDataFolder scope for privacy, the app can only access its own folder.
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+// Using appDataFolder for privacy, plus userinfo scopes to get profile data.
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 const APP_FOLDER_NAME = 'Moe Chat Data';
 
 let gapi: any = null;
@@ -113,6 +113,14 @@ export async function initClient(
                     console.log("Token client initialized successfully.");
                     resolve();
                 } catch (error) {
+                    // Check for the specific error related to discovery docs
+                    if (error && typeof error === 'object' && 'result' in error) {
+                        const errorResult = (error as any).result?.error;
+                        if (errorResult && errorResult.message && errorResult.message.includes('API not found')) {
+                             reject(new Error("API discovery response missing required fields. Ensure 'Google Drive API' and 'Google People API' are enabled in your Google Cloud project."));
+                             return;
+                        }
+                    }
                     reject(error);
                 }
             });
