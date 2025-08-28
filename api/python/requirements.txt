@@ -7,7 +7,7 @@ requests==2.32.3
 gfpgan==1.3.8
 basicsr==1.4.2
 facexlib==0.3.0
-# We need to install torch and torchvision for gfpgan, but we specify CPU-only versions
-# to keep the slug size smaller for Vercel's limits. Updated to Python 3.12 compatible versions.
-torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
-torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu
+# We need to install torch and torchvision for gfpgan, but we specify the exact CPU-only wheel URLs
+# to keep the slug size smaller for Vercel's limits. This avoids pulling in large CUDA libraries.
+https://download.pytorch.org/whl/cpu/torch-2.3.1%2Bcpu-cp312-cp312-linux_x86_64.whl
+https://download.pytorch.org/whl/cpu/torchvision-0.18.1%2Bcpu-cp312-cp312-linux_x86_64.whl
