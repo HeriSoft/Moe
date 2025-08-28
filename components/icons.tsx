@@ -296,6 +296,17 @@ export const SaveToDriveIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) 
   </svg>
 );
 
+export const FaceSwapIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15.375a2.625 2.625 0 1 0 0-5.25 2.625 2.625 0 0 0 0 5.25Z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.375a2.625 2.625 0 1 0 0-5.25 2.625 2.625 0 0 0 0 5.25Z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6.375v1.5m-9-1.5v1.5" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="m15 11.25-1.5-1.5-1.5 1.5m-3-1.5L7.5 8.25 6 9.75" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 15s.375-.285.375-.632c0-.347-.375-.632-.375-.632m-16.5 1.264c0-.347-.375-.632-.375-.632s.375-.285.375-.632" />
+  </svg>
+);
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;

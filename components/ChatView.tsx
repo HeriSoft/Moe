@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
-import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon } from './icons';
-import { generateSpeech, getTranslation } from '../services/geminiService';
+import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon, FaceSwapIcon } from './icons';
+import { generateSpeech, getTranslation, swapFace } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
 declare global {
@@ -100,6 +100,7 @@ interface ChatViewProps {
   onSaveToDrive: (message: Message) => Promise<void>;
   startChatWithPrompt: (prompt: string) => void; // For prompt starters
   onOpenMediaGallery: () => void; // For media gallery
+  onOpenSwapFaceModal: () => void; // For Swap Face
 }
 
 const PROMPT_STARTERS = [
@@ -176,7 +177,7 @@ const COMMANDS = [
     { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
 ];
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery, onOpenSwapFaceModal }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -678,6 +679,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                          </div>
                     )}
                 </div>
+                 <button title={"Swap Face"} aria-label="Swap Face" onClick={onOpenSwapFaceModal} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                    <FaceSwapIcon className="w-5 h-5" />
+                </button>
                  <button title={"Tạo video (Sắp ra mắt)"} aria-label="Generate Video" onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
                     <VideoIcon className="w-5 h-5" />
                 </button>
