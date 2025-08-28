@@ -13,6 +13,9 @@
   },
   "dependencies": {
     "@google/genai": "^1.15.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.7.2",
+    "pdf-parse": "^1.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
