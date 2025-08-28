@@ -8,7 +8,8 @@ export async function streamModelResponse(
     newMessage: string,
     attachments: Attachment[] | null,
     isWebSearchEnabled: boolean,
-    isDeepThinkEnabled: boolean
+    isDeepThinkEnabled: boolean,
+    systemInstruction?: string, // Added for personas
 ) {
     const response = await fetch('/api/proxy', {
         method: 'POST',
@@ -22,6 +23,7 @@ export async function streamModelResponse(
                 attachments,
                 isWebSearchEnabled,
                 isDeepThinkEnabled,
+                systemInstruction, // Pass it to the proxy
             }
         })
     });
