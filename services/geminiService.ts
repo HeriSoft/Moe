@@ -1,3 +1,4 @@
+
 import type { Message, Attachment } from '../types';
 
 // We only need one service function now, which calls the proxy's streaming endpoint.
@@ -63,19 +64,22 @@ export async function streamModelResponse(
 }
 
 
-// This specific Gemini/Imagen function is still needed for the /imagine command.
-export async function generateImage(prompt: string): Promise<Attachment> {
+// Updated to handle different models and settings
+export async function generateImage(prompt: string, settings: any): Promise<Attachment[]> {
     const response = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
           action: 'generateImages',
           payload: {
-              model: 'imagen-4.0-generate-001',
+              model: settings.model,
               prompt: prompt,
               config: {
-                numberOfImages: 1,
+                numberOfImages: settings.numImages || 1,
                 outputMimeType: 'image/png',
+                aspectRatio: settings.aspectRatio || '1:1',
+                quality: settings.quality,
+                style: settings.style,
               },
           }
       })
@@ -89,15 +93,38 @@ export async function generateImage(prompt: string): Promise<Attachment> {
     const data = await response.json();
 
     if (data.generatedImages && data.generatedImages.length > 0) {
-        return {
-            data: data.generatedImages[0].image.imageBytes,
-            mimeType: 'image/png',
-            fileName: `${prompt.substring(0, 20)}.png`
-        };
+        return data.generatedImages.map((img: any) => ({
+             data: img.image.imageBytes,
+             mimeType: 'image/png',
+             fileName: `${prompt.substring(0, 20)}.png`
+        }));
     } else {
         throw new Error("Image generation failed.");
     }
 }
+
+// New function for image editing
+export async function editImage(prompt: string, image: Attachment, settings: any): Promise<{ text: string, attachments: Attachment[] }> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'editImage',
+            payload: {
+                model: settings.model,
+                prompt,
+                image,
+                config: {}, // Pass any other settings if needed
+            }
+        })
+    });
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Image editing request failed');
+    }
+    return await response.json();
+}
+
 
 // New function for translating input text
 export async function getTranslation(text: string, targetLanguage: string): Promise<string> {
