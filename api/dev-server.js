@@ -60,6 +60,10 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
+// Set a longer keep-alive timeout to prevent ECONNRESET errors during streaming.
+// The default is 5 seconds, which can be too short if the AI model takes time to respond.
+server.keepAliveTimeout = 300000; // 5 minutes
+
 server.listen(PORT, () => {
     console.log(`[API] Local dev server listening on http://localhost:${PORT}`);
     console.log(`[Vite] Frontend should be proxying /api requests to this server.`);

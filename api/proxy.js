@@ -204,7 +204,7 @@ export default async function handler(req, res) {
                                 const zip = await JSZip.loadAsync(buffer);
                                 const fileList = Object.keys(zip.files).filter(name => !zip.files[name].dir);
                                 if (fileList.length > 0) {
-                                     textContents.push(`The user attached a ZIP archive named "${att.fileName}" which contains the following files:\n- ${fileList.join('\n- ')}\n\nAcknowledge this file list.`);
+                                     textContents.push(`The user attached a ZIP archive named "${att.fileName}". The contents of the files inside this ZIP archive cannot be read. The archive contains the following files:\n- ${fileList.join('\n- ')}\n\nAcknowledge that you have seen this file list but could not access the content within the files.`);
                                 } else {
                                      textContents.push(`The user attached an empty ZIP archive named "${att.fileName}".`);
                                 }
