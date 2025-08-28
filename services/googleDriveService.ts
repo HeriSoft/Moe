@@ -85,32 +85,60 @@ export async function initClient(
                         discoveryDocs: DISCOVERY_DOCS,
                     });
                     console.log("Gapi client initialized successfully.");
-                    
-                    console.log("Initializing token client...");
-                    tokenClient = google.accounts.oauth2.initTokenClient({
-                        client_id: GOOGLE_CLIENT_ID,
-                        scope: SCOPES,
-                        callback: async (tokenResponse: any) => {
-                            if (tokenResponse.error) {
-                                console.error('Token client error:', tokenResponse);
-                                onAuthError(`Google Sign-In Error: ${tokenResponse.error_description || tokenResponse.error}`);
-                                return;
-                            }
-                            gapi.client.setToken(tokenResponse);
-                            console.log("Access token received.");
-                            
+
+                    const updateUserStatus = async () => {
+                        const token = gapi.client.getToken();
+                        if (token === null) {
+                            console.log("User is not signed in.");
+                            onAuthChange(false);
+                            return;
+                        }
+
+                        console.log("User has a token. Fetching profile...");
+                        try {
                             const profileResponse = await gapi.client.oauth2.userinfo.get();
                             const profile = profileResponse.result;
+
+                            if (!profile || !profile.id) {
+                                console.warn("Token exists but userinfo is empty. Signing out.");
+                                signOut(() => onAuthChange(false));
+                                return;
+                            }
+                            
                             const userProfile: UserProfile = {
                                 id: profile.id,
                                 name: profile.name,
                                 email: profile.email,
                                 imageUrl: profile.picture,
                             };
+                            console.log("Profile fetched successfully:", userProfile.name);
                             onAuthChange(true, userProfile);
+                        } catch (error) {
+                            console.error("Error fetching user info for existing session, signing out:", error);
+                            signOut(() => onAuthChange(false));
+                        }
+                    };
+                    
+                    console.log("Initializing token client...");
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: GOOGLE_CLIENT_ID,
+                        scope: SCOPES,
+                        callback: (tokenResponse: any) => {
+                            if (tokenResponse.error) {
+                                console.error('Token client error:', tokenResponse);
+                                onAuthError(`Google Sign-In Error: ${tokenResponse.error_description || tokenResponse.error}`);
+                                return;
+                            }
+                            console.log("Access token received from sign-in flow.");
+                            // After a successful manual sign-in, update the user status
+                            updateUserStatus();
                         },
                     });
                     console.log("Token client initialized successfully.");
+                    
+                    // Crucially, check the user's status on initial load.
+                    await updateUserStatus();
+                    
                     resolve();
                 } catch (error) {
                     // Check for the specific error related to discovery docs
@@ -143,14 +171,12 @@ export function signIn() {
     console.log("signIn function called.");
     if (!tokenClient) {
         console.error("Cannot sign in: Google Auth client (tokenClient) is not initialized.");
-        // Optionally, you could call an error handler passed from the main app here
         alert("Sign-in service is not ready. Please check the console for errors.");
         return;
     }
     
-    // Prompt the user to select a Google Account and ask for consent to share their data
-    // when establishing a new session.
     console.log("Requesting access token...");
+    // Prompt the user to select an account if they are not already signed in.
     if (gapi.client.getToken() === null) {
         tokenClient.requestAccessToken({prompt: 'consent'});
     } else {
@@ -161,15 +187,18 @@ export function signIn() {
 /**
  * Signs the user out.
  */
-export function signOut(onAuthChange: (isLoggedIn: boolean) => void) {
+export function signOut(onSignOutComplete: (isLoggedIn: boolean) => void) {
     const token = gapi.client.getToken();
     if (token !== null) {
         google.accounts.oauth2.revoke(token.access_token, () => {
             gapi.client.setToken('');
             appFolderId = null; // Clear cached folder ID
-            onAuthChange(false);
-            console.log("User signed out.");
+            onSignOutComplete(false);
+            console.log("User signed out and token revoked.");
         });
+    } else {
+        onSignOutComplete(false);
+        console.log("No user was signed in.");
     }
 }
 
