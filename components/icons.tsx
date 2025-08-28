@@ -281,6 +281,13 @@ export const CodeBracketIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) 
   </svg>
 );
 
+export const GoogleDriveIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" {...props}>
+      <path fill="#4caf50" d="M333.22,264.6,179.35,512H301.7l153.33-264.6Z"/>
+      <path fill="#ffc107" d="M110.58,0,0,192.35,61.2,302.3,171.78,110.35Z"/>
+      <path fill="#1e88e5" d="M361.65,0H150.35L60.2,153.33,171.13,346.7,451.8,346.6,512,247.65,361.65,0Z"/>
+    </svg>
+);
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
