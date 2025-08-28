@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
-import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon } from './icons';
-import { getTranslation } from '../services/geminiService';
+import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from './icons';
+import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
 declare global {
@@ -79,6 +79,12 @@ const LoadingIndicator: React.FC<{ thinkingStatus: string | null }> = ({ thinkin
     );
 };
 
+interface AudioState {
+    messageId: string | null;
+    audioUrl: string | null;
+    isLoading: boolean;
+}
+
 export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -86,12 +92,98 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const [audioState, setAudioState] = useState<AudioState>({ messageId: null, audioUrl: null, isLoading: false });
 
+  const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
+
+  // --- TEXT TO SPEECH ---
+  // Initialize and clean up the single audio element for the component
+  useEffect(() => {
+    audioRef.current = new Audio();
+    const handleAudioEnd = () => {
+        setAudioState(prevState => {
+            if (prevState.audioUrl) {
+                URL.revokeObjectURL(prevState.audioUrl);
+            }
+            return { messageId: null, audioUrl: null, isLoading: false };
+        });
+    };
+    audioRef.current.addEventListener('ended', handleAudioEnd);
+
+    return () => {
+        if(audioRef.current) {
+            audioRef.current.removeEventListener('ended', handleAudioEnd);
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+        // Also revoke URL on unmount just in case
+        setAudioState(prevState => {
+             if (prevState.audioUrl) URL.revokeObjectURL(prevState.audioUrl);
+             return { messageId: null, audioUrl: null, isLoading: false };
+        });
+    };
+  }, []);
+
+  // Stop audio and clean up state when switching chats
+  useEffect(() => {
+    return () => {
+        if (audioRef.current) audioRef.current.pause();
+        if (audioState.audioUrl) URL.revokeObjectURL(audioState.audioUrl);
+        setAudioState({ messageId: null, audioUrl: null, isLoading: false });
+    };
+  }, [activeChat?.id]);
+
+
+  const handleToggleTTS = useCallback(async (messageId: string, text: string) => {
+    if (!audioRef.current) return;
+    
+    // If we click the same message that is currently playing, stop it.
+    if (audioState.messageId === messageId) {
+        audioRef.current.pause();
+        if (audioState.audioUrl) URL.revokeObjectURL(audioState.audioUrl);
+        setAudioState({ messageId: null, audioUrl: null, isLoading: false });
+        return;
+    }
+
+    // If another message is playing, stop it first and revoke its URL.
+    if (audioState.messageId) {
+         audioRef.current.pause();
+         if (audioState.audioUrl) URL.revokeObjectURL(audioState.audioUrl);
+    }
+    
+    // Start loading for the new message
+    setAudioState({ messageId: messageId, audioUrl: null, isLoading: true });
+
+    try {
+        const base64Audio = await generateSpeech(text);
+        const byteCharacters = atob(base64Audio);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        
+        setAudioState({ messageId: messageId, audioUrl: url, isLoading: false });
+        
+        if(audioRef.current) {
+          audioRef.current.src = url;
+          audioRef.current.play();
+        }
+
+    } catch (error) {
+        console.error("Failed to generate speech:", error);
+        setNotifications(prev => ["Failed to generate speech. Please try again.", ...prev.slice(0, 19)]);
+        setAudioState({ messageId: null, audioUrl: null, isLoading: false }); // Reset state on error
+    }
+  }, [audioState, setNotifications]);
+
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -275,14 +367,21 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         >
           {activeChat ? (
             <div>
-              {activeChat.messages.map((msg, index) => (
-                <MessageComponent 
-                    key={`${activeChat.id}-${index}`} 
-                    message={msg}
-                    onEdit={(newText) => handleEditMessage(index, newText)}
-                    onRefresh={() => handleRefreshResponse(index)}
-                />
-              ))}
+              {activeChat.messages.map((msg, index) => {
+                const messageId = `${activeChat.id}-${index}`;
+                return (
+                    <MessageComponent 
+                        key={messageId} 
+                        message={msg}
+                        onEdit={(newText) => handleEditMessage(index, newText)}
+                        onRefresh={() => handleRefreshResponse(index)}
+                        isSpeaking={audioState.messageId === messageId}
+                        isTTsLoading={audioState.isLoading && audioState.messageId === messageId}
+                        audioUrl={audioState.messageId === messageId ? audioState.audioUrl : null}
+                        onToggleTTS={() => handleToggleTTS(messageId, msg.text)}
+                    />
+                );
+              })}
               {isLoading && <LoadingIndicator thinkingStatus={thinkingStatus} />}
               <div ref={messagesEndRef} />
             </div>

@@ -1,31 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Message, Attachment } from '../types';
-import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, CloseIcon } from './icons';
+import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon } from './icons';
 import { CodeBlock } from './CodeBlock';
 import { MarkdownTable } from './MarkdownTable';
+import { renderFormattedText } from './utils';
+
 
 interface MessageProps {
   message: Message;
   onEdit: (newText: string) => void;
   onRefresh: () => void;
+  isSpeaking: boolean;
+  isTTsLoading: boolean;
+  audioUrl: string | null;
+  onToggleTTS: () => void;
 }
-
-// Helper to parse text for simple markdown like bold/italics
-const renderFormattedText = (text: string) => {
-  if (!text) return null;
-  const markdownRegex = /(\*\*[\s\S]+?\*\*|\*[\s\S]+?\*)/g;
-  const parts = text.split(markdownRegex);
-
-  return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith('*') && part.endsWith('*')) {
-      return <em key={index}>{part.slice(1, -1)}</em>;
-    }
-    return <React.Fragment key={index}>{part}</React.Fragment>;
-  });
-};
 
 const parseMessageContent = (text: string): React.ReactNode[] => {
     // This regex captures ```code blocks``` OR | markdown tables |
@@ -115,7 +104,7 @@ const AttachmentGrid: React.FC<{ attachments: Attachment[] }> = ({ attachments }
 );
 
 
-export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh }) => {
+export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh, isSpeaking, isTTsLoading, audioUrl, onToggleTTS }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.text);
@@ -184,13 +173,37 @@ export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRe
                       {isCopied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
                   </button>
                   {isUser ? (
-                     <button onClick={() => setIsEditing(true)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Edit message">
+                     <button onClick={() => setIsEditing(true)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover-text-slate-300 transition-colors" aria-label="Edit message">
                           <EditIcon className="w-4 h-4" />
                       </button>
                   ) : (
-                      <button onClick={onRefresh} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Refresh response">
-                          <RefreshIcon className="w-4 h-4" />
-                      </button>
+                      <>
+                        <button onClick={onRefresh} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Refresh response">
+                            <RefreshIcon className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={onToggleTTS} 
+                            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors disabled:opacity-50" 
+                            aria-label={isSpeaking ? "Stop speaking" : "Read message aloud"}
+                            disabled={isTTsLoading}
+                        >
+                            {isTTsLoading ? (
+                                <SpeakerWaveIcon className="w-4 h-4 animate-pulse" />
+                            ) : (
+                                isSpeaking ? <SpeakerXMarkIcon className="w-4 h-4 text-indigo-400" /> : <SpeakerWaveIcon className="w-4 h-4" />
+                            )}
+                        </button>
+                        {isSpeaking && audioUrl && (
+                            <a 
+                                href={audioUrl} 
+                                download={`MoeChat_TTS_${message.timestamp}.mp3`}
+                                className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" 
+                                aria-label="Download audio"
+                            >
+                                <DownloadIcon className="w-4 h-4" />
+                            </a>
+                        )}
+                      </>
                   )}
               </div>
             )}
