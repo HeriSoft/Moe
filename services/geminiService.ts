@@ -96,3 +96,21 @@ export async function generateImage(prompt: string): Promise<Attachment> {
         throw new Error("Image generation failed.");
     }
 }
+
+// New function for translating input text
+export async function getTranslation(text: string, targetLanguage: string): Promise<string> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'getTranslation',
+            payload: { text, targetLanguage }
+        })
+    });
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Translation request failed');
+    }
+    const data = await response.json();
+    return data.translatedText;
+}
