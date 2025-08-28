@@ -1,3 +1,4 @@
+
 // File: /api/proxy.js
 // This is a Vercel Serverless Function that acts as a multi-API proxy.
 // It routes requests to Google Gemini, OpenAI, or DeepSeek based on the model name.
@@ -19,6 +20,7 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 // --- API Clients & Endpoints ---
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 
@@ -351,10 +353,95 @@ export default async function handler(req, res) {
                 return res.status(200).json({ translatedText: response.text.trim() });
             }
 
-            case 'generateImages':
-                 if (!ai) throw new Error("Gemini API key not configured for image generation.");
-                 result = await ai.models.generateImages(payload);
-                 break;
+            case 'generateImages': {
+                const { model, prompt, config } = payload;
+                if (model === 'dall-e-3') {
+                    if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
+
+                    const aspectRatioToSize = {
+                        '1:1': '1024x1024',
+                        '16:9': '1792x1024',
+                        '9:16': '1024x1792',
+                    };
+                    const size = aspectRatioToSize[config.aspectRatio] || '1024x1024';
+
+                    const response = await fetch(OPENAI_IMAGE_API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                        },
+                        body: JSON.stringify({
+                            model: 'dall-e-3',
+                            prompt: prompt,
+                            n: config.numberOfImages || 1,
+                            size: size,
+                            response_format: 'b64_json',
+                            quality: config.quality || 'standard',
+                            style: config.style || 'vivid',
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        const errorMessage = error.error?.message || 'Unknown error';
+                        if (errorMessage.includes('blocked by our content filters')) {
+                           throw new Error(`Your prompt was blocked by the safety system. Please modify your prompt and try again.`);
+                        }
+                        throw new Error(`[${response.status}] DALL-E 3 API Error: ${errorMessage}`);
+                    }
+                    const data = await response.json();
+                    // Reformat to match Gemini's output
+                    result = {
+                        generatedImages: data.data.map(img => ({
+                            image: { imageBytes: img.b64_json }
+                        }))
+                    };
+                } else {
+                    // Default to Gemini
+                    if (!ai) throw new Error("Gemini API key not configured for image generation.");
+                    result = await ai.models.generateImages(payload);
+                }
+                break;
+            }
+
+            case 'editImage': {
+                if (!ai) throw new Error("Gemini API key not configured for image editing.");
+                const { prompt, image, config } = payload;
+                 const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash-image-preview',
+                    contents: {
+                        parts: [
+                          {
+                            inlineData: {
+                              data: image.data,
+                              mimeType: image.mimeType,
+                            },
+                          },
+                          {
+                            text: prompt,
+                          },
+                        ],
+                    },
+                    config: {
+                        responseModalities: ['IMAGE', 'TEXT'],
+                    },
+                });
+
+                const parts = response.candidates?.[0]?.content?.parts || [];
+                const textPart = parts.find(p => p.text)?.text || '';
+                const imagePart = parts.find(p => p.inlineData);
+                const attachments = [];
+                if (imagePart) {
+                    attachments.push({
+                        data: imagePart.inlineData.data,
+                        mimeType: imagePart.inlineData.mimeType || 'image/png',
+                        fileName: 'edited-image.png'
+                    });
+                }
+                result = { text: textPart, attachments: attachments };
+                break;
+            }
 
             default:
                 return res.status(400).json({ error: `Unknown action: ${action}` });
