@@ -1,4 +1,3 @@
-
 // File: /api/proxy.js
 // This is a Vercel Serverless Function that acts as a multi-API proxy.
 // It routes requests to Google Gemini, OpenAI, or DeepSeek based on the model name.
@@ -451,42 +450,6 @@ export default async function handler(req, res) {
                     });
                 }
                 result = { text: textPart, attachments: attachments };
-                break;
-            }
-            
-            case 'swapFace': {
-                // Determine the base URL for the internal API call.
-                // In production on Vercel, req.headers['x-forwarded-proto'] and req.headers['host'] are used.
-                // For local dev, we check for a custom header from our dev server or fall back to localhost.
-                const protocol = req.headers['x-forwarded-proto'] || 'http';
-                const host = req.headers['host'] || 'localhost:3000';
-                const baseUrl = `${protocol}://${host}`;
-                
-                // For local dev, our dev-server.js can't run python.
-                // We assume the python server is running separately on port 3001.
-                const isLocalDev = host.startsWith('localhost:');
-                const pythonApiUrl = isLocalDev ? `http://localhost:3001/api/python/swap` : `${baseUrl}/api/python/swap`;
-                                
-                const pythonResponse = await fetch(pythonApiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                // Check if the response is JSON before parsing
-                const contentType = pythonResponse.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") !== -1) {
-                    const responseData = await pythonResponse.json();
-                    if (!pythonResponse.ok) {
-                        throw new Error(`[${pythonResponse.status}] Face Swap API Error: ${responseData.details || responseData.error || 'Unknown error from Python service'}`);
-                    }
-                    result = responseData;
-                } else {
-                    // Handle non-JSON responses (e.g., HTML error pages)
-                    const textResponse = await pythonResponse.text();
-                    throw new Error(`[${pythonResponse.status}] Face Swap API Error: Unexpected response from Python service. Body: ${textResponse.substring(0, 200)}...`);
-                }
-
                 break;
             }
 
