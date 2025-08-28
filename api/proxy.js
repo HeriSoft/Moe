@@ -240,6 +240,20 @@ export default async function handler(req, res) {
                 }
             }
 
+            case 'getTranslation': {
+                if (!ai) throw new Error("Gemini API key not configured.");
+                const { text, targetLanguage } = payload;
+                if (!text || !targetLanguage) {
+                    return res.status(400).json({ error: "Missing text or targetLanguage in payload" });
+                }
+                const prompt = `Translate the following to ${targetLanguage}. Output ONLY the translated text, without any introduction, labels, or explanation.\n\nTEXT: "${text}"`;
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: prompt,
+                });
+                return res.status(200).json({ translatedText: response.text.trim() });
+            }
+
             case 'generateImages':
                  if (!ai) throw new Error("Gemini API key not configured for image generation.");
                  result = await ai.models.generateImages(payload);
