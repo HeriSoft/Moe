@@ -1,4 +1,3 @@
-
 // File: /api/proxy.js
 // This is a Vercel Serverless Function that acts as a multi-API proxy.
 // It routes requests to Google Gemini, OpenAI, or DeepSeek based on the model name.
@@ -284,9 +283,20 @@ export default async function handler(req, res) {
                             ...(systemInstruction ? { systemInstruction: systemInstruction } : {}),
                         },
                     });
-
+                    
+                    let metadataSent = false;
                     for await (const chunk of streamResult) {
-                        res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+                        // Always send the text chunk if it exists
+                        if (chunk.text) {
+                            res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+                        }
+
+                        // Check for grounding metadata and send it once
+                        const groundingChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+                        if (groundingChunks && groundingChunks.length > 0 && !metadataSent) {
+                            res.write(`data: ${JSON.stringify({ groundingMetadata: groundingChunks })}\n\n`);
+                            metadataSent = true; // Ensure metadata is only sent once per stream
+                        }
                     }
                     res.end();
                     return;
