@@ -2,6 +2,7 @@ export interface Attachment {
   data: string; // base64 encoded data
   mimeType: string;
   fileName: string; 
+  driveFileId?: string; // Google Drive's unique file ID
 }
 
 export interface Message {
@@ -9,6 +10,9 @@ export interface Message {
   text: string;
   timestamp: number;
   attachments?: Attachment[];
+  sourceDriveFileId?: string; // The Drive file ID that was the source for this message
+  sourceDriveFileName?: string; // The name of the source Drive file
+  sourceDriveFileMimeType?: string; // The MIME type of the source Drive file
 }
 
 export interface ChatSession {

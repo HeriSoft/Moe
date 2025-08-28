@@ -368,7 +368,8 @@ const App: React.FC = () => {
                 return {
                     data: base64Data,
                     mimeType: file.mimeType,
-                    fileName: file.name
+                    fileName: file.name,
+                    driveFileId: file.id, // Keep track of the file ID
                 };
             });
 
@@ -386,6 +387,28 @@ const App: React.FC = () => {
 
   }, [isLoggedIn, attachments.length]);
 
+  const handleSaveToDrive = useCallback(async (message: Message) => {
+    if (!message.sourceDriveFileId || !message.sourceDriveFileMimeType) {
+        const errorMsg = "Save failed: Missing file ID or MIME type.";
+        setNotifications(prev => [errorMsg, ...prev.slice(0, 19)]);
+        throw new Error(errorMsg);
+    }
+    setNotifications(prev => [`Saving to Google Drive...`, ...prev.slice(0, 19)]);
+    try {
+      await googleDriveService.updateDriveFileContent(
+        message.sourceDriveFileId,
+        message.text,
+        message.sourceDriveFileMimeType
+      );
+      setNotifications(prev => [`File successfully updated in Google Drive.`, ...prev.slice(0, 19)]);
+    } catch (error) {
+      console.error("Failed to save to Drive:", error);
+      const errorMessage = error instanceof Error ? error.message : "Could not save file to Google Drive.";
+      setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+      // Re-throw to allow the component to handle UI state
+      throw error;
+    }
+  }, []);
 
   const sendMessage = async (messageText: string, messageAttachments = attachments, customHistory?: Message[]) => {
     if (!activeChatId) return;
@@ -417,6 +440,9 @@ const App: React.FC = () => {
     setIsLoading(true);
     setAttachments([]);
     
+    // Check if the user message has a drive attachment to pass context to the model's response
+    const sourceDriveAttachment = userMessage.attachments?.find(att => att.driveFileId);
+
     try {
         let finalChatState: ChatSession = currentChat;
         if (messageText.startsWith('/image ') || messageText.startsWith('/edit ')) {
@@ -464,7 +490,18 @@ const App: React.FC = () => {
                             if (s.id === activeChatId) {
                                 let newMessages = [...s.messages];
                                 if (isFirstChunk) {
-                                    newMessages.push({ role: 'model', text: modelResponse, timestamp: Date.now() });
+                                    const newModelMessage: Message = {
+                                        role: 'model',
+                                        text: modelResponse,
+                                        timestamp: Date.now(),
+                                    };
+                                    // Pass Drive file context if it exists
+                                    if (sourceDriveAttachment) {
+                                        newModelMessage.sourceDriveFileId = sourceDriveAttachment.driveFileId;
+                                        newModelMessage.sourceDriveFileName = sourceDriveAttachment.fileName;
+                                        newModelMessage.sourceDriveFileMimeType = sourceDriveAttachment.mimeType;
+                                    }
+                                    newMessages.push(newModelMessage);
                                     isFirstChunk = false;
                                 } else if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'model') {
                                    newMessages[newMessages.length - 1].text = modelResponse;
@@ -591,6 +628,7 @@ const App: React.FC = () => {
           commandToPrepend={commandToPrepend}
           clearCommandToPrepend={() => setCommandToPrepend('')}
           onAttachFromDrive={handleAttachFromDrive}
+          onSaveToDrive={handleSaveToDrive}
         />
       </main>
       <SettingsModal
