@@ -114,3 +114,21 @@ export async function getTranslation(text: string, targetLanguage: string): Prom
     const data = await response.json();
     return data.translatedText;
 }
+
+
+export async function generateSpeech(text: string): Promise<string> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'generateSpeech',
+            payload: { text }
+        })
+    });
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Speech generation request failed');
+    }
+    const data = await response.json();
+    return data.audioContent; // This will be the base64 string
+}
