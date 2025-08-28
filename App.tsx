@@ -350,6 +350,42 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAttachFromDrive = useCallback(() => {
+    if (!isLoggedIn) {
+        setIsLoginModalOpen(true);
+        return;
+    }
+    
+    const onFilesSelected = async (driveFiles: any[]) => {
+        if (attachments.length + driveFiles.length > MAX_FILES) {
+            setNotifications(prev => [`You can only attach up to ${MAX_FILES} files.`, ...prev.slice(0, 19)]);
+            return;
+        }
+
+        try {
+            const newAttachmentsPromises = driveFiles.map(async (file) => {
+                const base64Data = await googleDriveService.downloadDriveFile(file.id);
+                return {
+                    data: base64Data,
+                    mimeType: file.mimeType,
+                    fileName: file.name
+                };
+            });
+
+            const newAttachments = await Promise.all(newAttachmentsPromises);
+            setAttachments(prev => [...prev, ...newAttachments]);
+
+        } catch (error) {
+            console.error("Error attaching files from Drive:", error);
+            const errorMessage = error instanceof Error ? error.message : "Could not attach files from Google Drive.";
+            setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+        }
+    };
+
+    googleDriveService.showPicker(onFilesSelected);
+
+  }, [isLoggedIn, attachments.length]);
+
 
   const sendMessage = async (messageText: string, messageAttachments = attachments, customHistory?: Message[]) => {
     if (!activeChatId) return;
@@ -554,6 +590,7 @@ const App: React.FC = () => {
           openImageSettingsModal={openImageSettingsModal}
           commandToPrepend={commandToPrepend}
           clearCommandToPrepend={() => setCommandToPrepend('')}
+          onAttachFromDrive={handleAttachFromDrive}
         />
       </main>
       <SettingsModal
