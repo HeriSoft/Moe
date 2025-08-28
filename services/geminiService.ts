@@ -1,4 +1,3 @@
-
 import type { Message, Attachment } from '../types';
 
 // We only need one service function now, which calls the proxy's streaming endpoint.
@@ -160,4 +159,21 @@ export async function generateSpeech(text: string): Promise<string> {
     }
     const data = await response.json();
     return data.audioContent; // This will be the base64 string
+}
+
+// New function for face swapping
+export async function swapFace(targetImage: Attachment, sourceImage: Attachment): Promise<Attachment> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'swapFace',
+            payload: { targetImage, sourceImage }
+        })
+    });
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Face swap request failed');
+    }
+    return await response.json();
 }
