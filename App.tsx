@@ -7,10 +7,39 @@ import {
   streamModelResponse,
   generateImage,
 } from './services/geminiService';
+import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon } from './components/icons';
 import type { ChatSession, Message, Attachment } from './types';
 
 const MAX_FILES = 4;
 const MAX_IMAGE_FILES = 1;
+
+const PERSONAS: { [key: string]: { name: string; icon: React.FC<any>; prompt: string; description: string; } } = {
+  default: {
+    name: 'Default Assistant',
+    icon: UserCircleIcon,
+    prompt: 'You are a helpful, friendly, and knowledgeable AI assistant.',
+    description: 'A standard, helpful AI assistant.'
+  },
+  creative: {
+    name: 'Creative Writer',
+    icon: SparklesIcon,
+    prompt: 'You are a creative writer and storyteller. Your responses should be imaginative, descriptive, and engaging. Weave compelling narratives and use vivid language.',
+    description: 'For brainstorming, storytelling, and creative tasks.'
+  },
+  programmer: {
+    name: 'Code Expert',
+    icon: CodeBracketIcon,
+    prompt: 'You are an expert programmer specializing in modern web development. Provide clean, efficient, and well-documented code. Explain complex concepts clearly and offer best practices.',
+    description: 'Get help with coding, debugging, and software design.'
+  },
+  tutor: {
+    name: 'Academic Tutor',
+    icon: AcademicCapIcon,
+    prompt: 'You are an experienced academic tutor. Your goal is to help users understand complex subjects by breaking them down into simple, easy-to-digest concepts. Use analogies, ask guiding questions, and be patient and encouraging.',
+    description: 'Explains complex topics in a simple way.'
+  }
+};
+
 
 const App: React.FC = () => {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
@@ -60,11 +89,16 @@ const App: React.FC = () => {
             let parsedSessions: ChatSession[] = JSON.parse(savedSessionsJSON);
             let sessionsUpdated = false;
             parsedSessions = parsedSessions.map(session => {
+                const updatedSession = { ...session };
                 if (session.model && modelMigrationMap[session.model]) {
                     sessionsUpdated = true;
-                    return { ...session, model: modelMigrationMap[session.model] };
+                    updatedSession.model = modelMigrationMap[session.model];
                 }
-                return session;
+                // Add default persona if missing
+                if (!session.persona) {
+                    updatedSession.persona = 'default';
+                }
+                return updatedSession;
             });
 
             if (sessionsUpdated) {
@@ -170,6 +204,7 @@ const App: React.FC = () => {
       messages: [{ role: 'model', text: 'Hello! How can I help you today?', timestamp: Date.now() }],
       model: model, // Use the current default model
       isFavorite: false,
+      persona: 'default',
     };
     setChatSessions(prev => [newChat, ...prev]);
     setActiveChatId(newChat.id);
@@ -205,6 +240,26 @@ const App: React.FC = () => {
         )
     );
   }, []);
+
+  const handleSetPersona = useCallback((personaKey: string) => {
+    if (!activeChatId) return;
+
+    setChatSessions(prev =>
+      prev.map(s => {
+        if (s.id === activeChatId && s.persona !== personaKey) {
+          const personaName = PERSONAS[personaKey]?.name || 'Default';
+          const personaMessage: Message = {
+            role: 'model',
+            text: `AI persona is now **${personaName}**.`,
+            timestamp: Date.now(),
+          };
+          return { ...s, persona: personaKey, messages: [...s.messages, personaMessage] };
+        }
+        return s;
+      })
+    );
+  }, [activeChatId]);
+
 
   const handleSetAttachments = (files: FileList | null) => {
     if (!files) return;
@@ -299,6 +354,9 @@ const App: React.FC = () => {
     setIsLoading(true);
     const webSearch = isWebSearchEnabled;
     const deepThink = isDeepThinkEnabled;
+    const activePersonaKey = currentChat.persona || 'default';
+    const systemInstruction = PERSONAS[activePersonaKey]?.prompt;
+
     setAttachments([]); // Clear attachments after sending
     setIsWebSearchEnabled(false);
     setIsDeepThinkEnabled(false);
@@ -317,7 +375,7 @@ const App: React.FC = () => {
             finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
         }
 
-        const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink);
+        const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction);
         let isFirstChunk = true;
         let modelResponse = '';
 
@@ -466,6 +524,8 @@ const App: React.FC = () => {
           notifications={notifications}
           setNotifications={setNotifications}
           clearNotifications={() => setNotifications([])}
+          personas={PERSONAS}
+          setPersona={handleSetPersona}
         />
       </main>
       <SettingsModal

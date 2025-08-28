@@ -17,4 +17,5 @@ export interface ChatSession {
   messages: Message[];
   model: string;
   isFavorite?: boolean;
+  persona?: string; // Key for the selected persona
 }
