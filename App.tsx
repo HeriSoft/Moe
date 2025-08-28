@@ -10,7 +10,7 @@ import {
   editImage,
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
-import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon } from './components/icons';
+import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
 import type { ChatSession, Message, Attachment, UserProfile } from './types';
 
 const MAX_FILES = 4;
@@ -64,6 +64,7 @@ const App: React.FC = () => {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>();
+  const [authError, setAuthError] = useState<string | null>(null); // State for auth errors
   const sessionsRef = useRef(chatSessions);
 
   useEffect(() => {
@@ -105,9 +106,13 @@ const App: React.FC = () => {
             setActiveChatId(null);
         }
         setIsAuthReady(true);
+        setAuthError(null); // Clear previous errors on successful auth change
     };
 
-    googleDriveService.initClient(handleAuthChange);
+    googleDriveService.initClient(handleAuthChange, (errorMsg) => {
+        setAuthError(errorMsg);
+        setIsAuthReady(true); // It's "ready" in the sense that initialization has completed (with an error)
+    });
   }, []);
 
   const loadChatsFromDrive = async () => {
@@ -508,6 +513,12 @@ const App: React.FC = () => {
         userProfile={userProfile}
       />
       <main className="flex-1 min-w-0">
+        {authError && (
+          <div className="absolute top-0 left-0 right-0 z-50 bg-red-600 text-white p-3 text-center shadow-lg flex items-center justify-center">
+            <InformationCircleIcon className="w-6 h-6 mr-3" />
+            <span className="font-semibold">{authError}</span>
+          </div>
+        )}
         <ChatView
           activeChat={activeChat || null}
           sendMessage={sendMessage}
