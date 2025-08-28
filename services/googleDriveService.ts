@@ -19,7 +19,7 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
 // Using appDataFolder for privacy, plus userinfo scopes to get profile data.
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 const APP_FOLDER_NAME = 'Moe Chat Data';
 
 let gapi: any = null;
@@ -394,5 +394,103 @@ export async function deleteSession(driveFileId: string): Promise<void> {
         });
     } catch (error) {
         handleGapiError(error, 'deleting chat session');
+    }
+}
+
+
+// --- NEW FUNCTIONS for Google Picker and File Download ---
+
+let isPickerApiLoaded = false;
+
+/**
+ * Helper to convert an ArrayBuffer to a Base64 string.
+ * @param buffer The ArrayBuffer to convert.
+ * @returns The Base64 encoded string.
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+
+/**
+ * Downloads a file's content from Google Drive using its file ID.
+ * @param fileId The ID of the file to download.
+ * @returns A promise that resolves to the file's content as a Base64 string.
+ */
+export async function downloadDriveFile(fileId: string): Promise<string> {
+    try {
+        const response = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        });
+        
+        // GAPI's `files.get` with `alt: 'media'` returns the raw response, not a parsed JSON object.
+        // We need to access the raw body and convert it.
+        const blob = await new Response(response.body).blob();
+        const buffer = await blob.arrayBuffer();
+        return arrayBufferToBase64(buffer);
+        
+    } catch (error) {
+        // GAPI wraps the raw XHR error. We need to parse it to get the real error message.
+        if (error && (error as any).body) {
+            try {
+                const errorBody = JSON.parse((error as any).body);
+                const errorMessage = errorBody?.error?.message || 'Failed to download file from Drive.';
+                 handleGapiError({ result: { error: { message: errorMessage } } } as any, `downloading file ${fileId}`);
+            } catch (e) {
+                 handleGapiError(error, `downloading file ${fileId}`);
+            }
+        } else {
+            handleGapiError(error, `downloading file ${fileId}`);
+        }
+    }
+}
+
+
+/**
+ * Initializes and displays the Google Picker UI for file selection.
+ * @param onFilesSelected Callback function that receives an array of selected file objects.
+ */
+export function showPicker(onFilesSelected: (files: any[]) => void): void {
+    const show = () => {
+        const token = gapi.client.getToken();
+        if (!token) {
+            console.error("Cannot show picker: user is not signed in.");
+            signIn(); // Prompt for sign-in if token is missing
+            return;
+        }
+
+        const view = new google.picker.View(google.picker.ViewId.DOCS);
+        // Allow a wide range of common file types
+        view.setMimeTypes("image/png,image/jpeg,image/jpg,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+
+        const picker = new google.picker.PickerBuilder()
+            .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+            .setAppId(GOOGLE_CLIENT_ID.split('-')[0]) // The App ID is the numeric part of the client ID
+            .setOAuthToken(token.access_token)
+            .addView(view)
+            .addView(new google.picker.DocsUploadView())
+            .setCallback((data: any) => {
+                if (data.action === google.picker.Action.PICKED) {
+                    onFilesSelected(data.docs);
+                }
+            })
+            .build();
+        picker.setVisible(true);
+    };
+
+    if (isPickerApiLoaded) {
+        show();
+    } else {
+        gapi.load('picker', () => {
+            isPickerApiLoaded = true;
+            show();
+        });
     }
 }
