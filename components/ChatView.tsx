@@ -1,8 +1,10 @@
+
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
-import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
@@ -93,6 +95,9 @@ interface ChatViewProps {
   clearNotifications: () => void;
   personas: any; // The global persona definitions
   setPersona: (personaKey: string) => void;
+  openImageSettingsModal: (mode: 'generation' | 'editing') => void;
+  commandToPrepend: string;
+  clearCommandToPrepend: () => void;
 }
 
 const WelcomeScreen: React.FC = () => (
@@ -144,11 +149,12 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false);
+  const [isImageMenuOpen, setIsImageMenuOpen] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioState, setAudioState] = useState<AudioState>({ messageId: null, audioUrl: null, isLoading: false });
@@ -158,7 +164,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const imageMenuRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (commandToPrepend) {
+        setInput(prev => `${commandToPrepend}${prev}`);
+        clearCommandToPrepend();
+    }
+  }, [commandToPrepend, clearCommandToPrepend]);
 
   // --- TEXT TO SPEECH ---
   // Initialize and clean up the single audio element for the component
@@ -294,6 +308,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
     const handleClickOutside = (event: MouseEvent) => {
         if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
             setIsNotificationsOpen(false);
+        }
+        if (imageMenuRef.current && !imageMenuRef.current.contains(event.target as Node)) {
+            setIsImageMenuOpen(false);
         }
     };
 
@@ -521,7 +538,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                 <SendIcon className="w-5 h-5" />
             </button>
             </form>
-            <div className="flex items-center justify-start space-x-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1 overflow-x-auto">
+            <div className="flex items-center justify-start flex-wrap gap-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1">
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="*/*" multiple />
                 <button title={"Attach file"} aria-label="Attach file" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
                     <AttachmentIcon className="w-5 h-5" />
@@ -535,9 +552,23 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                 <button title={"Translate"} aria-label="Translate" onClick={() => setIsTranslateMenuOpen(prev => !prev)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isTranslateMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`} disabled={!input.trim()}>
                     <TranslateIcon className="w-5 h-5" />
                 </button>
-                 <button title={"Tạo hình ảnh (Sắp ra mắt)"} aria-label="Generate Image" onClick={() => alert('Tính năng tạo hình ảnh sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
-                    <ImageIcon className="w-5 h-5" />
-                </button>
+                 <div className="relative" ref={imageMenuRef}>
+                    <button title="Image Tools" aria-label="Image Tools" onClick={() => setIsImageMenuOpen(p => !p)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isImageMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
+                        <ImageIcon className="w-5 h-5" />
+                    </button>
+                    {isImageMenuOpen && (
+                         <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-48 bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-1 z-20">
+                            <button onClick={() => { openImageSettingsModal('generation'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
+                                <ImageIcon className="w-5 h-5" />
+                                Image Generation
+                            </button>
+                             <button onClick={() => { openImageSettingsModal('editing'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
+                                <EditIcon className="w-5 h-5" />
+                                Image Editing
+                            </button>
+                         </div>
+                    )}
+                </div>
                  <button title={"Tạo video (Sắp ra mắt)"} aria-label="Generate Video" onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
                     <VideoIcon className="w-5 h-5" />
                 </button>
