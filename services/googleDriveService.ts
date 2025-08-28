@@ -77,9 +77,13 @@ export async function initClient(
         await Promise.all([gapiLoadPromise, gisLoadPromise]);
 
         await new Promise<void>((resolve, reject) => {
-            gapi.load('client', async () => {
+            // THE FIX: Load both 'client' and 'auth2' libraries. 'auth2' is required for userinfo.get().
+            gapi.load('client:auth2', async () => {
                 try {
                     console.log("Initializing gapi client...");
+                    // THE CRUCIAL FIX: Remove OAuth details from GAPI init.
+                    // This prevents a conflict with the newer GIS library. GAPI's only job
+                    // here is to load the API discovery document using the API key.
                     await gapi.client.init({
                         apiKey: GOOGLE_API_KEY,
                         discoveryDocs: DISCOVERY_DOCS,
@@ -88,25 +92,36 @@ export async function initClient(
 
                     const updateUserStatus = async () => {
                         const token = gapi.client.getToken();
-                        if (token === null) {
-                            console.log("User is not signed in.");
+                        if (token === null || !token.access_token) {
+                            console.log("User is not signed in or token is missing.");
                             onAuthChange(false);
                             return;
                         }
 
-                        console.log("User has a token. Fetching profile...");
+                        console.log("User has a token. Fetching profile via direct fetch...");
                         try {
-                            const profileResponse = await gapi.client.oauth2.userinfo.get();
-                            const profile = profileResponse.result;
+                             // THE ULTIMATE FIX: Instead of a faulty gapi call, use a direct fetch
+                             // to the standard userinfo endpoint. This is more robust.
+                            const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                                headers: {
+                                    'Authorization': `Bearer ${token.access_token}`
+                                }
+                            });
 
-                            if (!profile || !profile.id) {
+                            if (!profileResponse.ok) {
+                                throw new Error(`User info fetch failed with status: ${profileResponse.status}`);
+                            }
+
+                            const profile = await profileResponse.json();
+
+                            if (!profile || !profile.sub) { // 'sub' is the standard field for user ID
                                 console.warn("Token exists but userinfo is empty. Signing out.");
                                 signOut(() => onAuthChange(false));
                                 return;
                             }
                             
                             const userProfile: UserProfile = {
-                                id: profile.id,
+                                id: profile.sub,
                                 name: profile.name,
                                 email: profile.email,
                                 imageUrl: profile.picture,
@@ -130,6 +145,8 @@ export async function initClient(
                                 return;
                             }
                             console.log("Access token received from sign-in flow.");
+                            // THE CRUCIAL FIX: Explicitly set the token for the gapi client.
+                            gapi.client.setToken(tokenResponse);
                             // After a successful manual sign-in, update the user status
                             updateUserStatus();
                         },
