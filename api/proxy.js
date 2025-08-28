@@ -51,8 +51,7 @@ const TEXT_MIME_TYPES = new Set([
  */
 function formatHistoryForOpenAI(messages) {
     return messages
-      .slice(1) // Exclude initial system message
-      .filter(msg => !msg.attachments) // Exclude attachments from history
+      .filter(msg => (msg.role === 'user' || msg.role === 'model') && !msg.attachments) // Only include user/model messages, no attachments
       .map(msg => ({
         role: msg.role === 'model' ? 'assistant' : 'user',
         content: msg.text,
@@ -64,7 +63,12 @@ function formatHistoryForOpenAI(messages) {
  * It reads the upstream stream and pipes it to the client in a consistent format.
  */
 async function handleOpenAIStream(res, apiUrl, apiKey, payload, isWebSearchEnabled, isDeepThink) {
-    const history = formatHistoryForOpenAI(payload.history);
+    let history = formatHistoryForOpenAI(payload.history);
+    
+    // Prepend system instruction if it exists
+    if (payload.systemInstruction) {
+        history.unshift({ role: 'system', content: payload.systemInstruction });
+    }
     
     // The main handler already processes attachments, so payload.newMessage has text context
     // and payload.attachment has the single image.
@@ -168,7 +172,7 @@ export default async function handler(req, res) {
                  throw new Error(`Action 'generateContent' is deprecated. Use 'generateContentStream'.`);
 
             case 'generateContentStream': { // Use block scope for variables
-                const { model, history, newMessage, attachments, isWebSearchEnabled, isDeepThinkEnabled } = payload;
+                const { model, history, newMessage, attachments, isWebSearchEnabled, isDeepThinkEnabled, systemInstruction } = payload;
 
                 if (isWebSearchEnabled && !model.startsWith('gemini')) {
                    throw new Error(`Web Search is not supported for the '${model}' model. Please use a Gemini model.`);
@@ -229,7 +233,7 @@ export default async function handler(req, res) {
                 }
 
                 // Create a unified payload for downstream functions
-                const updatedPayload = { ...payload, newMessage: finalNewMessage, attachment: imageAttachment, attachments: null };
+                const updatedPayload = { ...payload, newMessage: finalNewMessage, attachment: imageAttachment, attachments: null, systemInstruction };
         
                 if (model.startsWith('gemini')) {
                     if (!ai) throw new Error("Gemini API key not configured or missing.");
@@ -273,7 +277,10 @@ export default async function handler(req, res) {
                     const streamResult = await ai.models.generateContentStream({
                         model: payload.model,
                         contents: contents,
-                        config: isWebSearchEnabled ? { tools: [{ googleSearch: {} }] } : undefined,
+                        config: {
+                            ...(isWebSearchEnabled ? { tools: [{ googleSearch: {} }] } : {}),
+                            ...(systemInstruction ? { systemInstruction: systemInstruction } : {}),
+                        },
                     });
 
                     for await (const chunk of streamResult) {
