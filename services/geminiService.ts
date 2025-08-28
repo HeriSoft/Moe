@@ -163,17 +163,30 @@ export async function generateSpeech(text: string): Promise<string> {
 
 // New function for face swapping
 export async function swapFace(targetImage: Attachment, sourceImage: Attachment): Promise<Attachment> {
-    const response = await fetch('/api/proxy', {
+    // IMPORTANT: Replace this URL with the public URL of your deployed Python backend (e.g., from Render).
+    const PYTHON_BACKEND_URL = 'https://moe-g3dg.onrender.com/api/python/swap';
+
+    const response = await fetch(PYTHON_BACKEND_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'swapFace',
-            payload: { targetImage, sourceImage }
+            targetImage,
+            sourceImage
         })
     });
+
+    // Improved error handling for the external service
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Face swap request failed');
+        let errorDetails = `Face swap request failed with status: ${response.status}`;
+        try {
+            // Try to parse a JSON error response from the Python server
+            const errorData = await response.json();
+            errorDetails = errorData.details || errorData.error || errorDetails;
+        } catch (e) {
+            // If the response isn't JSON, use the raw text
+            errorDetails = await response.text();
+        }
+        throw new Error(errorDetails);
     }
     return await response.json();
 }
