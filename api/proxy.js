@@ -3,6 +3,12 @@
 // It routes requests to Google Gemini, OpenAI, or DeepSeek based on the model name.
 
 import { GoogleGenAI } from "@google/genai";
+import { extractRawText } from "mammoth";
+import JSZip from "jszip";
+import { createRequire } from "module"; // NEW: For robust CJS module loading
+
+// --- Create a require function for CJS compatibility ---
+const require = createRequire(import.meta.url);
 
 // --- API Key Configuration ---
 // Vercel will inject these from your project's environment variables.
@@ -17,6 +23,27 @@ const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 
 // --- Helper Functions ---
+
+/**
+ * A set of MIME types that are safe to read as plain text.
+ * This prevents trying to decode binary files like .docx or .pdf.
+ */
+const TEXT_MIME_TYPES = new Set([
+    'text/plain',
+    'text/markdown',
+    'text/html',
+    'text/css',
+    'text/javascript',
+    'text/xml',
+    'text/csv',
+    'application/json',
+    'application/javascript',
+    'application/xml',
+    'application/x-sh',
+    'application/x-httpd-php',
+    'application/rtf',
+    'image/svg+xml' // SVG is XML-based and readable
+]);
 
 /**
  * Transforms a standard message history into the format required by OpenAI/DeepSeek.
@@ -146,29 +173,59 @@ export default async function handler(req, res) {
                 if (isWebSearchEnabled && !model.startsWith('gemini')) {
                    throw new Error(`Web Search is not supported for the '${model}' model. Please use a Gemini model.`);
                 }
-
+                
                 let finalNewMessage = newMessage;
                 let imageAttachment = null;
                 const textContents = [];
                 
                 if (attachments && attachments.length > 0) {
+                    // FIX: Use `require` for `pdf-parse` to ensure correct CJS module loading and path resolution,
+                    // preventing the library's internal test code from crashing the server.
+                    const pdf = require("pdf-parse");
+
                     for (const att of attachments) {
-                        if (att.mimeType.startsWith('image/') && !imageAttachment) {
-                            imageAttachment = att;
-                        } else {
-                             try {
-                                const fileContent = Buffer.from(att.data, 'base64').toString('utf-8');
+                        const buffer = Buffer.from(att.data, 'base64');
+                        const fileNameLower = att.fileName.toLowerCase();
+
+                        try {
+                            if (att.mimeType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
+                                const data = await pdf(buffer);
+                                textContents.push(`The user attached a PDF file named "${att.fileName}". Its extracted text content is:\n\n--- FILE CONTENT ---\n${data.text || '(No text content found)'}\n--- END FILE ---`);
+                            
+                            } else if (att.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileNameLower.endsWith('.docx')) {
+                                const { value } = await extractRawText({ buffer });
+                                textContents.push(`The user attached a Word document named "${att.fileName}". Its extracted text content is:\n\n--- FILE CONTENT ---\n${value || '(No text content found)'}\n--- END FILE ---`);
+                            
+                            } else if (att.mimeType === 'application/zip' || fileNameLower.endsWith('.zip')) {
+                                const zip = await JSZip.loadAsync(buffer);
+                                const fileList = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+                                if (fileList.length > 0) {
+                                     textContents.push(`The user attached a ZIP archive named "${att.fileName}" which contains the following files:\n- ${fileList.join('\n- ')}\n\nAcknowledge this file list.`);
+                                } else {
+                                     textContents.push(`The user attached an empty ZIP archive named "${att.fileName}".`);
+                                }
+                            
+                            } else if (TEXT_MIME_TYPES.has(att.mimeType) || att.mimeType.startsWith('text/')) {
+                                const fileContent = buffer.toString('utf-8');
                                 textContents.push(`The user has attached a file named "${att.fileName}". Its content is:\n\n--- FILE CONTENT ---\n${fileContent}\n--- END FILE ---`);
-                             } catch (e) {
-                                console.error("Failed to decode attachment:", att.fileName);
-                                textContents.push(`[Could not read attached file: ${att.fileName}]`);
-                             }
+                            
+                            } else if (att.mimeType.startsWith('image/') && att.mimeType !== 'image/svg+xml' && !imageAttachment) {
+                                // This is a primary image for multimodal input, handle it separately.
+                                imageAttachment = att;
+                            
+                            } else {
+                                // Fallback for other binary types (or secondary images)
+                                textContents.push(`The user has attached a file named "${att.fileName}". This is a binary file whose content type (${att.mimeType}) is not supported for reading. Acknowledge that the file was received but could not be read.`);
+                            }
+                        } catch (e) {
+                            console.error(`Failed to parse attachment "${att.fileName}":`, e.message);
+                            textContents.push(`The user attached a file named "${att.fileName}", but an error occurred while trying to read its content. Please inform the user that reading this specific file failed.`);
                         }
                     }
                 }
                 
                 if (textContents.length > 0) {
-                    finalNewMessage = `${textContents.join('\n\n')}\n\nPlease use the content from the file(s) above to inform your response to the following user prompt:\n\n--- USER PROMPT ---\n${newMessage}`;
+                    finalNewMessage = `${textContents.join('\n\n')}\n\nBased on the content of the file(s) above, please respond to the following user prompt:\n\n--- USER PROMPT ---\n${newMessage}`;
                 }
 
                 // Create a unified payload for downstream functions
