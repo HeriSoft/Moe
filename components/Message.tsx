@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Message, Attachment } from '../types';
-import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon } from './icons';
+import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon, SaveToDriveIcon } from './icons';
 import { CodeBlock } from './CodeBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { renderFormattedText } from './utils';
@@ -14,6 +14,7 @@ interface MessageProps {
   isTTsLoading: boolean;
   audioUrl: string | null;
   onToggleTTS: () => void;
+  onSaveToDrive: () => Promise<void>;
 }
 
 const parseMessageContent = (text: string): React.ReactNode[] => {
@@ -104,10 +105,12 @@ const AttachmentGrid: React.FC<{ attachments: Attachment[] }> = ({ attachments }
 );
 
 
-export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh, isSpeaking, isTTsLoading, audioUrl, onToggleTTS }) => {
+export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh, isSpeaking, isTTsLoading, audioUrl, onToggleTTS, onSaveToDrive }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.text);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const isUser = message.role === 'user';
@@ -127,6 +130,21 @@ export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRe
     setIsEditing(false);
   };
   
+  const handleSaveToDriveClick = async () => {
+    if (!message.sourceDriveFileId || isSaving) return;
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      await onSaveToDrive();
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2500);
+    } catch (e) {
+      // Error is handled by the App component's notification system
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (isEditing) {
       editTextAreaRef.current?.focus();
@@ -178,6 +196,23 @@ export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRe
                       </button>
                   ) : (
                       <>
+                        {message.sourceDriveFileId && (
+                           <button
+                              onClick={handleSaveToDriveClick}
+                              className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors disabled:opacity-50"
+                              aria-label={`Save changes to "${message.sourceDriveFileName}"`}
+                              title={`Save changes to "${message.sourceDriveFileName}"`}
+                              disabled={isSaving}
+                           >
+                               {isSaving ? (
+                                   <RefreshIcon className="w-4 h-4 animate-spin" />
+                               ) : saveSuccess ? (
+                                   <CheckIcon className="w-4 h-4 text-green-500" />
+                               ) : (
+                                   <SaveToDriveIcon className="w-4 h-4" />
+                               )}
+                           </button>
+                        )}
                         <button onClick={onRefresh} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Refresh response">
                             <RefreshIcon className="w-4 h-4" />
                         </button>

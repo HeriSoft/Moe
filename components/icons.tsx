@@ -289,6 +289,14 @@ export const GoogleDriveIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) 
     </svg>
 );
 
+export const SaveToDriveIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 13.5v6c0 1.105.895 2 2 2h14c1.105 0 2-.895 2-2v-6" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75V6.375c0-1.125-.788-2.125-1.875-2.375L12 3 8.625 4c-1.087.25-1.875 1.25-1.875 2.375v3.375" />
+  </svg>
+);
+
+
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
 export const SendIcon = PaperAirplaneIcon;

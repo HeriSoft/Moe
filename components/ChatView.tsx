@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { ChatSession, Attachment } from '../types';
+import type { ChatSession, Attachment, Message } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
 import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon } from './icons';
@@ -97,6 +97,7 @@ interface ChatViewProps {
   commandToPrepend: string;
   clearCommandToPrepend: () => void;
   onAttachFromDrive: () => void;
+  onSaveToDrive: (message: Message) => Promise<void>;
 }
 
 const WelcomeScreen: React.FC = () => (
@@ -148,7 +149,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -461,6 +462,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                         isTTsLoading={audioState.isLoading && audioState.messageId === messageId}
                         audioUrl={audioState.messageId === messageId ? audioState.audioUrl : null}
                         onToggleTTS={() => handleToggleTTS(messageId, msg.text)}
+                        onSaveToDrive={() => onSaveToDrive(msg)}
                     />
                 );
               })}
