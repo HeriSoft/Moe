@@ -5,6 +5,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } from './components/ImageSettingsModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
+import { SwapFaceModal } from './components/SwapFaceModal';
 import {
   streamModelResponse,
   generateImage,
@@ -83,6 +84,7 @@ const App: React.FC = () => {
   // New state for new features
   const [promptForNewChat, setPromptForNewChat] = useState<string | null>(null);
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
+  const [isSwapFaceModalOpen, setIsSwapFaceModalOpen] = useState(false);
 
 
 
@@ -678,6 +680,7 @@ const App: React.FC = () => {
           onSaveToDrive={handleSaveToDrive}
           startChatWithPrompt={startChatWithPrompt}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
+          onOpenSwapFaceModal={() => setIsSwapFaceModalOpen(true)}
         />
       </main>
       <SettingsModal
@@ -709,6 +712,11 @@ const App: React.FC = () => {
           onClose={() => setIsMediaGalleryOpen(false)}
           mediaItems={recentMedia}
           setActiveChat={setActiveChat}
+      />
+      <SwapFaceModal
+        isOpen={isSwapFaceModalOpen}
+        onClose={() => setIsSwapFaceModalOpen(false)}
+        setNotifications={setNotifications}
       />
     </div>
   );
