@@ -18,8 +18,10 @@ const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
-// Using appDataFolder for privacy, plus userinfo scopes to get profile data.
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+// FIX: Request full drive scope. The 'drive.file' scope is insufficient for PATCHing
+// arbitrary files selected by the user via the picker, leading to 403 errors.
+// The 'drive' scope allows the app to modify any file the user has granted access to.
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive';
 const APP_FOLDER_NAME = 'Moe Chat Data';
 
 let gapi: any = null;
@@ -425,30 +427,57 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  */
 export async function downloadDriveFile(fileId: string): Promise<string> {
     try {
-        const response = await gapi.client.drive.files.get({
-            fileId: fileId,
-            alt: 'media'
-        });
-        
-        // GAPI's `files.get` with `alt: 'media'` returns the raw response, not a parsed JSON object.
-        // We need to access the raw body and convert it.
-        const blob = await new Response(response.body).blob();
-        const buffer = await blob.arrayBuffer();
-        return arrayBufferToBase64(buffer);
-        
-    } catch (error) {
-        // GAPI wraps the raw XHR error. We need to parse it to get the real error message.
-        if (error && (error as any).body) {
-            try {
-                const errorBody = JSON.parse((error as any).body);
-                const errorMessage = errorBody?.error?.message || 'Failed to download file from Drive.';
-                 handleGapiError({ result: { error: { message: errorMessage } } } as any, `downloading file ${fileId}`);
-            } catch (e) {
-                 handleGapiError(error, `downloading file ${fileId}`);
-            }
-        } else {
-            handleGapiError(error, `downloading file ${fileId}`);
+        const token = gapi.client.getToken();
+        if (!token || !token.access_token) {
+            throw new Error("Cannot download file: User is not authenticated.");
         }
+        const accessToken = token.access_token;
+
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        if (!response.ok) {
+            // Try to parse error from Google's JSON response
+            try {
+                 const errorData = await response.json();
+                 const errorMessage = errorData?.error?.message || `Failed to download file. Status: ${response.status}`;
+                 throw new Error(errorMessage);
+            } catch (e) {
+                 // If parsing fails, throw a generic error
+                 throw new Error(`Failed to download file from Drive. HTTP Status: ${response.status}`);
+            }
+        }
+
+        const buffer = await response.arrayBuffer();
+        return arrayBufferToBase64(buffer);
+
+    } catch (error) {
+        // Pass the error to the centralized handler
+        handleGapiError(error, `downloading file ${fileId}`);
+    }
+}
+
+
+/**
+ * Updates the content of an existing file on Google Drive.
+ * @param fileId The ID of the file to update.
+ * @param newContent The new text content for the file.
+ * @param mimeType The original MIME type of the file.
+ */
+export async function updateDriveFileContent(fileId: string, newContent: string, mimeType: string): Promise<void> {
+    try {
+        await gapi.client.request({
+            path: `/upload/drive/v3/files/${fileId}`,
+            method: 'PATCH',
+            params: { uploadType: 'media' },
+            headers: { 'Content-Type': mimeType }, // Use the original file's MIME type
+            body: newContent
+        });
+    } catch (error) {
+        handleGapiError(error, `updating file content for ${fileId}`);
     }
 }
 
