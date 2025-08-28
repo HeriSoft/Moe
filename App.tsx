@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
+import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } from './components/ImageSettingsModal';
 import {
   streamModelResponse,
   generateImage,
+  editImage,
 } from './services/geminiService';
+import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon } from './components/icons';
-import type { ChatSession, Message, Attachment } from './types';
+import type { ChatSession, Message, Attachment, UserProfile } from './types';
 
 const MAX_FILES = 4;
 const MAX_IMAGE_FILES = 1;
@@ -55,93 +58,87 @@ const App: React.FC = () => {
   const [isDeepThinkEnabled, setIsDeepThinkEnabled] = useState(false);
   const [chatBgColor, setChatBgColor] = useState('#212133');
   const [notifications, setNotifications] = useState<string[]>([]);
-  const [isGuestUser, setIsGuestUser] = useState(true);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
+  
+  // --- New Auth & Data State ---
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile>();
+  const sessionsRef = useRef(chatSessions);
 
-
-  // Load state from localStorage on initial render, including migration logic
   useEffect(() => {
-    try {
-        // --- Migration for old DeepSeek model names ---
-        const modelMigrationMap: { [key: string]: string } = {
-            'deepseek-v3': 'deepseek-v3.1',
-            'deepseek-r1': 'deepseek-v3.1',
-            'deepseek-v2': 'deepseek-v3.1',
-            'deepseek-chat': 'deepseek-v3.1',
-            'deepseek-reasoner': 'deepseek-v3.1',
-        };
+    sessionsRef.current = chatSessions;
+  }, [chatSessions]);
 
-        // 1. Migrate defaultModel from localStorage
-        let savedModel = localStorage.getItem('defaultModel');
-        if (savedModel && modelMigrationMap[savedModel]) {
-            savedModel = modelMigrationMap[savedModel];
-            localStorage.setItem('defaultModel', savedModel); // Update localStorage
-        }
-        // Set the potentially migrated model to state
-        if (savedModel) {
-            setModel(savedModel);
-        }
 
-        // 2. Migrate chatSessions from localStorage
-        const savedSessionsJSON = localStorage.getItem('chatSessions');
-        let sessionsToLoad: ChatSession[] = [];
-        if (savedSessionsJSON) {
-            let parsedSessions: ChatSession[] = JSON.parse(savedSessionsJSON);
-            let sessionsUpdated = false;
-            parsedSessions = parsedSessions.map(session => {
-                const updatedSession = { ...session };
-                if (session.model && modelMigrationMap[session.model]) {
-                    sessionsUpdated = true;
-                    updatedSession.model = modelMigrationMap[session.model];
-                }
-                // Add default persona if missing
-                if (!session.persona) {
-                    updatedSession.persona = 'default';
-                }
-                return updatedSession;
-            });
+  // New state for image features
+  const [isImageSettingsModalOpen, setIsImageSettingsModalOpen] = useState(false);
+  const [imageModalMode, setImageModalMode] = useState<'generation' | 'editing'>('generation');
+  const [imageGenerationSettings, setImageGenerationSettings] = useState<ImageGenerationSettings | null>(null);
+  const [imageEditingSettings, setImageEditingSettings] = useState<ImageEditingSettings | null>(null);
+  const [commandToPrepend, setCommandToPrepend] = useState('');
 
-            if (sessionsUpdated) {
-                localStorage.setItem('chatSessions', JSON.stringify(parsedSessions)); // Update localStorage if changed
-            }
-            sessionsToLoad = parsedSessions;
-        }
 
-        if (sessionsToLoad.length > 0) {
-            setChatSessions(sessionsToLoad);
-            const savedActiveId = localStorage.getItem('activeChatId');
-            const activeSessionExists = savedActiveId && sessionsToLoad.some(s => s.id === savedActiveId);
-            setActiveChatId(activeSessionExists ? savedActiveId : sessionsToLoad[0].id);
-        }
-
-        // --- Load other settings ---
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) {
-            setIsDarkMode(savedTheme === 'dark');
-        } else {
-            setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
-        }
-        
-        const savedChatBg = localStorage.getItem('chatBgColor');
-        if (savedChatBg) {
-            setChatBgColor(savedChatBg);
-        }
-    } catch (error) {
-        console.error("Failed to load and migrate state from localStorage", error);
+  // --- Initialization Effect ---
+  useEffect(() => {
+    // Load local-only settings first
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+        setIsDarkMode(savedTheme === 'dark');
+    } else {
+        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
     }
+    const savedChatBg = localStorage.getItem('chatBgColor');
+    if (savedChatBg) setChatBgColor(savedChatBg);
+    const savedModel = localStorage.getItem('defaultModel');
+    if (savedModel) setModel(savedModel);
+
+    // Initialize Google Drive Service
+    const handleAuthChange = (loggedIn: boolean, profile?: UserProfile) => {
+        setIsLoggedIn(loggedIn);
+        if (loggedIn && profile) {
+            setUserProfile(profile);
+            loadChatsFromDrive();
+        } else {
+            setUserProfile(undefined);
+            setChatSessions([]); // Clear sessions on logout
+            setActiveChatId(null);
+        }
+        setIsAuthReady(true);
+    };
+
+    googleDriveService.initClient(handleAuthChange);
   }, []);
 
-  // Save sessions and active chat ID to localStorage whenever they change
-  useEffect(() => {
+  const loadChatsFromDrive = async () => {
+    setIsLoading(true);
     try {
-        localStorage.setItem('chatSessions', JSON.stringify(chatSessions));
-        if (activeChatId) {
-          localStorage.setItem('activeChatId', activeChatId);
+        const sessions = await googleDriveService.listSessions();
+        setChatSessions(sessions);
+        if (sessions.length > 0) {
+            const lastActiveId = localStorage.getItem('activeChatId');
+            const sessionExists = lastActiveId && sessions.some(s => s.id === lastActiveId);
+            setActiveChatId(sessionExists ? lastActiveId : sessions[0].id);
+        } else {
+            setActiveChatId(null);
         }
     } catch (error) {
-        console.error("Failed to save state to localStorage", error);
+        console.error("Failed to load chats from Drive:", error);
+        setNotifications(prev => ["Failed to load chats from Google Drive.", ...prev.slice(0, 19)]);
+    } finally {
+        setIsLoading(false);
     }
-  }, [chatSessions, activeChatId]);
+  };
+  
+  // Save active chat ID to localStorage whenever it changes
+  useEffect(() => {
+    if (activeChatId) {
+        localStorage.setItem('activeChatId', activeChatId);
+    } else {
+        localStorage.removeItem('activeChatId');
+    }
+  }, [activeChatId]);
+
 
   // Save model and background color to localStorage
   useEffect(() => {
@@ -165,141 +162,144 @@ const App: React.FC = () => {
 
   // When the default model changes via settings, update the active chat to use it.
   useEffect(() => {
-    // Don't do anything if no chat is active
-    if (!activeChatId) {
-      return;
-    }
+    if (!activeChatId || !isLoggedIn) return;
 
-    setChatSessions(prevSessions => {
-      const currentActiveChat = prevSessions.find(s => s.id === activeChatId);
+    const currentActiveChat = sessionsRef.current.find(s => s.id === activeChatId);
 
-      // Only update if a chat is active and the model has actually changed
-      if (currentActiveChat && currentActiveChat.model !== model) {
-        const modelChangeMessage: Message = {
-          role: 'model',
-          text: `Model switched to **${model}**.`,
-          timestamp: Date.now(),
-        };
-
-        return prevSessions.map(session =>
-          session.id === activeChatId
-            ? {
-                ...session,
-                model: model, // Update the model for the session
-                messages: [...session.messages, modelChangeMessage], // Add a notification message to the chat
-              }
-            : session
-        );
-      }
+    if (currentActiveChat && currentActiveChat.model !== model) {
+      const modelChangeMessage: Message = {
+        role: 'model',
+        text: `Model switched to **${model}**.`,
+        timestamp: Date.now(),
+      };
       
-      // If no change is needed, return the previous state to avoid unnecessary re-renders
-      return prevSessions;
-    });
-  }, [model, activeChatId]); // Only run this effect when the model selection changes.
+      const updatedChat = {
+        ...currentActiveChat,
+        model: model,
+        messages: [...currentActiveChat.messages, modelChangeMessage],
+      };
 
-  const startNewChat = useCallback(() => {
+      googleDriveService.saveSession(updatedChat).then(savedChat => {
+         setChatSessions(prev => prev.map(s => s.id === activeChatId ? savedChat : s));
+      }).catch(err => {
+         console.error("Failed to save session on model change:", err);
+         setNotifications(prev => ["Failed to update model.", ...prev.slice(0, 19)]);
+      });
+    }
+  }, [model, activeChatId, isLoggedIn]);
+
+  const startNewChat = useCallback(async () => {
+    if (!isLoggedIn) {
+        setIsLoginModalOpen(true);
+        return;
+    }
     const newChat: ChatSession = {
       id: Date.now().toString(),
       title: 'New Chat',
       messages: [{ role: 'model', text: 'Hello! How can I help you today?', timestamp: Date.now() }],
-      model: model, // Use the current default model
+      model: model,
       isFavorite: false,
       persona: 'default',
     };
-    setChatSessions(prev => [newChat, ...prev]);
-    setActiveChatId(newChat.id);
-    setIsSidebarOpen(false); // Close sidebar on mobile after starting a new chat
-  }, [model]);
+    
+    try {
+        const savedChat = await googleDriveService.saveSession(newChat);
+        setChatSessions(prev => [savedChat, ...prev]);
+        setActiveChatId(savedChat.id);
+        setIsSidebarOpen(false);
+    } catch (error) {
+        console.error("Failed to start new chat:", error);
+        setNotifications(prev => ["Could not create new chat in Google Drive.", ...prev.slice(0, 19)]);
+    }
+  }, [model, isLoggedIn]);
 
   const setActiveChat = useCallback((id: string) => {
     setActiveChatId(id);
-    setIsSidebarOpen(false); // Close sidebar on mobile after selecting a chat
+    setIsSidebarOpen(false);
   }, []);
   
-  const deleteChat = useCallback((idToDelete: string) => {
-    setChatSessions(prev => {
-        const newSessions = prev.filter(s => s.id !== idToDelete);
-        if (activeChatId === idToDelete) {
-            if (newSessions.length > 0) {
-                setActiveChatId(newSessions[0].id);
-            } else {
-                setActiveChatId(null);
-                 localStorage.removeItem('activeChatId');
+  const deleteChat = useCallback(async (idToDelete: string) => {
+    const sessionToDelete = chatSessions.find(s => s.id === idToDelete);
+    if (!sessionToDelete?.driveFileId) return;
+
+    try {
+        await googleDriveService.deleteSession(sessionToDelete.driveFileId);
+        setChatSessions(prev => {
+            const newSessions = prev.filter(s => s.id !== idToDelete);
+            if (activeChatId === idToDelete) {
+                setActiveChatId(newSessions.length > 0 ? newSessions[0].id : null);
             }
-        }
-        return newSessions;
-    });
-  }, [activeChatId]);
+            return newSessions;
+        });
+    } catch (error) {
+        console.error("Failed to delete chat:", error);
+        setNotifications(prev => ["Failed to delete chat from Google Drive.", ...prev.slice(0, 19)]);
+    }
+  }, [chatSessions, activeChatId]);
 
-  const toggleFavorite = useCallback((idToToggle: string) => {
-    setChatSessions(prev => 
-        prev.map(session => 
-            session.id === idToToggle 
-            ? { ...session, isFavorite: !session.isFavorite } 
-            : session
-        )
-    );
-  }, []);
+  const toggleFavorite = useCallback(async (idToToggle: string) => {
+    const session = chatSessions.find(s => s.id === idToToggle);
+    if (!session) return;
+    
+    const updatedSession = { ...session, isFavorite: !session.isFavorite };
+    try {
+        await googleDriveService.saveSession(updatedSession);
+        setChatSessions(prev => prev.map(s => s.id === idToToggle ? updatedSession : s));
+    } catch (error) {
+        console.error("Failed to toggle favorite:", error);
+        setNotifications(prev => ["Failed to update favorite status.", ...prev.slice(0, 19)]);
+    }
+  }, [chatSessions]);
 
-  const handleSetPersona = useCallback((personaKey: string) => {
+  const handleSetPersona = useCallback(async (personaKey: string) => {
     if (!activeChatId) return;
+    const session = chatSessions.find(s => s.id === activeChatId);
+    if (!session || session.persona === personaKey) return;
+    
+    const personaName = PERSONAS[personaKey]?.name || 'Default';
+    const personaMessage: Message = {
+      role: 'model',
+      text: `AI persona is now **${personaName}**.`,
+      timestamp: Date.now(),
+    };
+    const updatedSession = { ...session, persona: personaKey, messages: [...session.messages, personaMessage] };
 
-    setChatSessions(prev =>
-      prev.map(s => {
-        if (s.id === activeChatId && s.persona !== personaKey) {
-          const personaName = PERSONAS[personaKey]?.name || 'Default';
-          const personaMessage: Message = {
-            role: 'model',
-            text: `AI persona is now **${personaName}**.`,
-            timestamp: Date.now(),
-          };
-          return { ...s, persona: personaKey, messages: [...s.messages, personaMessage] };
-        }
-        return s;
-      })
-    );
-  }, [activeChatId]);
+    try {
+        await googleDriveService.saveSession(updatedSession);
+        setChatSessions(prev => prev.map(s => s.id === activeChatId ? updatedSession : s));
+    } catch (error) {
+        console.error("Failed to set persona:", error);
+        setNotifications(prev => ["Failed to update persona.", ...prev.slice(0, 19)]);
+    }
+  }, [chatSessions, activeChatId]);
 
 
   const handleSetAttachments = (files: FileList | null) => {
     if (!files) return;
 
     const newFiles = Array.from(files);
-    
-    // Validation checks
     if (attachments.length + newFiles.length > MAX_FILES) {
       setNotifications(prev => [`You can only attach up to ${MAX_FILES} files.`, ...prev.slice(0, 19)]);
       return;
     }
-    
     const currentImageCount = attachments.filter(f => f.mimeType.startsWith('image/')).length;
     const newImageCount = newFiles.filter(f => f.type.startsWith('image/')).length;
-    
     if (currentImageCount + newImageCount > MAX_IMAGE_FILES) {
       setNotifications(prev => [`You can only attach a maximum of ${MAX_IMAGE_FILES} image.`, ...prev.slice(0, 19)]);
       return;
     }
-
-    // Read and add new files
     const filePromises = newFiles.map(file => {
       return new Promise<Attachment>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64String = (reader.result as string).split(',')[1];
-          resolve({
-            data: base64String,
-            mimeType: file.type,
-            fileName: file.name,
-          });
+          resolve({ data: base64String, mimeType: file.type, fileName: file.name });
         };
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
     });
-
-    Promise.all(filePromises).then(newAttachments => {
-      setAttachments(prev => [...prev, ...newAttachments]);
-    });
+    Promise.all(filePromises).then(newAttachments => setAttachments(prev => [...prev, ...newAttachments]));
   };
 
   const removeAttachment = (index: number) => {
@@ -313,101 +313,114 @@ const App: React.FC = () => {
     
     if (!isWebSearchEnabled && !currentModel.startsWith('gemini')) {
       setNotifications(prev => [`Web Search is only available for Gemini models.`, ...prev.slice(0, 19)]);
-      return; // Prevent enabling for unsupported models
+      return;
     }
     setIsWebSearchEnabled(prev => !prev);
   };
   
   const toggleDeepThink = () => setIsDeepThinkEnabled(prev => !prev);
 
+  const openImageSettingsModal = (mode: 'generation' | 'editing') => {
+    if (!isLoggedIn) { setIsLoginModalOpen(true); return; }
+    setImageModalMode(mode);
+    setIsImageSettingsModalOpen(true);
+  };
+
+  const handleApplyImageSettings = (settings: any, mode: 'generation' | 'editing') => {
+    if (mode === 'generation') {
+        setImageGenerationSettings(settings);
+        setCommandToPrepend('/image ');
+    } else {
+        setImageEditingSettings(settings);
+        setCommandToPrepend('/edit ');
+    }
+  };
+
 
   const sendMessage = async (messageText: string, messageAttachments = attachments, customHistory?: Message[]) => {
     if (!activeChatId) return;
+    if (!isLoggedIn) { setIsLoginModalOpen(true); return; }
 
-    const currentChat = chatSessions.find(c => c.id === activeChatId);
+    let currentChat = sessionsRef.current.find(c => c.id === activeChatId);
     if (!currentChat) return;
     
-    const historyForAPI = customHistory || [...currentChat.messages];
+    const userMessage: Message = {
+      role: 'user',
+      text: messageText,
+      timestamp: Date.now(),
+      ...(messageAttachments.length > 0 && { attachments: messageAttachments }),
+    };
 
-    // Only add a new user message if we are not using a custom history (i.e., not an edit/refresh)
     if (!customHistory) {
-      const userMessage: Message = {
-        role: 'user',
-        text: messageText,
-        timestamp: Date.now(),
-        ...(messageAttachments.length > 0 && { attachments: messageAttachments }),
+      const isFirstMessage = currentChat.messages.length <= 1;
+      const newTitle = isFirstMessage ? messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '') : currentChat.title;
+      currentChat = {
+        ...currentChat,
+        title: newTitle,
+        messages: [...currentChat.messages, userMessage],
       };
-
-      setChatSessions(prev =>
-        prev.map(s =>
-          s.id === activeChatId
-            ? {
-                ...s,
-                title: s.messages.length === 1 ? messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '') : s.title,
-                messages: [...s.messages, userMessage],
-              }
-            : s
-        )
-      );
+      setChatSessions(prev => prev.map(s => s.id === activeChatId ? currentChat as ChatSession : s));
+      // Save after adding user message
+      await googleDriveService.saveSession(currentChat).catch(e => console.error("Save after user message failed:", e));
     }
     
     setIsLoading(true);
-    const webSearch = isWebSearchEnabled;
-    const deepThink = isDeepThinkEnabled;
-    const activePersonaKey = currentChat.persona || 'default';
-    const systemInstruction = PERSONAS[activePersonaKey]?.prompt;
-
-    setAttachments([]); // Clear attachments after sending
-    setIsWebSearchEnabled(false);
-    setIsDeepThinkEnabled(false);
-
+    setAttachments([]);
+    
     try {
-      if (messageText.startsWith('/imagine ')) {
-        const prompt = messageText.replace('/imagine ', '').trim();
-        const image = await generateImage(prompt);
-        const imageMessage: Message = { role: 'model', text: `Here is the generated image for: "${prompt}"`, attachments: [image], timestamp: Date.now() };
-        setChatSessions(prev =>
-          prev.map(s => s.id === activeChatId ? { ...s, messages: [...s.messages, imageMessage] } : s)
-        );
-      } else {
-        let finalModel = currentChat.model;
-        if (currentChat.model === 'deepseek-v3.1') {
-            finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
-        }
-
-        const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction);
-        let isFirstChunk = true;
-        let modelResponse = '';
-
-        for await (const chunk of stream) {
-            if (chunk.status) {
-                setThinkingStatus(chunk.status);
+        let finalChatState: ChatSession = currentChat;
+        if (messageText.startsWith('/image ') || messageText.startsWith('/edit ')) {
+            let resultMessage: Message;
+            if (messageText.startsWith('/image ')) {
+                const prompt = messageText.replace('/image ', '').trim();
+                if (!imageGenerationSettings) throw new Error("Image generation settings not configured.");
+                const images = await generateImage(prompt, imageGenerationSettings);
+                resultMessage = { role: 'model', text: `Here are the generated images for: "${prompt}"`, attachments: images, timestamp: Date.now() };
+            } else { // /edit
+                const prompt = messageText.replace('/edit ', '').trim();
+                const imageToEdit = messageAttachments.find(att => att.mimeType.startsWith('image/'));
+                if (!imageToEdit) throw new Error("An image attachment is required for the /edit command.");
+                if (!imageEditingSettings) throw new Error("Image editing settings not configured.");
+                const result = await editImage(prompt, imageToEdit, imageEditingSettings);
+                resultMessage = { role: 'model', text: result.text, attachments: result.attachments, timestamp: Date.now() };
             }
-            if (chunk.text) { 
-                if (isFirstChunk) {
-                    setThinkingStatus(null); // Clear status when response starts
-                }
-                modelResponse += chunk.text;
-                if (isFirstChunk) {
-                    isFirstChunk = false;
-                    const modelMessage: Message = { role: 'model', text: modelResponse, timestamp: Date.now() };
-                    setChatSessions(prev =>
-                        prev.map(s =>
-                            s.id === activeChatId
-                                ? { ...s, messages: [...s.messages, modelMessage] }
-                                : s
-                        )
-                    );
+            finalChatState = { ...currentChat, messages: [...currentChat.messages, resultMessage] };
+            setChatSessions(prev => prev.map(s => s.id === activeChatId ? finalChatState : s));
 
-                } else {
+        } else {
+            const historyForAPI = customHistory || [...currentChat.messages];
+            const webSearch = isWebSearchEnabled;
+            const deepThink = isDeepThinkEnabled;
+            const activePersonaKey = currentChat.persona || 'default';
+            const systemInstruction = PERSONAS[activePersonaKey]?.prompt;
+            setIsWebSearchEnabled(false);
+            setIsDeepThinkEnabled(false);
+            let finalModel = currentChat.model;
+            if (currentChat.model === 'deepseek-v3.1') {
+                finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
+            }
+
+            const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction);
+            let isFirstChunk = true;
+            let modelResponse = '';
+
+            for await (const chunk of stream) {
+                if (chunk.status) setThinkingStatus(chunk.status);
+                if (chunk.text) { 
+                    if (isFirstChunk) setThinkingStatus(null);
+                    modelResponse += chunk.text;
                     setChatSessions(prev =>
                         prev.map(s => {
                             if (s.id === activeChatId) {
-                                const newMessages = [...s.messages];
-                                if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'model') {
+                                let newMessages = [...s.messages];
+                                if (isFirstChunk) {
+                                    newMessages.push({ role: 'model', text: modelResponse, timestamp: Date.now() });
+                                    isFirstChunk = false;
+                                } else if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'model') {
                                    newMessages[newMessages.length - 1].text = modelResponse;
                                 }
-                                return { ...s, messages: newMessages };
+                                finalChatState = { ...s, messages: newMessages }; // keep track of the latest state
+                                return finalChatState;
                             }
                             return s;
                         })
@@ -415,14 +428,21 @@ const App: React.FC = () => {
                 }
             }
         }
-      }
+        await googleDriveService.saveSession(finalChatState);
     } catch (error) {
       console.error("Error sending message:", error);
       const detailedError = error instanceof Error ? error.message : String(error);
       setNotifications(prev => [`[${new Date().toLocaleTimeString()}] ${detailedError}`, ...prev.slice(0, 19)]);
-      const errorMessage: Message = { role: 'model', text: "There was an unexpected error. Please try again.", timestamp: Date.now() };
+      const errorMessage: Message = { role: 'model', text: `There was an unexpected error: ${detailedError}`, timestamp: Date.now() };
       setChatSessions(prev =>
-          prev.map(s => s.id === activeChatId ? { ...s, messages: [...s.messages, errorMessage] } : s)
+          prev.map(s => {
+            if (s.id === activeChatId) {
+                const updatedChat = { ...s, messages: [...s.messages, errorMessage] };
+                googleDriveService.saveSession(updatedChat).catch(e => console.error("Failed to save error message", e));
+                return updatedChat;
+            }
+            return s;
+          })
       );
     } finally {
       setIsLoading(false);
@@ -431,50 +451,33 @@ const App: React.FC = () => {
   };
   
   const handleEditMessage = async (messageIndex: number, newText: string) => {
-      if (!activeChatId) return;
+      if (!activeChatId || !isLoggedIn) return;
       
-      let sessionToUpdate: ChatSession | undefined;
+      const session = sessionsRef.current.find(s => s.id === activeChatId);
+      if (!session) return;
       
-      setChatSessions(prev => prev.map(s => {
-          if (s.id === activeChatId) {
-              const truncatedMessages = s.messages.slice(0, messageIndex);
-              const editedMessage: Message = {
-                  ...s.messages[messageIndex],
-                  text: newText,
-                  timestamp: Date.now(),
-              };
-              sessionToUpdate = { ...s, messages: [...truncatedMessages, editedMessage] };
-              return sessionToUpdate;
-          }
-          return s;
-      }));
+      const truncatedMessages = session.messages.slice(0, messageIndex);
+      const editedMessage: Message = { ...session.messages[messageIndex], text: newText, timestamp: Date.now() };
+      const updatedSession = { ...session, messages: [...truncatedMessages, editedMessage] };
+      setChatSessions(prev => prev.map(s => s.id === activeChatId ? updatedSession : s));
 
-      if (sessionToUpdate) {
-        // We use the history *before* the edited message to generate a new response
-        const historyForApi = sessionToUpdate.messages.slice(0, messageIndex); 
-        await sendMessage(newText, sessionToUpdate.messages[messageIndex].attachments, historyForApi);
-      }
+      const historyForApi = updatedSession.messages.slice(0, messageIndex); 
+      await sendMessage(newText, updatedSession.messages[messageIndex].attachments, historyForApi);
   };
 
   const handleRefreshResponse = async (messageIndex: number) => {
-    if (!activeChatId || messageIndex === 0) return;
+    if (!activeChatId || messageIndex === 0 || !isLoggedIn) return;
     
-    let sessionToUpdate: ChatSession | undefined;
-    let userPrompt: Message | undefined;
+    const session = sessionsRef.current.find(s => s.id === activeChatId);
+    if (!session) return;
 
-    setChatSessions(prev => prev.map(s => {
-        if (s.id === activeChatId) {
-            // Remove the model's response and any subsequent messages
-            const truncatedMessages = s.messages.slice(0, messageIndex);
-            userPrompt = truncatedMessages[truncatedMessages.length - 1];
-            sessionToUpdate = { ...s, messages: truncatedMessages };
-            return sessionToUpdate;
-        }
-        return s;
-    }));
-
-    if (sessionToUpdate && userPrompt && userPrompt.role === 'user') {
-        const historyForApi = sessionToUpdate.messages.slice(0, messageIndex - 1);
+    const truncatedMessages = session.messages.slice(0, messageIndex);
+    const userPrompt = truncatedMessages[truncatedMessages.length - 1];
+    
+    if (userPrompt?.role === 'user') {
+        const updatedSession = { ...session, messages: truncatedMessages };
+        setChatSessions(prev => prev.map(s => s.id === activeChatId ? updatedSession : s));
+        const historyForApi = updatedSession.messages.slice(0, messageIndex - 1);
         await sendMessage(userPrompt.text, userPrompt.attachments, historyForApi);
     }
   };
@@ -499,8 +502,10 @@ const App: React.FC = () => {
         deleteChat={deleteChat}
         toggleFavorite={toggleFavorite}
         onSettingsClick={() => setIsSettingsOpen(true)}
-        onUserClick={() => setIsLoginModalOpen(true)}
-        isGuestUser={isGuestUser}
+        onSignIn={() => googleDriveService.signIn()}
+        onSignOut={() => googleDriveService.signOut( (loggedIn) => setIsLoggedIn(loggedIn) )}
+        isLoggedIn={isLoggedIn}
+        userProfile={userProfile}
       />
       <main className="flex-1 min-w-0">
         <ChatView
@@ -508,7 +513,7 @@ const App: React.FC = () => {
           sendMessage={sendMessage}
           handleEditMessage={handleEditMessage}
           handleRefreshResponse={handleRefreshResponse}
-          isLoading={isLoading}
+          isLoading={isLoading || !isAuthReady}
           thinkingStatus={thinkingStatus}
           attachments={attachments}
           setAttachments={handleSetAttachments}
@@ -526,6 +531,9 @@ const App: React.FC = () => {
           clearNotifications={() => setNotifications([])}
           personas={PERSONAS}
           setPersona={handleSetPersona}
+          openImageSettingsModal={openImageSettingsModal}
+          commandToPrepend={commandToPrepend}
+          clearCommandToPrepend={() => setCommandToPrepend('')}
         />
       </main>
       <SettingsModal
@@ -541,7 +549,16 @@ const App: React.FC = () => {
       <LoginModal 
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
-        onLoginSuccess={() => setIsGuestUser(false)}
+        onGoogleSignIn={() => {
+            googleDriveService.signIn();
+            setIsLoginModalOpen(false);
+        }}
+      />
+      <ImageSettingsModal
+        isOpen={isImageSettingsModalOpen}
+        onClose={() => setIsImageSettingsModalOpen(false)}
+        onApply={handleApplyImageSettings}
+        mode={imageModalMode}
       />
     </div>
   );
