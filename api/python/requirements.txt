@@ -1,6 +1,7 @@
 gunicorn==22.0.0
-onnxruntime==1.17.3
-opencv-python-headless==4.9.0.80
+Flask==3.0.3
 numpy==1.26.4
+opencv-python-headless==4.10.0.84
 insightface==0.7.3
-requests==2.32.3
+onnxruntime==1.18.1
+Pillow
