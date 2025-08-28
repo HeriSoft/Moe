@@ -80,42 +80,7 @@ const App: React.FC = () => {
   const [commandToPrepend, setCommandToPrepend] = useState('');
 
 
-  // --- Initialization Effect ---
-  useEffect(() => {
-    // Load local-only settings first
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-        setIsDarkMode(savedTheme === 'dark');
-    } else {
-        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
-    }
-    const savedChatBg = localStorage.getItem('chatBgColor');
-    if (savedChatBg) setChatBgColor(savedChatBg);
-    const savedModel = localStorage.getItem('defaultModel');
-    if (savedModel) setModel(savedModel);
-
-    // Initialize Google Drive Service
-    const handleAuthChange = (loggedIn: boolean, profile?: UserProfile) => {
-        setIsLoggedIn(loggedIn);
-        if (loggedIn && profile) {
-            setUserProfile(profile);
-            loadChatsFromDrive();
-        } else {
-            setUserProfile(undefined);
-            setChatSessions([]); // Clear sessions on logout
-            setActiveChatId(null);
-        }
-        setIsAuthReady(true);
-        setAuthError(null); // Clear previous errors on successful auth change
-    };
-
-    googleDriveService.initClient(handleAuthChange, (errorMsg) => {
-        setAuthError(errorMsg);
-        setIsAuthReady(true); // It's "ready" in the sense that initialization has completed (with an error)
-    });
-  }, []);
-
-  const loadChatsFromDrive = async () => {
+  const loadChatsFromDrive = useCallback(async () => {
     setIsLoading(true);
     try {
         const sessions = await googleDriveService.listSessions();
@@ -133,7 +98,46 @@ const App: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Define the authentication handler using useCallback to prevent stale closures
+  const handleAuthChange = useCallback((loggedIn: boolean, profile?: UserProfile) => {
+      setIsLoggedIn(loggedIn);
+      if (loggedIn && profile) {
+          setUserProfile(profile);
+          loadChatsFromDrive();
+      } else {
+          setUserProfile(undefined);
+          setChatSessions([]); // Clear sessions on logout
+          setActiveChatId(null);
+      }
+      setIsAuthReady(true);
+      setAuthError(null); // Clear previous errors on successful auth change
+  }, [loadChatsFromDrive]);
+
+
+  // --- Initialization Effect ---
+  useEffect(() => {
+    // Load local-only settings first
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+        setIsDarkMode(savedTheme === 'dark');
+    } else {
+        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    const savedChatBg = localStorage.getItem('chatBgColor');
+    if (savedChatBg) setChatBgColor(savedChatBg);
+    const savedModel = localStorage.getItem('defaultModel');
+    if (savedModel) setModel(savedModel);
+
+    // Initialize Google Drive Service
+    const handleAuthError = (errorMsg: string) => {
+        setAuthError(errorMsg);
+        setIsAuthReady(true); // It's "ready" in the sense that initialization has completed (with an error)
+    };
+
+    googleDriveService.initClient(handleAuthChange, handleAuthError);
+  }, [handleAuthChange]);
   
   // Save active chat ID to localStorage whenever it changes
   useEffect(() => {
