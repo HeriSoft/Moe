@@ -1,12 +1,13 @@
-// FIX: Manually define the type for import.meta.env to satisfy TypeScript
-// in environments where "vite/client" types might not be automatically resolved.
-// This removes the <reference> directive that was causing a "file not found"
-// error and fixes subsequent errors about the 'env' property.
-interface ImportMeta {
-  readonly env: {
-    readonly VITE_GOOGLE_CLIENT_ID: string;
-    readonly VITE_GOOGLE_API_KEY: string;
-  };
+// FIX: Augment the global ImportMeta type to include Vite's environment variables.
+// This resolves TypeScript errors about `import.meta.env` when the standard
+// `vite/client` types are not being picked up automatically.
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_GOOGLE_CLIENT_ID: string;
+      readonly VITE_GOOGLE_API_KEY: string;
+    };
+  }
 }
 
 import type { ChatSession, UserProfile } from '../types';
