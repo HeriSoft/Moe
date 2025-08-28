@@ -94,7 +94,8 @@ const App: React.FC = () => {
         }
     } catch (error) {
         console.error("Failed to load chats from Drive:", error);
-        setNotifications(prev => ["Failed to load chats from Google Drive.", ...prev.slice(0, 19)]);
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while loading chats.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     } finally {
         setIsLoading(false);
     }
@@ -218,7 +219,8 @@ const App: React.FC = () => {
         setIsSidebarOpen(false);
     } catch (error) {
         console.error("Failed to start new chat:", error);
-        setNotifications(prev => ["Could not create new chat in Google Drive.", ...prev.slice(0, 19)]);
+        const errorMessage = error instanceof Error ? error.message : "Could not create new chat.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     }
   }, [model, isLoggedIn]);
 
@@ -242,7 +244,8 @@ const App: React.FC = () => {
         });
     } catch (error) {
         console.error("Failed to delete chat:", error);
-        setNotifications(prev => ["Failed to delete chat from Google Drive.", ...prev.slice(0, 19)]);
+        const errorMessage = error instanceof Error ? error.message : "Could not delete chat.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     }
   }, [chatSessions, activeChatId]);
 
@@ -256,7 +259,8 @@ const App: React.FC = () => {
         setChatSessions(prev => prev.map(s => s.id === idToToggle ? updatedSession : s));
     } catch (error) {
         console.error("Failed to toggle favorite:", error);
-        setNotifications(prev => ["Failed to update favorite status.", ...prev.slice(0, 19)]);
+        const errorMessage = error instanceof Error ? error.message : "Could not update favorite status.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     }
   }, [chatSessions]);
 
@@ -278,7 +282,8 @@ const App: React.FC = () => {
         setChatSessions(prev => prev.map(s => s.id === activeChatId ? updatedSession : s));
     } catch (error) {
         console.error("Failed to set persona:", error);
-        setNotifications(prev => ["Failed to update persona.", ...prev.slice(0, 19)]);
+        const errorMessage = error instanceof Error ? error.message : "Could not update persona.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     }
   }, [chatSessions, activeChatId]);
 
