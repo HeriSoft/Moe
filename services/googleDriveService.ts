@@ -28,6 +28,34 @@ let tokenClient: any = null;
 let appFolderId: string | null = null;
 
 /**
+ * Inspects a GAPI error object and throws a more user-friendly error.
+ * Specifically checks for the "API not enabled" error.
+ * @param error The raw error object from a GAPI client promise rejection.
+ * @param context A string describing the action that failed (e.g., "saving session").
+ */
+const handleGapiError = (error: any, context: string): never => {
+    console.error(`GAPI Error during ${context}:`, error);
+    const errorDetails = error?.result?.error;
+
+    if (errorDetails) {
+        if (
+            (errorDetails.status === 'PERMISSION_DENIED' || errorDetails.code === 403) &&
+            errorDetails.message?.toLowerCase().includes('drive api has not been used')
+        ) {
+            throw new Error(
+                "Google Drive API is not enabled. Please visit your Google Cloud Console and enable the 'Google Drive API' for this project to save and load chats."
+            );
+        }
+        // Throw a more specific message if available
+        throw new Error(`Google Drive Error: ${errorDetails.message} (Code: ${errorDetails.code})`);
+    }
+
+    // Fallback for unexpected error formats
+    throw new Error(error.message || `An unknown error occurred during ${context}.`);
+};
+
+
+/**
  * Initializes the Google API client.
  * This function now assumes gapi and google scripts are loaded from index.html
  * @param onAuthChange Callback function to update authentication status in the app.
@@ -230,27 +258,31 @@ async function getAppFolderId(): Promise<string> {
         return appFolderId;
     }
 
-    const response = await gapi.client.drive.files.list({
-        q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`,
-        spaces: 'appDataFolder',
-        fields: 'files(id, name)',
-    });
-
-    if (response.result.files && response.result.files.length > 0) {
-        appFolderId = response.result.files[0].id;
-        return appFolderId as string;
-    } else {
-        const fileMetadata = {
-            'name': APP_FOLDER_NAME,
-            'mimeType': 'application/vnd.google-apps.folder',
-            'parents': ['appDataFolder']
-        };
-        const file = await gapi.client.drive.files.create({
-            resource: fileMetadata,
-            fields: 'id'
+    try {
+        const response = await gapi.client.drive.files.list({
+            q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`,
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
         });
-        appFolderId = file.result.id;
-        return appFolderId as string;
+
+        if (response.result.files && response.result.files.length > 0) {
+            appFolderId = response.result.files[0].id;
+            return appFolderId as string;
+        } else {
+            const fileMetadata = {
+                'name': APP_FOLDER_NAME,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': ['appDataFolder']
+            };
+            const file = await gapi.client.drive.files.create({
+                resource: fileMetadata,
+                fields: 'id'
+            });
+            appFolderId = file.result.id;
+            return appFolderId as string;
+        }
+    } catch (error) {
+        handleGapiError(error, 'finding or creating app folder');
     }
 }
 
@@ -259,32 +291,39 @@ async function getAppFolderId(): Promise<string> {
  * @returns {Promise<ChatSession[]>} A list of chat sessions.
  */
 export async function listSessions(): Promise<ChatSession[]> {
-    const folderId = await getAppFolderId();
-    const response = await gapi.client.drive.files.list({
-        q: `'${folderId}' in parents and trashed=false`,
-        fields: 'files(id, name)',
-        pageSize: 1000 // Max 1000 files
-    });
-    
-    const files = response.result.files || [];
-    const sessionPromises = files.map(async (file: any) => {
-        try {
-            const contentResponse = await gapi.client.drive.files.get({
-                fileId: file.id,
-                alt: 'media'
-            });
-            const sessionData = contentResponse.result as ChatSession;
-            // Attach the driveFileId for future updates/deletes
-            sessionData.driveFileId = file.id;
-            return sessionData;
-        } catch (error) {
-            console.error(`Failed to fetch content for file ${file.name} (${file.id}):`, error);
-            return null; // Return null for failed fetches
-        }
-    });
+    try {
+        const folderId = await getAppFolderId();
+        const response = await gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and trashed=false`,
+            // FIX: Explicitly specify the appDataFolder space to match the granted scope.
+            // Without this, the API defaults to the 'drive' space, causing a 403 error.
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
+            pageSize: 1000 // Max 1000 files
+        });
+        
+        const files = response.result.files || [];
+        const sessionPromises = files.map(async (file: any) => {
+            try {
+                const contentResponse = await gapi.client.drive.files.get({
+                    fileId: file.id,
+                    alt: 'media'
+                });
+                const sessionData = contentResponse.result as ChatSession;
+                // Attach the driveFileId for future updates/deletes
+                sessionData.driveFileId = file.id;
+                return sessionData;
+            } catch (error) {
+                console.error(`Failed to fetch content for file ${file.name} (${file.id}):`, error);
+                return null; // Return null for failed fetches
+            }
+        });
 
-    const sessions = (await Promise.all(sessionPromises)).filter(Boolean) as ChatSession[];
-    return sessions;
+        const sessions = (await Promise.all(sessionPromises)).filter(Boolean) as ChatSession[];
+        return sessions;
+    } catch (error) {
+        handleGapiError(error, 'listing chat sessions');
+    }
 }
 
 
@@ -294,46 +333,50 @@ export async function listSessions(): Promise<ChatSession[]> {
  * @returns The session object with the `driveFileId` updated.
  */
 export async function saveSession(session: ChatSession): Promise<ChatSession> {
-    const folderId = await getAppFolderId();
-    const fileName = `${session.id}.json`;
+    try {
+        const folderId = await getAppFolderId();
+        const fileName = `${session.id}.json`;
 
-    // Create a copy to avoid mutating the original object before saving
-    const sessionToSave = { ...session };
-    const fileId = sessionToSave.driveFileId;
-    delete sessionToSave.driveFileId; // Don't save the drive ID inside the file content
+        // Create a copy to avoid mutating the original object before saving
+        const sessionToSave = { ...session };
+        const fileId = sessionToSave.driveFileId;
+        delete sessionToSave.driveFileId; // Don't save the drive ID inside the file content
 
-    const fileMetadata = {
-        name: fileName,
-        mimeType: 'application/json',
-        ...(fileId ? {} : { parents: [folderId] }) // Only specify parent on creation
-    };
+        const fileMetadata = {
+            name: fileName,
+            mimeType: 'application/json',
+            ...(fileId ? {} : { parents: [folderId] }) // Only specify parent on creation
+        };
 
-    const boundary = '-------314159265358979323846';
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const close_delim = "\r\n--" + boundary + "--";
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
 
-    const multipartRequestBody =
-      delimiter +
-      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-      JSON.stringify(fileMetadata) +
-      delimiter +
-      'Content-Type: application/json\r\n\r\n' +
-      JSON.stringify(sessionToSave) +
-      close_delim;
-      
-    const request = gapi.client.request({
-        path: `/upload/drive/v3/files${fileId ? `/${fileId}` : ''}`,
-        method: fileId ? 'PATCH' : 'POST',
-        params: { uploadType: 'multipart' },
-        headers: {
-            'Content-Type': 'multipart/related; boundary="' + boundary + '"'
-        },
-        body: multipartRequestBody
-    });
-    
-    const response = await request;
-    session.driveFileId = response.result.id; // Update the original session object
-    return session;
+        const multipartRequestBody =
+          delimiter +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(fileMetadata) +
+          delimiter +
+          'Content-Type: application/json\r\n\r\n' +
+          JSON.stringify(sessionToSave) +
+          close_delim;
+          
+        const request = gapi.client.request({
+            path: `/upload/drive/v3/files${fileId ? `/${fileId}` : ''}`,
+            method: fileId ? 'PATCH' : 'POST',
+            params: { uploadType: 'multipart' },
+            headers: {
+                'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+            },
+            body: multipartRequestBody
+        });
+        
+        const response = await request;
+        session.driveFileId = response.result.id; // Update the original session object
+        return session;
+    } catch (error) {
+        handleGapiError(error, 'saving chat session');
+    }
 }
 
 
@@ -342,10 +385,14 @@ export async function saveSession(session: ChatSession): Promise<ChatSession> {
  * @param driveFileId The unique Google Drive file ID.
  */
 export async function deleteSession(driveFileId: string): Promise<void> {
-    if (!driveFileId) {
-        throw new Error("driveFileId is required to delete a session.");
+    try {
+        if (!driveFileId) {
+            throw new Error("driveFileId is required to delete a session.");
+        }
+        await gapi.client.drive.files.delete({
+            fileId: driveFileId
+        });
+    } catch (error) {
+        handleGapiError(error, 'deleting chat session');
     }
-    await gapi.client.drive.files.delete({
-        fileId: driveFileId
-    });
 }
