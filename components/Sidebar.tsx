@@ -1,8 +1,9 @@
 
 
+
 import React from 'react';
 import type { ChatSession } from '../types';
-import { PlusIcon, ChatBubbleIcon, UserIcon, GearIcon, TrashIcon, StarIcon } from './icons';
+import { PlusIcon, UserCircleIcon, UserIcon, GearIcon, TrashIcon, StarIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -60,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
                   activeChatId === session.id ? 'bg-[#2d2d40]' : 'hover:bg-[#2d2d40]'
                 }`}
               >
-                <ChatBubbleIcon className="w-5 h-5 mr-3 text-slate-400 flex-shrink-0" />
+                <UserCircleIcon className="w-5 h-5 mr-3 text-slate-400 flex-shrink-0" />
                 <span className="truncate flex-1">{session.title}</span>
               </a>
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-transparent group-hover:bg-[#2d2d40] rounded-md">

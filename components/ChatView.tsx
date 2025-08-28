@@ -13,6 +13,63 @@ declare global {
   }
 }
 
+// --- Persona Selector Component ---
+const PersonaSelector: React.FC<{
+  personas: any;
+  activePersonaKey: string;
+  setPersona: (key: string) => void;
+}> = ({ personas, activePersonaKey, setPersona }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const currentPersona = personas[activePersonaKey] || personas.default;
+  const CurrentIcon = currentPersona.icon;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(prev => !prev)}
+        className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors"
+      >
+        <CurrentIcon className="w-5 h-5" />
+        <span className="hidden sm:inline">{currentPersona.name}</span>
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-[#2d2d40] rounded-lg shadow-xl z-50 border border-slate-200 dark:border-slate-700">
+          <div className="p-2">
+            {Object.entries(personas).map(([key, persona]: [string, any]) => {
+              const Icon = persona.icon;
+              return (
+                <button
+                  key={key}
+                  onClick={() => { setPersona(key); setIsOpen(false); }}
+                  className={`w-full text-left p-2 rounded-md flex items-start gap-3 transition-colors ${activePersonaKey === key ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                >
+                  <Icon className="w-5 h-5 mt-0.5 text-slate-600 dark:text-slate-300 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-slate-800 dark:text-white">{persona.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{persona.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 interface ChatViewProps {
   activeChat: ChatSession | null;
   sendMessage: (message: string, attachments?: Attachment[], history?: any[]) => Promise<void>;
@@ -34,6 +91,8 @@ interface ChatViewProps {
   notifications: string[];
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   clearNotifications: () => void;
+  personas: any; // The global persona definitions
+  setPersona: (personaKey: string) => void;
 }
 
 const WelcomeScreen: React.FC = () => (
@@ -85,7 +144,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -308,15 +367,22 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#171725] transition-colors duration-300">
       <header className="flex-shrink-0 p-2 sm:p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-        <div className="flex items-center">
+        <div className="flex items-center min-w-0">
             <button onClick={onMenuClick} className="md:hidden p-2 mr-2 text-slate-600 dark:text-slate-300">
                 <MenuIcon className="w-6 h-6" />
             </button>
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-white truncate pr-4">
+            <h2 className="text-xl font-semibold text-slate-800 dark:text-white truncate">
                 {activeChat ? activeChat.title : 'Moe Chat'}
             </h2>
         </div>
         <div className="flex items-center space-x-2 sm:space-x-4">
+            {activeChat && (
+              <PersonaSelector
+                personas={personas}
+                activePersonaKey={activeChat.persona || 'default'}
+                setPersona={setPersona}
+              />
+            )}
             <div className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400 hidden sm:flex">
                 <span>Model: {currentModelName}</span>
             </div>
