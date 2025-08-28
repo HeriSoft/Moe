@@ -1,17 +1,9 @@
-
 {
   "version": 2,
   "builds": [
     {
       "src": "api/proxy.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "api/python/swap.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "450mb"
-      }
     },
     {
       "src": "package.json",
@@ -22,10 +14,6 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/api/python/swap",
-      "destination": "/api/python/swap.py"
-    },
     {
       "source": "/api/proxy",
       "destination": "/api/proxy.js"
