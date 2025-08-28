@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import type { Message, Attachment } from '../types';
 import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, CloseIcon } from './icons';
 import { CodeBlock } from './CodeBlock';
+import { MarkdownTable } from './MarkdownTable';
 
 interface MessageProps {
   message: Message;
@@ -9,8 +10,9 @@ interface MessageProps {
   onRefresh: () => void;
 }
 
-// Helper to parse text for code blocks and markdown
+// Helper to parse text for simple markdown like bold/italics
 const renderFormattedText = (text: string) => {
+  if (!text) return null;
   const markdownRegex = /(\*\*[\s\S]+?\*\*|\*[\s\S]+?\*)/g;
   const parts = text.split(markdownRegex);
 
@@ -26,19 +28,66 @@ const renderFormattedText = (text: string) => {
 };
 
 const parseMessageContent = (text: string): React.ReactNode[] => {
-    const codeBlockRegex = /(```(?:[a-zA-Z]+\n)?[\s\S]*?```)/g;
-    const parts = text.split(codeBlockRegex);
+    // This regex captures ```code blocks``` OR | markdown tables |
+    // It's stateful (g flag), so we create a new one each time.
+    const contentRegex = /(```(?:[a-zA-Z]+\n)?[\s\S]*?```)|((?:^\|.*\|(?:\r?\n|\r))+)/gm;
+    
+    const nodes: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
 
-    return parts.map((part, index) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-            const codeContent = part.slice(3, -3);
-            const firstLine = codeContent.indexOf('\n');
-            const language = codeContent.substring(0, firstLine).trim();
-            const code = codeContent.substring(firstLine + 1).trim();
-            return <CodeBlock key={index} language={language} code={code} />;
+    while ((match = contentRegex.exec(text)) !== null) {
+        // 1. Add the plain text part that comes before this match
+        if (match.index > lastIndex) {
+            const precedingText = text.substring(lastIndex, match.index);
+            if (precedingText.trim()) {
+                 nodes.push(<p key={`text-${lastIndex}`} className="whitespace-pre-wrap">{renderFormattedText(precedingText)}</p>);
+            }
         }
-        return <p key={index} className="whitespace-pre-wrap">{renderFormattedText(part)}</p>;
-    });
+
+        const codeBlockMatch = match[1]; // Captured code block
+        const tableMatch = match[2];     // Captured table block
+
+        // 2. Add the matched special block (code or table)
+        if (codeBlockMatch) {
+            const trimmedPart = codeBlockMatch.trim();
+            const codeContent = trimmedPart.slice(3, -3);
+            const firstLineEnd = codeContent.indexOf('\n');
+            let language = '';
+            let code = codeContent;
+
+            // Check if a language is specified on the first line
+            if (firstLineEnd !== -1) {
+                const firstLine = codeContent.substring(0, firstLineEnd).trim();
+                // A simple check: if the first line has no spaces, it's likely a language identifier
+                if (firstLine && !firstLine.includes(' ')) {
+                    language = firstLine;
+                    code = codeContent.substring(firstLineEnd + 1);
+                }
+            }
+            nodes.push(<CodeBlock key={`code-${match.index}`} language={language} code={code.trim()} />);
+
+        } else if (tableMatch) {
+            nodes.push(<MarkdownTable key={`table-${match.index}`} markdownContent={tableMatch.trim()} />);
+        }
+        
+        lastIndex = contentRegex.lastIndex;
+    }
+
+    // 3. Add any remaining plain text after the last match
+    if (lastIndex < text.length) {
+        const remainingText = text.substring(lastIndex);
+        if (remainingText.trim()) {
+            nodes.push(<p key={`text-${lastIndex}`} className="whitespace-pre-wrap">{renderFormattedText(remainingText)}</p>);
+        }
+    }
+    
+    // If the original text was not empty but resulted in no nodes, render it as a single block
+    if (nodes.length === 0 && text) {
+        nodes.push(<p key="single-text" className="whitespace-pre-wrap">{renderFormattedText(text)}</p>);
+    }
+    
+    return nodes;
 };
 
 
