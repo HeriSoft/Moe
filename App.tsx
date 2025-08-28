@@ -512,7 +512,7 @@ const App: React.FC = () => {
         toggleFavorite={toggleFavorite}
         onSettingsClick={() => setIsSettingsOpen(true)}
         onSignIn={() => googleDriveService.signIn()}
-        onSignOut={() => googleDriveService.signOut( (loggedIn) => setIsLoggedIn(loggedIn) )}
+        onSignOut={() => googleDriveService.signOut(handleAuthChange)}
         isLoggedIn={isLoggedIn}
         userProfile={userProfile}
       />
