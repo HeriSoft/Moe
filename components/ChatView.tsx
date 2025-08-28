@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
-import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
@@ -98,12 +98,33 @@ interface ChatViewProps {
   clearCommandToPrepend: () => void;
   onAttachFromDrive: () => void;
   onSaveToDrive: (message: Message) => Promise<void>;
+  startChatWithPrompt: (prompt: string) => void; // For prompt starters
+  onOpenMediaGallery: () => void; // For media gallery
 }
 
-const WelcomeScreen: React.FC = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400">
+const PROMPT_STARTERS = [
+    { title: "Plan a trip", prompt: "Plan a 5-day itinerary for a trip to Kyoto, Japan, focusing on historical sites and local cuisine." },
+    { title: "Explain a concept", prompt: "Explain the concept of blockchain to me like I'm five." },
+    { title: "Write a story", prompt: "Write a short sci-fi story about a sentient plant on a distant planet." },
+    { title: "Code a function", prompt: "Write a python function that takes a list of URLs and returns a list of their status codes." },
+];
+
+const WelcomeScreen: React.FC<{ onPromptClick: (prompt: string) => void }> = ({ onPromptClick }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-4">
         <h1 className="text-4xl font-bold text-slate-800 dark:text-white mb-2">Moe Chat</h1>
-        <p className="text-lg">Start a new conversation to begin.</p>
+        <p className="text-lg text-slate-500 dark:text-slate-400">Select a prompt or start a new conversation to begin.</p>
+         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 max-w-3xl w-full">
+            {PROMPT_STARTERS.map(starter => (
+                <button 
+                    key={starter.title}
+                    onClick={() => onPromptClick(starter.prompt)}
+                    className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg text-left hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">{starter.title}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{starter.prompt}</p>
+                </button>
+            ))}
+        </div>
     </div>
 );
 
@@ -149,7 +170,13 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive }) => {
+const COMMANDS = [
+    { cmd: '/image', label: 'Generate Image', icon: ImageIcon, description: 'Create an image from a text prompt.' },
+    { cmd: '/edit', label: 'Edit Image', icon: EditIcon, description: 'Edit an attached image with a prompt.' },
+    { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
+];
+
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -158,6 +185,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   const [isTranslating, setIsTranslating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioState, setAudioState] = useState<AudioState>({ messageId: null, audioUrl: null, isLoading: false });
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false);
+
 
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -166,11 +196,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   const notificationsRef = useRef<HTMLDivElement>(null);
   const imageMenuRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const slashMenuRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   useEffect(() => {
     if (commandToPrepend) {
         setInput(prev => `${commandToPrepend}${prev}`);
         clearCommandToPrepend();
+        textareaRef.current?.focus();
     }
   }, [commandToPrepend, clearCommandToPrepend]);
 
@@ -312,6 +345,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         if (imageMenuRef.current && !imageMenuRef.current.contains(event.target as Node)) {
             setIsImageMenuOpen(false);
         }
+        if (slashMenuRef.current && !slashMenuRef.current.contains(event.target as Node)) {
+            setIsSlashMenuOpen(false);
+        }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -370,6 +406,44 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         setIsTranslating(false);
     }
   };
+  
+  const handleDragEnter = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDraggingOver(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDraggingOver(false); };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); }; // Necessary to allow drop
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingOver(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          setAttachments(e.dataTransfer.files);
+      }
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      setInput(value);
+      if (value.trim() === '/') {
+          setIsSlashMenuOpen(true);
+      } else {
+          setIsSlashMenuOpen(false);
+      }
+  };
+  
+  const handleCommandClick = (cmd: string) => {
+      if (cmd === '/search') {
+          toggleWebSearch();
+          setInput(''); 
+      } else if (cmd === '/image') {
+          openImageSettingsModal('generation');
+          setInput('');
+      } else if (cmd === '/edit') {
+          openImageSettingsModal('editing');
+          setInput('');
+      }
+      setIsSlashMenuOpen(false);
+      textareaRef.current?.focus();
+  }
+
 
   const currentModelName = activeChat?.model ?? defaultModel;
   const isDeepSeekModel = currentModelName === 'deepseek-v3.1';
@@ -394,11 +468,16 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         </div>
         <div className="flex items-center space-x-2 sm:space-x-4">
             {activeChat && (
+              <>
+              <button title="Media Gallery" aria-label="Open Media Gallery" onClick={onOpenMediaGallery} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
+                  <FolderOpenIcon className="w-5 h-5" />
+              </button>
               <PersonaSelector
                 personas={personas}
                 activePersonaKey={activeChat.persona || 'default'}
                 setPersona={setPersona}
               />
+              </>
             )}
             <div className="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400 hidden sm:flex">
                 <span>Model: {currentModelName}</span>
@@ -441,7 +520,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         </div>
       </header>
 
-      <div className="relative flex-1 overflow-hidden">
+      <div className="relative flex-1 overflow-hidden" onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
+        {isDraggingOver && (
+            <div className="absolute inset-2 bg-indigo-500/20 border-4 border-dashed border-indigo-400 rounded-2xl z-30 flex flex-col items-center justify-center pointer-events-none">
+                <ArrowUpTrayIcon className="w-16 h-16 text-indigo-300" />
+                <p className="mt-4 text-xl font-semibold text-indigo-200">Drop files to attach</p>
+            </div>
+        )}
         <main 
           ref={mainScrollRef}
           onScroll={handleScroll}
@@ -470,7 +555,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
               <div ref={messagesEndRef} />
             </div>
           ) : (
-            <WelcomeScreen />
+            <WelcomeScreen onPromptClick={startChatWithPrompt} />
           )}
         </main>
 
@@ -485,6 +570,25 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
       <footer className="flex-shrink-0 p-2 sm:p-4 sm:pt-0">
         <div className="relative w-full bg-slate-100 dark:bg-[#2d2d40] text-slate-800 dark:text-slate-200 rounded-xl p-2 shadow-sm">
+            {isSlashMenuOpen && (
+                <div ref={slashMenuRef} className="absolute bottom-full mb-2 w-full sm:w-96 bg-white dark:bg-[#171725] rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-10">
+                    <p className="text-xs font-semibold text-slate-400 px-2 pb-1">COMMANDS</p>
+                    {COMMANDS.map(command => {
+                        const Icon = command.icon;
+                        return (
+                            <button key={command.cmd} onClick={() => handleCommandClick(command.cmd)} className="w-full flex items-start gap-3 p-2 rounded-md text-left hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <div className="p-1.5 bg-slate-200 dark:bg-slate-700 rounded-md">
+                                <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                                </div>
+                                <div>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200">{command.label}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{command.description}</p>
+                                </div>
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
             {isTranslateMenuOpen && (
                  <div className="absolute bottom-full left-0 right-0 p-2">
                     <div className="bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-2 grid grid-cols-4 gap-2">
@@ -517,14 +621,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             )}
             <form onSubmit={handleSubmit} className="relative">
             <textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={handleInputChange}
                 onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     handleSubmit(e);
                 }
                 }}
-                placeholder="Type your message..."
+                placeholder="Type your message or '/' for commands..."
                 rows={1}
                 className="w-full bg-transparent p-4 pr-16 resize-none focus:outline-none"
                 disabled={isLoading || isTranslating}

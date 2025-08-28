@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { Message, Attachment } from '../types';
-import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon, SaveToDriveIcon } from './icons';
+import type { Message, Attachment, GroundingChunk } from '../types';
+import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon, SaveToDriveIcon, WebSearchIcon } from './icons';
 import { CodeBlock } from './CodeBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { renderFormattedText } from './utils';
@@ -16,6 +16,30 @@ interface MessageProps {
   onToggleTTS: () => void;
   onSaveToDrive: () => Promise<void>;
 }
+
+const GroundingSources: React.FC<{ sources: GroundingChunk[] }> = ({ sources }) => (
+    <div className="mt-3 pt-3 border-t border-white/20">
+        <h4 className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2">
+            <WebSearchIcon className="w-4 h-4" />
+            Sources
+        </h4>
+        <div className="flex flex-wrap gap-2">
+            {sources.map((source, index) => (
+                <a 
+                    key={index} 
+                    href={source.web.uri} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-xs bg-indigo-500/50 hover:bg-indigo-500/80 text-indigo-200 rounded-full px-2.5 py-1 transition-colors truncate max-w-[200px] sm:max-w-xs"
+                    title={source.web.title}
+                >
+                    {source.web.title || new URL(source.web.uri).hostname}
+                </a>
+            ))}
+        </div>
+    </div>
+);
+
 
 const parseMessageContent = (text: string): React.ReactNode[] => {
     // This regex captures ```code blocks``` OR | markdown tables |
@@ -180,6 +204,9 @@ export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRe
                     </div>
                 ) : (
                     message.text && <div>{parsedContent}</div>
+                )}
+                {message.groundingMetadata && message.groundingMetadata.length > 0 && (
+                   <GroundingSources sources={message.groundingMetadata} />
                 )}
             </div>
             {!isEditing && (

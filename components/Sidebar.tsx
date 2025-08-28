@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
-import { PlusIcon, UserIcon, GearIcon, TrashIcon, StarIcon } from './icons';
+import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -22,18 +22,21 @@ const UserProfileSection: React.FC<{
   userProfile?: UserProfile;
   onSignIn: () => void;
   onSignOut: () => void;
-}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut }) => {
+  onProfileClick: () => void;
+}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick }) => {
   if (isLoggedIn && userProfile) {
     return (
-        <div className="group relative flex items-center p-2 rounded-md hover:bg-[#2d2d40] transition-colors flex-grow text-left">
-            <img src={userProfile.imageUrl} alt={userProfile.name} className="w-8 h-8 rounded-full mr-3 flex-shrink-0" />
-            <div className="flex-grow min-w-0">
-                <p className="font-semibold truncate">{userProfile.name}</p>
-                <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
-            </div>
+        <div className="flex flex-col items-center w-full">
+            <button onClick={onProfileClick} className="flex items-center p-2 rounded-md hover:bg-[#2d2d40] transition-colors text-left w-full">
+                <img src={userProfile.imageUrl} alt={userProfile.name} className="w-8 h-8 rounded-full mr-3 flex-shrink-0" />
+                <div className="flex-grow min-w-0">
+                    <p className="font-semibold truncate">{userProfile.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
+                </div>
+            </button>
             <button
                 onClick={onSignOut}
-                className="absolute right-2 top-1/2 -translate-y-1/2 ml-2 px-3 py-1 text-xs font-semibold bg-slate-600 hover:bg-red-500 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                className="w-full mt-2 px-3 py-1.5 text-sm font-semibold bg-slate-600 hover:bg-red-500 rounded-md transition-colors"
             >
                 Logout
             </button>
@@ -56,9 +59,14 @@ const UserProfileSection: React.FC<{
 
 
 export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
-  
+  const [searchTerm, setSearchTerm] = React.useState('');
+
   const sortedSessions = React.useMemo(() => {
-    return [...chatSessions].sort((a, b) => {
+    const filtered = chatSessions.filter(session =>
+        session.title.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    return filtered.sort((a, b) => {
         const aFav = a.isFavorite ? 1 : 0;
         const bFav = b.isFavorite ? 1 : 0;
         if (aFav !== bFav) return bFav - aFav;
@@ -66,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
         const bLastTimestamp = b.messages[b.messages.length - 1]?.timestamp ?? 0;
         return bLastTimestamp - aLastTimestamp;
     });
-  }, [chatSessions]);
+  }, [chatSessions, searchTerm]);
 
   return (
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#171725] text-white flex flex-col p-4 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -76,13 +84,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
       
       <button 
         onClick={startNewChat}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors mb-6"
+        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors mb-4"
       >
         <PlusIcon className="w-5 h-5 mr-2" />
         New Chat
       </button>
 
-      <div className="flex-1 overflow-y-auto">
+       <div className="relative mb-4">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+          <input
+              type="text"
+              placeholder="Search chats..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#2d2d40] border border-slate-700/50 rounded-lg py-2 pl-10 pr-4 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-label="Search chat history"
+          />
+      </div>
+
+
+      <div className="flex-1 overflow-y-auto -mr-2 pr-2">
         {isLoggedIn && chatSessions.length > 0 && (
             <h2 className="text-sm font-semibold text-slate-400 mb-2 px-2">Recent Chats</h2>
         )}
@@ -131,17 +152,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
       </div>
       
       <div className="mt-auto border-t border-slate-700 pt-4">
-        <div className="flex items-center justify-between">
-            <UserProfileSection 
-                isLoggedIn={isLoggedIn}
-                userProfile={userProfile}
-                onSignIn={onSignIn}
-                onSignOut={onSignOut}
-            />
-            <button onClick={onSettingsClick} className="p-2 rounded-md text-slate-400 hover:text-white hover:bg-[#2d2d40] transition-colors flex-shrink-0 ml-2" aria-label="Open settings">
-                <GearIcon className="w-5 h-5" />
-            </button>
-        </div>
+          <UserProfileSection 
+              isLoggedIn={isLoggedIn}
+              userProfile={userProfile}
+              onSignIn={onSignIn}
+              onSignOut={onSignOut}
+              onProfileClick={onSettingsClick}
+          />
       </div>
     </aside>
   );
