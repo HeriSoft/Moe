@@ -1,11 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, ModelIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon } from './icons';
+// FIX: Add ModelIcon to imports
+import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon } from './icons';
+import { getTranslation } from '../services/geminiService';
+
+// Add SpeechRecognition types to window for TypeScript
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
 
 interface ChatViewProps {
   activeChat: ChatSession | null;
-  sendMessage: (message: string) => Promise<void>;
+  sendMessage: (message: string, attachments?: Attachment[], history?: any[]) => Promise<void>;
+  handleEditMessage: (messageIndex: number, newText: string) => Promise<void>;
+  handleRefreshResponse: (messageIndex: number) => Promise<void>;
   isLoading: boolean;
   thinkingStatus: string | null;
   attachments: Attachment[];
@@ -20,6 +32,7 @@ interface ChatViewProps {
   chatBgColor: string;
   defaultModel: string;
   notifications: string[];
+  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   clearNotifications: () => void;
 }
 
@@ -66,14 +79,64 @@ const LoadingIndicator: React.FC<{ thinkingStatus: string | null }> = ({ thinkin
     );
 };
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, clearNotifications }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+           setInput(prev => prev.trim() ? `${prev.trim()} ${finalTranscript.trim()}` : finalTranscript.trim());
+        }
+      };
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setNotifications(prev => [`Speech recognition error: ${event.error}`, ...prev.slice(0, 19)]);
+        setIsRecording(false);
+      };
+      recognition.onend = () => {
+        if(isRecording) { // If it stops unexpectedly, try to restart it
+           recognition.start();
+        }
+      };
+      recognitionRef.current = recognition;
+    }
+  }, [isRecording, setNotifications]);
+  
+  const toggleRecording = () => {
+    if (!recognitionRef.current) {
+        setNotifications(prev => ['Speech recognition is not supported in this browser.', ...prev.slice(0, 19)]);
+        return;
+    }
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      recognitionRef.current.start();
+      setIsRecording(true);
+    }
+  };
 
 
   useEffect(() => {
@@ -93,24 +156,23 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isL
     const mainEl = mainScrollRef.current;
     if (mainEl) {
         const { scrollTop, scrollHeight, clientHeight } = mainEl;
-        // Show button if the user has scrolled up more than a certain threshold from the bottom.
         const threshold = 300; 
         setShowScrollToBottom(scrollHeight - scrollTop > clientHeight + threshold);
     }
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [activeChat?.messages, isLoading]);
+  }, [activeChat?.messages, isLoading, scrollToBottom]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((input.trim() || attachments.length > 0) && !isLoading) {
-      sendMessage(input.trim());
+      sendMessage(input.trim(), attachments);
       setInput('');
       if(fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -124,8 +186,32 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isL
     }
   };
   
+  const handleTranslate = async (lang: string) => {
+    setIsTranslateMenuOpen(false);
+    if (!input.trim() || isTranslating) return;
+
+    setIsTranslating(true);
+    try {
+        const translatedText = await getTranslation(input, lang);
+        setInput(translatedText);
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : "Translation failed.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+    } finally {
+        setIsTranslating(false);
+    }
+  };
+
   const currentModelName = activeChat?.model ?? defaultModel;
   const isDeepSeekModel = currentModelName === 'deepseek-v3.1';
+  
+  const languages = [
+    { code: 'Vietnamese', name: 'Tiếng Việt' }, { code: 'English', name: 'English' },
+    { code: 'Chinese', name: '中文' }, { code: 'Korean', name: '한국어' },
+    { code: 'Japanese', name: '日本語' }, { code: 'Thai', name: 'ภาษาไทย' },
+    { code: 'Russian', name: 'Русский' }, { code: 'Italian', name: 'Italiano' },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#171725] transition-colors duration-300">
@@ -190,7 +276,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isL
           {activeChat ? (
             <div>
               {activeChat.messages.map((msg, index) => (
-                <MessageComponent key={`${activeChat.id}-${index}`} message={msg} />
+                <MessageComponent 
+                    key={`${activeChat.id}-${index}`} 
+                    message={msg}
+                    onEdit={(newText) => handleEditMessage(index, newText)}
+                    onRefresh={() => handleRefreshResponse(index)}
+                />
               ))}
               {isLoading && <LoadingIndicator thinkingStatus={thinkingStatus} />}
               <div ref={messagesEndRef} />
@@ -210,7 +301,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isL
       </div>
 
       <footer className="flex-shrink-0 p-2 sm:p-4 sm:pt-0">
-        <div className="w-full bg-slate-100 dark:bg-[#2d2d40] text-slate-800 dark:text-slate-200 rounded-xl p-2 shadow-sm">
+        <div className="relative w-full bg-slate-100 dark:bg-[#2d2d40] text-slate-800 dark:text-slate-200 rounded-xl p-2 shadow-sm">
+            {isTranslateMenuOpen && (
+                 <div className="absolute bottom-full left-0 right-0 p-2">
+                    <div className="bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-2 grid grid-cols-4 gap-2">
+                        {languages.map(lang => (
+                             <button key={lang.code} onClick={() => handleTranslate(lang.code)} className="p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                {lang.name}
+                             </button>
+                        ))}
+                    </div>
+                 </div>
+            )}
             {attachments.length > 0 && (
                 <div className="p-2 flex flex-wrap gap-2">
                     {attachments.map((att, index) => (
@@ -242,7 +344,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isL
                 placeholder="Type your message..."
                 rows={1}
                 className="w-full bg-transparent p-4 pr-16 resize-none focus:outline-none"
-                disabled={isLoading}
+                disabled={isLoading || isTranslating}
                 aria-label="Chat message input"
             />
             <button
@@ -256,45 +358,26 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, isL
             </form>
             <div className="flex items-center justify-start space-x-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1 overflow-x-auto">
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="*/*" multiple />
-                <button 
-                    title={"Attach file"} 
-                    aria-label="Attach file" 
-                    onClick={() => fileInputRef.current?.click()} 
-                    className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400"
-                >
+                <button title={"Attach file"} aria-label="Attach file" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
                     <AttachmentIcon className="w-5 h-5" />
                 </button>
-                <button 
-                    title={"Web Search"} 
-                    aria-label="Web Search" 
-                    onClick={toggleWebSearch} 
-                    className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isWebSearchEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}
-                >
+                <button title={"Web Search"} aria-label="Web Search" onClick={toggleWebSearch} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isWebSearchEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
                     <WebSearchIcon className="w-5 h-5" />
                 </button>
-                 <button 
-                    title={"Tạo hình ảnh (Sắp ra mắt)"} 
-                    aria-label="Generate Image" 
-                    onClick={() => alert('Tính năng tạo hình ảnh sẽ sớm ra mắt!')} 
-                    className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed"
-                >
+                <button title={isRecording ? "Stop recording" : "Start recording"} aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={toggleRecording} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isRecording ? 'bg-red-100 dark:bg-red-900/50 !text-red-500' : ''}`}>
+                    {isRecording ? <StopCircleIcon className="w-5 h-5" /> : <MicrophoneIcon className="w-5 h-5" />}
+                </button>
+                <button title={"Translate"} aria-label="Translate" onClick={() => setIsTranslateMenuOpen(prev => !prev)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isTranslateMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`} disabled={!input.trim()}>
+                    <TranslateIcon className="w-5 h-5" />
+                </button>
+                 <button title={"Tạo hình ảnh (Sắp ra mắt)"} aria-label="Generate Image" onClick={() => alert('Tính năng tạo hình ảnh sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
                     <ImageIcon className="w-5 h-5" />
                 </button>
-                 <button 
-                    title={"Tạo video (Sắp ra mắt)"} 
-                    aria-label="Generate Video" 
-                    onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} 
-                    className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed"
-                >
+                 <button title={"Tạo video (Sắp ra mắt)"} aria-label="Generate Video" onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
                     <VideoIcon className="w-5 h-5" />
                 </button>
                 {isDeepSeekModel && (
-                  <button 
-                      title={"Deep Think"} 
-                      aria-label="Toggle Deep Think mode" 
-                      onClick={toggleDeepThink} 
-                      className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isDeepThinkEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}
-                  >
+                  <button title={"Deep Think"} aria-label="Toggle Deep Think mode" onClick={toggleDeepThink} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isDeepThinkEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
                       <DeepThinkIcon className="w-5 h-5" />
                   </button>
                 )}

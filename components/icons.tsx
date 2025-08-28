@@ -32,7 +32,7 @@ export const PaperAirplaneIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props
 
 export const CogIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0015 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m18 0h-1.5m-15.036-6.364A7.5 7.5 0 004.5 12v0A7.5 7.5 0 0021 12v0a7.5 7.5 0 00-2.536-5.364m-13.928 0A7.51 7.51 0 004.5 6.364v0c1.131 0 2.186.334 3.036.913m10.928 0c.849-.579 1.905-.913 3.036-.913v0c.387 0 .762.036 1.126.104M4.5 12v0A7.5 7.5 0 0021 12v0a7.5 7.5 0 00-2.536 5.364M4.501 17.636A7.51 7.51 0 007.536 18.55c.849.579 1.905.913 3.036.913s2.186-.334 3.036-.913m3.428 0c.875.29 1.826.449 2.827.449v0c.387 0 .762-.036 1.126-.104M12 9.75a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
   </svg>
 );
 
@@ -220,6 +220,18 @@ export const AcademicCapIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) 
 
 // --- NEW ICONS ---
 
+export const ArrowPathIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+  </svg>
+);
+
+export const LanguageIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802" />
+    </svg>
+);
+
 export const PlusIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -256,3 +268,6 @@ export const VideoIcon = FilmIcon;
 export const MenuIcon = Bars3Icon;
 export const CheckIcon = CheckCircleIcon;
 export const ChatBubbleIcon = ChatBubbleLeftRightIcon;
+export const EditIcon = PencilSquareIcon;
+export const RefreshIcon = ArrowPathIcon;
+export const TranslateIcon = LanguageIcon;

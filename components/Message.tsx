@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Message, Attachment } from '../types';
-import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon } from './icons';
+import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, CloseIcon } from './icons';
 import { CodeBlock } from './CodeBlock';
 
 interface MessageProps {
   message: Message;
+  onEdit: (newText: string) => void;
+  onRefresh: () => void;
 }
 
 // Helper to parse text for code blocks and markdown
@@ -64,10 +66,14 @@ const AttachmentGrid: React.FC<{ attachments: Attachment[] }> = ({ attachments }
 );
 
 
-export const MessageComponent: React.FC<MessageProps> = ({ message }) => {
+export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh }) => {
   const [isCopied, setIsCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(message.text);
+  const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
+
   const isUser = message.role === 'user';
-  const parsedContent = parseMessageContent(message.text);
+  const parsedContent = isEditing ? null : parseMessageContent(message.text);
   
   const handleCopy = () => {
     navigator.clipboard.writeText(message.text).then(() => {
@@ -75,6 +81,20 @@ export const MessageComponent: React.FC<MessageProps> = ({ message }) => {
         setTimeout(() => setIsCopied(false), 2000);
     });
   };
+
+  const handleSaveEdit = () => {
+    if (editText.trim() && editText.trim() !== message.text) {
+        onEdit(editText.trim());
+    }
+    setIsEditing(false);
+  };
+  
+  useEffect(() => {
+    if (isEditing) {
+      editTextAreaRef.current?.focus();
+      editTextAreaRef.current?.select();
+    }
+  }, [isEditing]);
 
   const hasContent = message.attachments || message.text;
 
@@ -85,19 +105,46 @@ export const MessageComponent: React.FC<MessageProps> = ({ message }) => {
         </div>
         <div className={`min-w-0 flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[85%] sm:max-w-lg md:max-w-xl rounded-2xl text-white ${isUser ? 'bg-indigo-600 rounded-br-none' : 'bg-[#2d2d40] dark:bg-[#2d2d40] rounded-bl-none'} ${hasContent ? 'p-3 md:p-4' : ''}`}>
-                {message.attachments && message.attachments.length > 0 && (
+                {message.attachments && !isEditing && message.attachments.length > 0 && (
                   <AttachmentGrid attachments={message.attachments} />
                 )}
-                {message.text && <div>{parsedContent}</div>}
+                {isEditing ? (
+                    <div className="w-full">
+                        <textarea
+                            ref={editTextAreaRef}
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            className="w-full bg-indigo-700/80 rounded-md p-2 resize-y focus:outline-none focus:ring-2 focus:ring-white/50"
+                            rows={Math.min(10, editText.split('\n').length + 1)}
+                        />
+                        <div className="flex justify-end gap-2 mt-2">
+                           <button onClick={() => setIsEditing(false)} className="px-3 py-1 rounded-md text-sm font-semibold bg-slate-500/50 hover:bg-slate-500/80">Cancel</button>
+                           <button onClick={handleSaveEdit} className="px-3 py-1 rounded-md text-sm font-semibold bg-white text-indigo-600 hover:bg-slate-200">Save & Submit</button>
+                        </div>
+                    </div>
+                ) : (
+                    message.text && <div>{parsedContent}</div>
+                )}
             </div>
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1.5 flex items-center gap-3">
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <button onClick={handleCopy} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Copy message text">
-                    {isCopied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
-                </button>
-            </div>
+            {!isEditing && (
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 mt-1.5 flex items-center gap-3">
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                      {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                   <button onClick={handleCopy} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Copy message text">
+                      {isCopied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
+                  </button>
+                  {isUser ? (
+                     <button onClick={() => setIsEditing(true)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Edit message">
+                          <EditIcon className="w-4 h-4" />
+                      </button>
+                  ) : (
+                      <button onClick={onRefresh} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Refresh response">
+                          <RefreshIcon className="w-4 h-4" />
+                      </button>
+                  )}
+              </div>
+            )}
         </div>
     </div>
   );

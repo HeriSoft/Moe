@@ -2,7 +2,7 @@
 
 import React from 'react';
 import type { ChatSession } from '../types';
-import { PlusIcon, ChatBubbleIcon, UserIcon, GearIcon, TrashIcon } from './icons';
+import { PlusIcon, ChatBubbleIcon, UserIcon, GearIcon, TrashIcon, StarIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -10,13 +10,27 @@ interface SidebarProps {
   startNewChat: () => void;
   setActiveChat: (id: string) => void;
   deleteChat: (id: string) => void;
+  toggleFavorite: (id: string) => void;
   onSettingsClick: () => void;
   onUserClick: () => void;
   isOpen: boolean;
   isGuestUser: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, onSettingsClick, onUserClick, isOpen, isGuestUser }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onUserClick, isOpen, isGuestUser }) => {
+  
+  const sortedSessions = React.useMemo(() => {
+    return [...chatSessions].sort((a, b) => {
+        const aFav = a.isFavorite ? 1 : 0;
+        const bFav = b.isFavorite ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
+        // Fallback to sorting by the timestamp of the last message if favorites are the same
+        const aLastTimestamp = a.messages[a.messages.length - 1]?.timestamp ?? 0;
+        const bLastTimestamp = b.messages[b.messages.length - 1]?.timestamp ?? 0;
+        return bLastTimestamp - aLastTimestamp;
+    });
+  }, [chatSessions]);
+
   return (
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#171725] text-white flex flex-col p-4 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="mb-6">
@@ -34,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
       <div className="flex-1 overflow-y-auto">
         <h2 className="text-sm font-semibold text-slate-400 mb-2 px-2">Recent Chats</h2>
         <nav className="space-y-1">
-          {chatSessions.map((session) => (
+          {sortedSessions.map((session) => (
             <div key={session.id} className="group relative flex items-center pr-2">
               <a
                 href="#"
@@ -49,16 +63,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
                 <ChatBubbleIcon className="w-5 h-5 mr-3 text-slate-400 flex-shrink-0" />
                 <span className="truncate flex-1">{session.title}</span>
               </a>
-              <button 
-                onClick={(e) => {
-                    e.stopPropagation();
-                    deleteChat(session.id);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:bg-red-500/50 hover:text-white opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
-                aria-label={`Delete chat: ${session.title}`}
-              >
-                <TrashIcon className="w-4 h-4" />
-              </button>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-transparent group-hover:bg-[#2d2d40] rounded-md">
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleFavorite(session.id); }}
+                  className="p-1.5 text-slate-400 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+                  aria-label={`Favorite chat: ${session.title}`}
+                >
+                  <StarIcon className={`w-4 h-4 ${session.isFavorite ? 'text-yellow-400' : ''}`} solid={session.isFavorite} />
+                </button>
+                <button 
+                  onClick={(e) => {
+                      e.stopPropagation();
+                      deleteChat(session.id);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+                  aria-label={`Delete chat: ${session.title}`}
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </nav>
