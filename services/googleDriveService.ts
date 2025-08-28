@@ -31,75 +31,100 @@ let appFolderId: string | null = null;
  * Initializes the Google API client.
  * This function now assumes gapi and google scripts are loaded from index.html
  * @param onAuthChange Callback function to update authentication status in the app.
+ * @param onAuthError Callback function to report initialization errors to the app.
  */
-export async function initClient(onAuthChange: (isLoggedIn: boolean, userProfile?: UserProfile) => void) {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
-        console.error("VITE_GOOGLE_CLIENT_ID or VITE_GOOGLE_API_KEY is not set in your .env.local file.");
-        alert("Configuration Error: Google Client ID or API Key is missing. The application cannot start. Please check your .env.local file and the console for more details.");
-        return;
-    }
-    
-    // Wait for the global gapi object to be available from the script tag
-    const gapiLoadPromise = new Promise<void>(resolve => {
-        const interval = setInterval(() => {
-            if ((window as any).gapi) {
-                clearInterval(interval);
-                gapi = (window as any).gapi;
-                resolve();
-            }
-        }, 100);
-    });
-
-    const gisLoadPromise = new Promise<void>(resolve => {
-        const interval = setInterval(() => {
-            if ((window as any).google) {
-                clearInterval(interval);
-                google = (window as any).google;
-                resolve();
-            }
-        }, 100);
-    });
-    
-    await Promise.all([gapiLoadPromise, gisLoadPromise]);
-
-    await new Promise<void>((resolve, reject) => {
-        // gapi.load('client') is the modern way to do this
-        gapi.load('client', async () => {
-            try {
-                await gapi.client.init({
-                    apiKey: GOOGLE_API_KEY,
-                    discoveryDocs: DISCOVERY_DOCS,
-                });
-                
-                tokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: GOOGLE_CLIENT_ID,
-                    scope: SCOPES,
-                    callback: async (tokenResponse: any) => {
-                        if (tokenResponse.error) {
-                            console.error('Token client error:', tokenResponse.error);
-                            return;
-                        }
-                        gapi.client.setToken(tokenResponse);
-                        
-                        // After getting a token, get user profile
-                        const profileResponse = await gapi.client.oauth2.userinfo.get();
-                        const profile = profileResponse.result;
-                        const userProfile: UserProfile = {
-                            id: profile.id,
-                            name: profile.name,
-                            email: profile.email,
-                            imageUrl: profile.picture,
-                        };
-                        onAuthChange(true, userProfile);
-                    },
-                });
-
-                resolve();
-            } catch (error) {
-                reject(error);
-            }
+export async function initClient(
+    onAuthChange: (isLoggedIn: boolean, userProfile?: UserProfile) => void,
+    onAuthError: (errorMessage: string) => void
+) {
+    console.log("Starting Google Drive service initialization...");
+    try {
+        if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
+            throw new Error("VITE_GOOGLE_CLIENT_ID or VITE_GOOGLE_API_KEY is not set. Please check your environment variables.");
+        }
+        
+        // Wait for the global gapi and google objects to be available from the script tags in index.html
+        const gapiLoadPromise = new Promise<void>((resolve, reject) => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if ((window as any).gapi) {
+                    clearInterval(interval);
+                    gapi = (window as any).gapi;
+                    console.log("gapi library loaded.");
+                    resolve();
+                } else if (++attempts > 50) { // Timeout after 5 seconds
+                    clearInterval(interval);
+                    reject(new Error("Failed to load Google API (gapi) library. Check script tag in index.html."));
+                }
+            }, 100);
         });
-    });
+
+        const gisLoadPromise = new Promise<void>((resolve, reject) => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if ((window as any).google) {
+                    clearInterval(interval);
+                    google = (window as any).google;
+                    console.log("Google Identity Services (gis) library loaded.");
+                    resolve();
+                } else if (++attempts > 50) { // Timeout after 5 seconds
+                    clearInterval(interval);
+                    reject(new Error("Failed to load Google Identity Services (gis) library. Check script tag in index.html."));
+                }
+            }, 100);
+        });
+        
+        await Promise.all([gapiLoadPromise, gisLoadPromise]);
+
+        await new Promise<void>((resolve, reject) => {
+            gapi.load('client', async () => {
+                try {
+                    console.log("Initializing gapi client...");
+                    await gapi.client.init({
+                        apiKey: GOOGLE_API_KEY,
+                        discoveryDocs: DISCOVERY_DOCS,
+                    });
+                    console.log("Gapi client initialized successfully.");
+                    
+                    console.log("Initializing token client...");
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: GOOGLE_CLIENT_ID,
+                        scope: SCOPES,
+                        callback: async (tokenResponse: any) => {
+                            if (tokenResponse.error) {
+                                console.error('Token client error:', tokenResponse);
+                                onAuthError(`Google Sign-In Error: ${tokenResponse.error_description || tokenResponse.error}`);
+                                return;
+                            }
+                            gapi.client.setToken(tokenResponse);
+                            console.log("Access token received.");
+                            
+                            const profileResponse = await gapi.client.oauth2.userinfo.get();
+                            const profile = profileResponse.result;
+                            const userProfile: UserProfile = {
+                                id: profile.id,
+                                name: profile.name,
+                                email: profile.email,
+                                imageUrl: profile.picture,
+                            };
+                            onAuthChange(true, userProfile);
+                        },
+                    });
+                    console.log("Token client initialized successfully.");
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+
+        console.log("Google Drive service initialization complete.");
+
+    } catch (error) {
+        console.error("Fatal error during Google service initialization:", error);
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during authentication setup.";
+        onAuthError(`Initialization Failed: ${errorMessage}`);
+    }
 }
 
 
@@ -107,12 +132,17 @@ export async function initClient(onAuthChange: (isLoggedIn: boolean, userProfile
  * Triggers the Google Sign-In flow.
  */
 export function signIn() {
+    console.log("signIn function called.");
     if (!tokenClient) {
-        console.error("Google Auth client is not initialized.");
+        console.error("Cannot sign in: Google Auth client (tokenClient) is not initialized.");
+        // Optionally, you could call an error handler passed from the main app here
+        alert("Sign-in service is not ready. Please check the console for errors.");
         return;
     }
+    
     // Prompt the user to select a Google Account and ask for consent to share their data
     // when establishing a new session.
+    console.log("Requesting access token...");
     if (gapi.client.getToken() === null) {
         tokenClient.requestAccessToken({prompt: 'consent'});
     } else {
@@ -130,6 +160,7 @@ export function signOut(onAuthChange: (isLoggedIn: boolean) => void) {
             gapi.client.setToken('');
             appFolderId = null; // Clear cached folder ID
             onAuthChange(false);
+            console.log("User signed out.");
         });
     }
 }
