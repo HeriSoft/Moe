@@ -164,7 +164,7 @@ export async function generateSpeech(text: string): Promise<string> {
 // New function for face swapping
 export async function swapFace(targetImage: Attachment, sourceImage: Attachment): Promise<Attachment> {
     // IMPORTANT: Replace this URL with the public URL of your deployed Python backend (e.g., from Render).
-    const PYTHON_BACKEND_URL = 'https://moe-chat.onrender.com/api/python/swap';
+    const PYTHON_BACKEND_URL = 'http://127.0.0.1:3001/api/python/swap';
 
     const response = await fetch(PYTHON_BACKEND_URL, {
         method: 'POST',
