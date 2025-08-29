@@ -1,5 +1,6 @@
 gunicorn==22.0.0
 Flask==3.0.3
+Flask-Cors==4.0.1
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
 insightface==0.7.3
