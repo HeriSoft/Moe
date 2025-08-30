@@ -680,7 +680,14 @@ const App: React.FC = () => {
           onSaveToDrive={handleSaveToDrive}
           startChatWithPrompt={startChatWithPrompt}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
-          onOpenSwapFaceModal={() => setIsSwapFaceModalOpen(true)}
+          onOpenSwapFaceModal={() => {
+            if (isLoggedIn) {
+              setIsSwapFaceModalOpen(true);
+            } else {
+              setIsLoginModalOpen(true);
+              setNotifications(prev => ["Please sign in to use the Face Swap feature.", ...prev.slice(0, 19)]);
+            }
+          }}
         />
       </main>
       <SettingsModal
