@@ -248,23 +248,39 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
   const handleToggleTTS = useCallback(async (messageId: string, text: string) => {
     if (!audioRef.current) return;
+    const audioPlayer = audioRef.current;
+
+    // Use a variable to track if the clicked message was already playing
+    let wasPlaying = false;
     
-    // If we click the same message that is currently playing, stop it.
-    if (audioState.messageId === messageId) {
-        audioRef.current.pause();
-        if (audioState.audioUrl) URL.revokeObjectURL(audioState.audioUrl);
-        setAudioState({ messageId: null, audioUrl: null, isLoading: false });
+    // Use functional update to get the latest state and avoid stale closures
+    setAudioState(currentState => {
+        // Case 1: Clicked the same message that is currently playing/loading. Stop it.
+        if (currentState.messageId === messageId) {
+            wasPlaying = true;
+            audioPlayer.pause();
+            if (currentState.audioUrl) {
+                URL.revokeObjectURL(currentState.audioUrl);
+            }
+            return { messageId: null, audioUrl: null, isLoading: false };
+        }
+
+        // Case 2: Another message was playing. Stop it before starting the new one.
+        if (currentState.messageId) {
+            audioPlayer.pause();
+            if (currentState.audioUrl) {
+                URL.revokeObjectURL(currentState.audioUrl);
+            }
+        }
+        
+        // Case 3: Start loading the new message.
+        return { messageId: messageId, audioUrl: null, isLoading: true };
+    });
+
+    // If we just stopped the currently playing audio, don't proceed to fetch and play again.
+    if (wasPlaying) {
         return;
     }
-
-    // If another message is playing, stop it first and revoke its URL.
-    if (audioState.messageId) {
-         audioRef.current.pause();
-         if (audioState.audioUrl) URL.revokeObjectURL(audioState.audioUrl);
-    }
-    
-    // Start loading for the new message
-    setAudioState({ messageId: messageId, audioUrl: null, isLoading: true });
 
     try {
         const base64Audio = await generateSpeech(text);
@@ -277,19 +293,29 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         const blob = new Blob([byteArray], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
         
-        setAudioState({ messageId: messageId, audioUrl: url, isLoading: false });
+        audioPlayer.src = url;
+        audioPlayer.play().catch(e => {
+            console.error("Audio playback failed:", e);
+            // If playback fails, revoke the URL and reset state.
+            URL.revokeObjectURL(url);
+            setAudioState({ messageId: null, audioUrl: null, isLoading: false });
+        });
         
-        if(audioRef.current) {
-          audioRef.current.src = url;
-          audioRef.current.play();
-        }
+        // Update state to reflect that we are now playing
+        setAudioState({ messageId: messageId, audioUrl: url, isLoading: false });
 
     } catch (error) {
         console.error("Failed to generate speech:", error);
         setNotifications(prev => ["Failed to generate speech. Please try again.", ...prev.slice(0, 19)]);
-        setAudioState({ messageId: null, audioUrl: null, isLoading: false }); // Reset state on error
+        // Reset state on error, ensuring we only reset if it's the one that failed
+        setAudioState(currentState => {
+            if (currentState.messageId === messageId) {
+                return { messageId: null, audioUrl: null, isLoading: false };
+            }
+            return currentState;
+        });
     }
-  }, [audioState, setNotifications]);
+  }, [setNotifications]);
 
 
   useEffect(() => {
