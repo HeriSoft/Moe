@@ -1,3 +1,4 @@
+
 // File: /api/proxy.js
 // This is a Vercel Serverless Function that acts as a multi-API proxy.
 // It routes requests to Google Gemini, OpenAI, or DeepSeek based on the model name.
@@ -451,6 +452,97 @@ export default async function handler(req, res) {
                 }
                 result = { text: textPart, attachments: attachments };
                 break;
+            }
+            
+            case 'swapFace': {
+                const { targetImage, sourceImage } = payload;
+                const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live"; // <-- URL mới nhất
+                
+                // --- BƯỚC 1 & 2: UPLOAD VÀ JOIN QUEUE (Không thay đổi) ---
+                const uploadFileAndGetRef = async (image) => {
+                    const UPLOAD_ENDPOINT = "/gradio_api/upload";
+                    const buffer = Buffer.from(image.data, 'base64');
+                    const formData = new FormData();
+                    formData.append("files", new Blob([buffer], { type: image.mimeType }), image.fileName);
+                    const uploadResponse = await fetch(`${GRADIO_PUBLIC_URL}${UPLOAD_ENDPOINT}`, { method: "POST", body: formData });
+                    if (!uploadResponse.ok) throw new Error(`[${uploadResponse.status}] Failed to upload file ${image.fileName}.`);
+                    const uploadResult = await uploadResponse.json();
+                    if (!uploadResult || uploadResult.length === 0) throw new Error("Gradio upload returned no file reference.");
+                    const fileRef = { path: uploadResult[0], url: `${GRADIO_PUBLIC_URL}/gradio_api/file=${uploadResult[0]}`, orig_name: image.fileName, mime_type: image.mimeType, size: buffer.length, meta: { _type: "gradio.FileData" } };
+                    console.log(`Proxy: Successfully uploaded ${image.fileName}.`);
+                    return fileRef;
+                };
+                const sourceFileRef = await uploadFileAndGetRef(sourceImage);
+                const targetFileRef = await uploadFileAndGetRef(targetImage);
+                const JOIN_ENDPOINT = "/gradio_api/queue/join";
+                const FN_INDEX_FOR_SWAP_FACE = 0;
+                const sessionHash = Math.random().toString(36).substring(2);
+                console.log(`Proxy: Joining Gradio queue with file references...`);
+                const joinResponse = await fetch(`${GRADIO_PUBLIC_URL}${JOIN_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fn_index: FN_INDEX_FOR_SWAP_FACE, data: [sourceFileRef, targetFileRef], session_hash: sessionHash }),
+                });
+                if (!joinResponse.ok) throw new Error(`[${joinResponse.status}] Failed to join Gradio queue.`);
+                console.log("Proxy: Successfully joined queue. Now polling for result...");
+
+                // --- BƯỚC 3: HỎI THĂM KẾT QUẢ (PHIÊN BẢN HOÀN CHỈNH) ---
+                const DATA_ENDPOINT = `/gradio_api/queue/data?session_hash=${sessionHash}`;
+                const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+                
+                let attempts = 0;
+                const maxAttempts = 90;
+
+                while (attempts < maxAttempts) {
+                    await sleep(1000);
+                    attempts++;
+
+                    const dataResponse = await fetch(`${GRADIO_PUBLIC_URL}${DATA_ENDPOINT}`);
+                    if (!dataResponse.ok) throw new Error(`[${dataResponse.status}] Error while polling.`);
+
+                    const responseText = await dataResponse.text();
+                    if (!responseText.trim()) continue;
+                    
+                    console.log(`[Attempt ${attempts}/${maxAttempts}] RAW RESPONSE:\n---\n${responseText}\n---`);
+
+                    // *** LOGIC QUAN TRỌNG NHẤT LÀ Ở ĐÂY ***
+                    // Duyệt qua TẤT CẢ các sự kiện trong phản hồi
+                    const eventLines = responseText.trim().split('\n\n');
+                    for (const line of eventLines) {
+                        if (!line.startsWith('data:')) continue;
+                        
+                        const jsonString = line.substring(5).trim();
+                        const responseData = JSON.parse(jsonString);
+
+                        // Tìm sự kiện 'process_completed'
+                        if (responseData.msg === "process_completed") {
+                            console.log("Proxy: Found 'process_completed' event! Processing result.");
+                            const resultFileRef = responseData.output?.data?.[0];
+
+                            if (!resultFileRef || !resultFileRef.url) {
+                                throw new Error("Result event is missing the output file URL.");
+                            }
+
+                            // --- BƯỚC 4: TẢI KẾT QUẢ VỀ ---
+                            console.log(`Proxy: Downloading result from ${resultFileRef.url}`);
+                            const resultResponse = await fetch(resultFileRef.url);
+                            if (!resultResponse.ok) throw new Error("Failed to download the final image.");
+                            
+                            const resultBuffer = await resultResponse.arrayBuffer();
+                            const resultBase64 = Buffer.from(resultBuffer).toString('base64');
+                            const resultMimeType = resultResponse.headers.get('content-type') || 'image/jpeg';
+                            
+                            result = {
+                                data: resultBase64,
+                                mimeType: resultMimeType,
+                                fileName: `swapped_${targetImage.fileName}`
+                            };
+                            return res.status(200).json(result); 
+                        }
+                    } // Kết thúc vòng lặp for
+                } // Kết thúc vòng lặp while
+                
+                throw new Error("Polling for Gradio result timed out.");
             }
 
             default:
