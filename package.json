@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.15.0",
+    "@gradio/client": "^1.17.1",
     "jszip": "^3.10.1",
     "mammoth": "^1.7.2",
     "pdf-parse": "^1.1.1",
