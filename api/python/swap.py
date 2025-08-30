@@ -1,111 +1,241 @@
-import os
 import cv2
 import numpy as np
 import insightface
 from insightface.app import FaceAnalysis
-from flask import Flask, request, jsonify
-from flask_cors import CORS  # Import CORS
-import base64
-from io import BytesIO
+from gfpgan import GFPGANer
+import os
+import torch
+import warnings
+import gradio as gr
+import time
+from datetime import datetime
+import shutil
 import traceback
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Suppress specific warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="gradio_client.documentation")
+warnings.filterwarnings("ignore", category=FutureWarning)
 
-# --- Global variable for models ---
-face_analyzer = None
-face_swapper = None
+# Paths (giữ nguyên như bạn cung cấp)
+model_path = os.path.join("models", "inswapper_128.onnx")
+gfpgan_path = os.path.join("gfpgan", "weights", "GFPGANv1.4.pth")
+buffalo_l_path = os.path.join("models", "buffalo_l")
+output_dir = "output"
 
-def load_models():
-    """Loads models into global variables to ensure they are loaded only once."""
-    global face_analyzer, face_swapper
-    if face_analyzer is None:
-        print("Loading face analysis model...")
-        face_analyzer = FaceAnalysis(name='buffalo_l', allowed_modules=['detection', 'recognition'])
-        face_analyzer.prepare(ctx_id=0, det_size=(640, 640))
-        print("Face analysis model loaded.")
-    
-    if face_swapper is None:
-        print("Loading inswapper model...")
-        face_swapper = insightface.model_zoo.get_model('inswapper_128.onnx', download=True, download_zip=True)
-        print("Inswapper model loaded.")
+# Initialize logging
+log_messages = []
 
-# --- Helper Functions ---
-def decode_image(base64_string):
-    """Decodes a base64 string into an OpenCV image (numpy array)."""
-    img_data = base64.b64decode(base64_string)
-    img_np = np.frombuffer(img_data, np.uint8)
-    img = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
-    return img
+def log_message(message):
+    """Append message to log with timestamp."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_messages.append(f"[{timestamp}] {message}")
+    print(f"[{timestamp}] {message}")  # Also print to console
+    return "\n".join(log_messages)
 
-def encode_image(img_np, mime_type):
-    """Encodes an OpenCV image (numpy array) into a base64 string."""
-    ext = mime_type.split('/')[-1]
-    if ext.lower() == 'jpeg':
-        ext = 'jpg'
-    _, buffer = cv2.imencode(f'.{ext}', img_np)
-    return base64.b64encode(buffer).decode('utf-8')
+def validate_paths():
+    """Validate required file and directory paths."""
+    log_message("Validating file paths...")
+    for path in [model_path, gfpgan_path]:
+        if not os.path.isfile(path):
+            return False, f"Error: File not found at {path}"
+    if not os.path.isdir(buffalo_l_path):
+        return False, f"Error: buffalo_l directory not found at {buffalo_l_path}. Please download and extract buffalo_l.zip from https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip to {buffalo_l_path}"
+    # Kiểm tra các file cần thiết trong buffalo_l
+    required_files = ["1k3d68.onnx", "2d106det.onnx", "det_10g.onnx", "genderage.onnx", "w600k_r50.onnx"]
+    if not all(os.path.exists(os.path.join(buffalo_l_path, f)) for f in required_files):
+        return False, f"Error: buffalo_l directory at {buffalo_l_path} is incomplete. Please ensure it contains {', '.join(required_files)}"
+    return True, "All paths validated successfully"
 
-# --- API Endpoint ---
-@app.route('/api/python/swap', methods=['POST'])
-def swap_face_endpoint():
-    # Ensure models are loaded before handling the request
-    load_models()
-
-    if not request.json or 'targetImage' not in request.json or 'sourceImage' not in request.json:
-        return jsonify({'error': 'Missing targetImage or sourceImage in request body'}), 400
-
+def initialize_face_analysis():
+    """Initialize FaceAnalysis model."""
+    providers = [
+        ('CUDAExecutionProvider', {
+            'device_id': 0,
+            'gpu_mem_limit': 10 * 1024 * 1024 * 1024,
+            'arena_extend_strategy': 'kNextPowerOfTwo',
+            'cudnn_conv_algo_search': 'EXHAUSTIVE',
+            'do_copy_in_default_stream': True,
+        }),
+        'CPUExecutionProvider',
+    ]
     try:
-        target_image_data = request.json['targetImage']
-        source_image_data = request.json['sourceImage']
-
-        # Decode images
-        target_img = decode_image(target_image_data['data'])
-        source_img = decode_image(source_image_data['data'])
-
-        if target_img is None:
-            return jsonify({'error': 'Could not decode target image. Check base64 data.'}), 400
-        if source_img is None:
-            return jsonify({'error': 'Could not decode source image. Check base64 data.'}), 400
-
-        # Analyze faces
-        target_faces = face_analyzer.get(target_img)
-        source_faces = face_analyzer.get(source_img)
-
-        if not target_faces:
-            return jsonify({'error': 'No face found in the target image.'}), 400
-        if not source_faces:
-            return jsonify({'error': 'No face found in the source image.'}), 400
-            
-        # Perform swap
-        # Using the first detected face from the source image
-        # and swapping it onto the largest detected face in the target image for better results
-        result_img = target_img.copy()
-        
-        # Sort target faces by area (width*height) to find the largest one
-        target_faces = sorted(target_faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]), reverse=True)
-        
-        # Swap onto the largest face
-        result_img = face_swapper.get(result_img, target_faces[0], source_faces[0], paste_back=True)
-
-        # Encode result
-        result_base64 = encode_image(result_img, target_image_data['mimeType'])
-        
-        # Return response in the same format as Attachment
-        return jsonify({
-            'data': result_base64,
-            'mimeType': target_image_data['mimeType'],
-            'fileName': f"swapped_{target_image_data['fileName']}"
-        })
-
+        log_message("Initializing FaceAnalysis...")
+        # Sử dụng root="models" để tìm đúng models\buffalo_l
+        app = FaceAnalysis(name="buffalo_l", root=os.path.dirname(buffalo_l_path), providers=providers)
+        app.prepare(ctx_id=0, det_size=(640, 640))
+        log_message(f"PyTorch CUDA available: {torch.cuda.is_available()}")
+        log_message("FaceAnalysis initialized successfully")
+        return app, None
     except Exception as e:
-        print(f"Error during face swap: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': 'An internal error occurred during the face swap process.', 'details': str(e)}), 500
+        error_msg = f"Error initializing FaceAnalysis: {str(e)}\n{traceback.format_exc()}"
+        return None, log_message(error_msg)
 
-# This block is executed when the script is run directly.
-# Gunicorn will call the 'app' object directly, so this part won't run on Render.
-if __name__ == '__main__':
-    # Load models on startup for local dev
-    load_models()
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 3001)))
+def load_and_detect_faces(app, source_img, target_img):
+    """Load images and detect faces."""
+    try:
+        log_message("Loading and detecting faces...")
+        if source_img is None or target_img is None:
+            return None, None, "Error: Source or target image is None"
+        
+        source_img_np = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
+        target_img_np = cv2.cvtColor(np.array(target_img), cv2.COLOR_RGB2BGR)
+        
+        source_faces = app.get(source_img_np)
+        target_faces = app.get(target_img_np)
+        
+        log_message(f"Source image: {len(source_faces)} faces detected")
+        log_message(f"Target image: {len(target_faces)} faces detected")
+        
+        if len(source_faces) == 0 or len(target_faces) == 0:
+            return None, None, "Error: No faces detected in source or target image!"
+        
+        return source_faces, target_faces, None
+    except Exception as e:
+        error_msg = f"Error in load_and_detect_faces: {str(e)}\n{traceback.format_exc()}"
+        return None, None, log_message(error_msg)
+
+def select_source_face(source_faces):
+    """Select the first source face."""
+    try:
+        log_message("Selecting source face...")
+        source_face = source_faces[0]
+        log_message("Using first detected source face")
+        return source_face, None
+    except Exception as e:
+        error_msg = f"Error selecting source face: {str(e)}\n{traceback.format_exc()}"
+        return None, log_message(error_msg)
+
+def perform_face_swap(source_face, target_face, target_img):
+    """Perform face swapping with edge smoothing."""
+    try:
+        log_message("Loading inswapper model...")
+        swapper = insightface.model_zoo.get_model(model_path, providers=[
+            ('CUDAExecutionProvider', {
+                'device_id': 0,
+                'gpu_mem_limit': 10 * 1024 * 1024 * 1024,
+                'arena_extend_strategy': 'kNextPowerOfTwo',
+                'cudnn_conv_algo_search': 'EXHAUSTIVE',
+                'do_copy_in_default_stream': True,
+            }),
+            'CPUExecutionProvider',
+        ])
+        log_message("Inswapper model loaded successfully")
+        
+        target_img_np = cv2.cvtColor(np.array(target_img), cv2.COLOR_RGB2BGR)
+        result = target_img_np.copy()
+        result = swapper.get(result, target_face, source_face, paste_back=True)
+        
+        x, y, w, h = target_face.bbox.astype(int)
+        mask = np.zeros(result.shape[:2], dtype=np.float32)
+        cv2.rectangle(mask, (x, y), (x + w, y + h), 1.0, -1)
+        mask = cv2.GaussianBlur(mask, (9, 9), 0)
+        mask = np.stack([mask]*3, axis=-1)
+        result = (result * mask + target_img_np * (1 - mask)).astype(np.uint8)
+        
+        log_message("Face swapping completed")
+        return result, None
+    except Exception as e:
+        error_msg = f"Error during face swapping: {str(e)}\n{traceback.format_exc()}"
+        return None, log_message(error_msg)
+
+def enhance_with_gfpgan(result):
+    """Enhance swapped image using GFPGAN without resizing."""
+    try:
+        log_message("Enhancing with GFPGAN...")
+        enhancer = GFPGANer(
+            model_path=gfpgan_path,
+            upscale=1,
+            arch='clean',
+            channel_multiplier=2,
+            device='cuda' if torch.cuda.is_available() else 'cpu',
+            bg_upsampler=None
+        )
+        _, _, enhanced_result = enhancer.enhance(result, paste_back=True)
+        output_path = os.path.join(output_dir, "output.jpg")
+        cv2.imwrite(output_path, enhanced_result)
+        log_message(f"Enhanced image saved to {output_path}")
+        return output_path, None
+    except Exception as e:
+        error_msg = f"Error during GFPGAN enhancement: {str(e)}\n{traceback.format_exc()}"
+        return None, log_message(error_msg)
+
+def face_swap(source_img, target_img):
+    """Main face swap function for Gradio."""
+    global log_messages
+    log_messages = []  # Reset logs
+    start_time = time.time()
+    
+    try:
+        log_message("Starting face swap process...")
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        valid, message = validate_paths()
+        log_message(message)
+        if not valid:
+            return None, log_message("Path validation failed")
+        
+        app, error = initialize_face_analysis()
+        if error:
+            return None, log_message(error)
+        
+        source_faces, target_faces, error = load_and_detect_faces(app, source_img, target_img)
+        if error:
+            return None, log_message(error)
+        
+        source_face, error = select_source_face(source_faces)
+        if error:
+            return None, log_message(error)
+        target_face = target_faces[0]
+        log_message(f"Target face attributes: {target_face.__dict__}")
+        
+        result, error = perform_face_swap(source_face, target_face, target_img)
+        if error:
+            return None, log_message(error)
+        
+        output_path, error = enhance_with_gfpgan(result)
+        if error:
+            return None, log_message(error)
+        
+        log_message(f"Processing completed in {time.time() - start_time:.2f} seconds")
+        return output_path, "\n".join(log_messages)
+    except Exception as e:
+        error_msg = f"Unexpected error in face_swap: {str(e)}\n{traceback.format_exc()}"
+        return None, log_message(error_msg)
+
+# Gradio Interface
+with gr.Blocks() as demo:
+    gr.Markdown("# Face Swap Application")
+    gr.Markdown("Upload source and target images to swap faces. The first detected face in the source image will be used.")
+    
+    with gr.Row():
+        with gr.Column():
+            source_img = gr.Image(type="pil", label="Source Image")
+            target_img = gr.Image(type="pil", label="Target Image")
+            submit_btn = gr.Button("Swap Faces")
+        with gr.Column():
+            output = gr.Image(label="Final Output")
+    
+    logs = gr.Textbox(label="Logs", interactive=False, lines=10)
+    
+    submit_btn.click(
+        fn=face_swap,
+        inputs=[source_img, target_img],
+        outputs=[output, logs],
+        api_name="faceswap"  # Đảm bảo endpoint /face_swap
+    )
+
+if __name__ == "__main__":
+    try:
+        log_message("Launching Gradio interface...")
+        demo.launch(
+            share=True,
+            debug=True,
+            allowed_paths=["models", "gfpgan/weights", output_dir],
+            server_name="0.0.0.0",
+            server_port=7860
+        )
+    except Exception as e:
+        log_message(f"Error launching Gradio: {str(e)}\n{traceback.format_exc()}")
+        print(f"Error launching Gradio: {str(e)}\n{traceback.format_exc()}")
