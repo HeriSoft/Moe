@@ -1,3 +1,4 @@
+import { client } from '@gradio/client';
 import type { Message, Attachment } from '../types';
 
 // We only need one service function now, which calls the proxy's streaming endpoint.
@@ -23,7 +24,7 @@ export async function streamModelResponse(
                 attachments,
                 isWebSearchEnabled,
                 isDeepThinkEnabled,
-                systemInstruction, // Pass it to the proxy
+                systemInstruction, // Pass it to the proxy,
             }
         })
     });
@@ -161,32 +162,61 @@ export async function generateSpeech(text: string): Promise<string> {
     return data.audioContent; // This will be the base64 string
 }
 
-// New function for face swapping
+// New function for face swapping using a Gradio API
 export async function swapFace(targetImage: Attachment, sourceImage: Attachment): Promise<Attachment> {
-    // IMPORTANT: Replace this URL with the public URL of your deployed Python backend (e.g., from Render).
-    const PYTHON_BACKEND_URL = 'http://127.0.0.1:3001/api/python/swap';
+    console.log("Calling local proxy for face swap...");
 
-    const response = await fetch(PYTHON_BACKEND_URL, {
+    const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            targetImage,
-            sourceImage
+            action: 'swapFace',
+            payload: { 
+                targetImage: targetImage, 
+                sourceImage: sourceImage 
+            }
         })
     });
 
-    // Improved error handling for the external service
+    console.log("Response status from proxy:", response.status);
+
+    // *** THAY ĐỔI QUAN TRỌNG NHẤT LÀ Ở ĐÂY ***
+
+    // Kiểm tra xem response có thành công không
     if (!response.ok) {
-        let errorDetails = `Face swap request failed with status: ${response.status}`;
+        // Nếu thất bại, đọc body một lần để lấy chi tiết lỗi
+        let errorDetails = `Proxy API request failed with status: ${response.status}`;
         try {
-            // Try to parse a JSON error response from the Python server
             const errorData = await response.json();
-            errorDetails = errorData.details || errorData.error || errorDetails;
+            errorDetails = errorData.details || errorData.error || JSON.stringify(errorData) || errorDetails;
         } catch (e) {
-            // If the response isn't JSON, use the raw text
-            errorDetails = await response.text();
+            // Nếu không phải JSON, thử đọc dưới dạng text.
+            // Cần một try-catch riêng vì body có thể đã được đọc một phần
+            try {
+                 errorDetails = await response.text();
+            } catch (textError) {
+                console.error("Could not read error response body", textError);
+            }
         }
-        throw new Error(errorDetails);
+        console.error("Proxy API error details:", errorDetails);
+        // Ném lỗi và dừng thực thi
+        throw new Error(`Face swap failed via proxy: ${errorDetails}`);
     }
-    return await response.json();
+
+    // Nếu thành công (response.ok is true), đọc body một lần để lấy kết quả
+    try {
+        const result = await response.json();
+        console.log("Proxy API response for swapFace:", JSON.stringify(result, null, 2));
+
+        if (!result || !result.data || !result.mimeType) {
+            console.error("Invalid response from proxy for face swap. Missing image data.", result);
+            throw new Error("Invalid response from proxy for face swap. Missing image data.");
+        }
+
+        return result; // Trả về kết quả
+    } catch (e) {
+        console.error("Failed to parse successful proxy response as JSON", e);
+        throw new Error("Proxy returned a successful status, but the response body was not valid JSON.");
+    }
+    // *** KẾT THÚC THAY ĐỔI ***
 }
