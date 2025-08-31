@@ -419,6 +419,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return window.btoa(binary);
 }
 
+/**
+ * Creates a publicly viewable URL for a file in Google Drive.
+ * Note: The file itself must have its sharing permissions set to "Anyone with the link can view".
+ * This function does not change file permissions.
+ * @param fileId The ID of the file.
+ * @returns A direct content URL for the file.
+ */
+export function getDriveFilePublicUrl(fileId: string): string {
+    return `https://drive.google.com/uc?id=${fileId}`;
+}
+
 
 /**
  * Downloads a file's content from Google Drive using its file ID.
@@ -486,7 +497,7 @@ export async function updateDriveFileContent(fileId: string, newContent: string,
  * Initializes and displays the Google Picker UI for file selection.
  * @param onFilesSelected Callback function that receives an array of selected file objects.
  */
-export function showPicker(onFilesSelected: (files: any[]) => void): void {
+export function showPicker(onFilesSelected: (files: any[]) => void, viewOptions?: { mimeTypes?: string }): void {
     const show = () => {
         const token = gapi.client.getToken();
         if (!token) {
@@ -496,8 +507,9 @@ export function showPicker(onFilesSelected: (files: any[]) => void): void {
         }
 
         const view = new google.picker.View(google.picker.ViewId.DOCS);
-        // Allow a wide range of common file types
-        view.setMimeTypes("image/png,image/jpeg,image/jpg,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        // Allow a wide range of common file types if not specified
+        const mimeTypes = viewOptions?.mimeTypes || "image/png,image/jpeg,image/jpg,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        view.setMimeTypes(mimeTypes);
 
         const picker = new google.picker.PickerBuilder()
             .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
