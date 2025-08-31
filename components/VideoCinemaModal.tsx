@@ -23,8 +23,8 @@ const getDriveEmbedUrl = (driveUrlOrId: string) => {
     }
 
     if (fileId) {
-        // Use a reliable third-party player to bypass Google Drive's rate limiting and performance issues.
-        return `https://gdriveplayer.to/embed.php?id=${fileId}`;
+        // Switch to the official Google Drive embed link to avoid issues with third-party players creating overlays.
+        return `https://drive.google.com/file/d/${fileId}/preview`;
     }
     return '';
 };
@@ -179,7 +179,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                         </div>
                         <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
                            {videoUrl ? (
-                                <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" allow="autoplay; fullscreen" sandbox="allow-scripts allow-forms allow-presentation" className="border-0 rounded-lg"></iframe>
+                                <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" allow="autoplay; fullscreen" className="border-0 rounded-lg"></iframe>
                            ) : isPlayerLoading ? (
                                <RefreshIcon className="w-10 h-10 text-slate-400 animate-spin"/>
                            ) : (
