@@ -339,6 +339,12 @@ export const CurrencyDollarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (prop
   </svg>
 );
 
+export const TicketIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-1.5h5.25m-5.25 0h3m-3 0h-3m2.25-4.5h5.25m-5.25 0h3m-3 0h-3m2.25-4.5h5.25m-5.25 0h3m-3 0h-3M15 5.25v13.5A2.25 2.25 0 0 1 12.75 21H5.25A2.25 2.25 0 0 1 3 18.75V5.25A2.25 2.25 0 0 1 5.25 3h7.5A2.25 2.25 0 0 1 15 5.25Z" />
+    </svg>
+);
+
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
