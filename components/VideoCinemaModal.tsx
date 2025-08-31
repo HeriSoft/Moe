@@ -23,8 +23,9 @@ const getDriveEmbedUrl = (driveUrlOrId: string) => {
     }
 
     if (fileId) {
-        // Switch to the official Google Drive embed link to avoid issues with third-party players creating overlays.
-        return `https://drive.google.com/file/d/${fileId}/preview`;
+        // FIX: Use the official /embeddedplayer/ URL, which is designed for iframing and avoids CSP issues.
+        // The /preview URL sends headers that prevent it from being embedded on other sites.
+        return `https://drive.google.com/embeddedplayer/${fileId}`;
     }
     return '';
 };
