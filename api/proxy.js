@@ -3,6 +3,7 @@
 // It uses ioredis for logging and IP management.
 
 import { GoogleGenAI } from "@google/genai";
+import { sql } from '@vercel/postgres';
 import { extractRawText } from "mammoth";
 import JSZip from "jszip";
 import { createRequire } from "module";
@@ -28,6 +29,52 @@ const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+
+// --- Pro Feature Check ---
+async function isUserPro(email) {
+    if (!email) return false;
+
+    // 1. Check cache first
+    if (isRedisConfigured) {
+        try {
+            const cachedStatus = await redis.get(`user-pro-status:${email}`);
+            if (cachedStatus !== null) {
+                return cachedStatus === 'true';
+            }
+        } catch (e) {
+            console.error("Redis cache check error:", e);
+        }
+    }
+
+    // 2. If not in cache, check database
+    let isPro = false;
+    try {
+        // This requires VERCEL_POSTGRES_URL (and other related vars) to be set in your environment
+        const { rows } = await sql`
+            SELECT subscription_status FROM users 
+            WHERE email = ${email} AND subscription_status = 'active';
+        `;
+        isPro = rows.length > 0;
+    } catch (e) {
+        console.error("Database check error:", e.message);
+        // If DB check fails, deny pro access to be safe and prevent unexpected costs.
+        // This could happen if the DB isn't configured yet.
+        return false;
+    }
+
+    // 3. Store result in cache
+    if (isRedisConfigured) {
+        try {
+            // Cache for 5 minutes
+            await redis.set(`user-pro-status:${email}`, isPro, 'EX', 300);
+        } catch (e) {
+            console.error("Redis cache set error:", e);
+        }
+    }
+    
+    return isPro;
+}
+
 
 // --- Helper & Logging Functions ---
 async function logAction(email, message) {
@@ -143,6 +190,20 @@ export default async function handler(req, res) {
     try {
         const { action, payload } = req.body;
         const userEmail = payload?.user?.email;
+
+        // --- FEATURE GATING ---
+        const proActions = ['swapFace', 'generateImages', 'editImage', 'generateSpeech'];
+        if (proActions.includes(action)) {
+            const userIsPro = await isUserPro(userEmail);
+            if (!userIsPro) {
+                return res.status(403).json({ 
+                    error: 'Forbidden', 
+                    details: 'This is a Pro feature. Please upgrade your account to use it.' 
+                });
+            }
+        }
+        // --- END FEATURE GATING ---
+        
         let result;
 
         switch (action) {
