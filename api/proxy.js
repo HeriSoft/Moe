@@ -403,7 +403,7 @@ export default async function handler(req, res) {
                 // ... (Logic của case này không thay đổi, giữ nguyên như file gốc của bạn)
                 await logAction(userEmail, 'played Swapface');
                 const { targetImage, sourceImage } = payload;
-                const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
+                const GRADIO_PUBLIC_URL = "https://5aebcfa925224f9e49.gradio.live";
                 
                 const uploadFileAndGetRef = async (image) => {
                     const buffer = Buffer.from(image.data, 'base64');
