@@ -456,7 +456,7 @@ export default async function handler(req, res) {
             
             case 'swapFace': {
                 const { targetImage, sourceImage } = payload;
-                const GRADIO_PUBLIC_URL = "https://1eb54d8183e8cef40d.gradio.live"; // <-- URL mới nhất
+                const GRADIO_PUBLIC_URL = "https://5aebcfa925224f9e49.gradio.live"; // <-- URL mới nhất
                 
                 // --- BƯỚC 1 & 2: UPLOAD VÀ JOIN QUEUE (Không thay đổi) ---
                 const uploadFileAndGetRef = async (image) => {
