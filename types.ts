@@ -33,6 +33,7 @@ export interface ChatSession {
   model: string;
   isFavorite?: boolean;
   persona?: string; // Key for the selected persona
+  isLocked?: boolean; // True if the chat history is too large to send to the API
 }
 
 export interface UserProfile {
