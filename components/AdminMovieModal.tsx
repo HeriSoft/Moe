@@ -5,30 +5,11 @@ import * as googleDriveService from '../services/googleDriveService';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
-const getDriveEmbedUrl = (driveUrlOrId: string) => {
-    if (!driveUrlOrId) return '';
-    let fileId = '';
-    try {
-        // Handle full URLs like "https://drive.google.com/file/d/FILE_ID/view"
-        const url = new URL(driveUrlOrId);
-        const match = url.pathname.match(/d\/([a-zA-Z0-9_-]{25,})/);
-        if (match && match[1]) {
-            fileId = match[1];
-        }
-    } catch (e) {
-        // Handle raw IDs
-        if (driveUrlOrId.length > 20 && !driveUrlOrId.includes('/')) {
-            fileId = driveUrlOrId;
-        }
-    }
-
-    if (fileId) {
-        // FIX: Use the official /embeddedplayer/ URL for consistency, security, and reliability.
-        return `https://drive.google.com/embeddedplayer/${fileId}`;
-    }
-    return '';
+// FIX: Rename function to be more generic and simply return the provided URL.
+const getVideoEmbedUrl = (embedUrl: string) => {
+    if (!embedUrl || typeof embedUrl !== 'string') return '';
+    return embedUrl;
 };
-
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
@@ -41,7 +22,6 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
   </button>
 );
 
-// FIX: Add props interface for AdminMovieModal component.
 interface AdminMovieModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -135,7 +115,7 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
       const movieData = {
           title, description, actors, 
           thumbnail_drive_id: thumbnail.id,
-          episodes: episodes.filter(ep => ep.video_drive_id) // Filter out empty episodes
+          episodes: episodes.filter(ep => ep.video_drive_id)
       };
 
       try {
@@ -254,8 +234,9 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
                   {episodes.map((ep, index) => (
                       <div key={index} className="flex items-center gap-2 p-2 rounded-md bg-slate-100 dark:bg-slate-800/50">
                           <input type="number" placeholder="Ep#" value={ep.episode_number} onChange={e => handleEpisodeChange(index, 'episode_number', parseInt(e.target.value))} className="w-16 input-style" />
-                          <input type="text" placeholder="Google Drive URL or ID" value={ep.video_drive_id} onChange={e => handleEpisodeChange(index, 'video_drive_id', e.target.value)} required className="flex-grow input-style" />
-                          {getDriveEmbedUrl(ep.video_drive_id || '') && <a href={getDriveEmbedUrl(ep.video_drive_id || '')} target="_blank" rel="noopener noreferrer"><EyeIcon className="w-5 h-5 text-sky-400"/></a>}
+                          {/* FIX: Update placeholder to be more generic */}
+                          <input type="text" placeholder="Video Embed URL (e.g., https://short.icu/...)" value={ep.video_drive_id} onChange={e => handleEpisodeChange(index, 'video_drive_id', e.target.value)} required className="flex-grow input-style" />
+                          {getVideoEmbedUrl(ep.video_drive_id || '') && <a href={getVideoEmbedUrl(ep.video_drive_id || '')} target="_blank" rel="noopener noreferrer"><EyeIcon className="w-5 h-5 text-sky-400"/></a>}
                           <button type="button" onClick={() => removeEpisodeField(index)} className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-full"><TrashIcon className="w-4 h-4"/></button>
                       </div>
                   ))}
