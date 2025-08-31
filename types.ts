@@ -42,3 +42,22 @@ export interface UserProfile {
     email: string;
     imageUrl: string;
 }
+
+// --- NEW TYPES FOR VIDEO CINEMA ---
+
+export interface MovieEpisode {
+  id?: string;
+  episode_number: number;
+  title?: string;
+  video_drive_id: string;
+}
+
+export interface Movie {
+  id: string;
+  title: string;
+  description: string;
+  actors: string;
+  thumbnail_drive_id: string;
+  episodes: MovieEpisode[];
+  created_at?: string;
+}
