@@ -333,6 +333,12 @@ export const ClipboardDocumentListIcon: React.FC<React.SVGProps<SVGSVGElement>> 
     </svg>
 );
 
+export const CurrencyDollarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182.553-.44 1.28-.659 2.003-.659s1.45.22 2.003.659c1.106.879 1.106 2.303 0 3.182s-1.106 1.559-2.625 1.559-2.625-.68-2.625-1.559V8.25a2.25 2.25 0 012.25-2.25h1.5a2.25 2.25 0 012.25 2.25v.094c.552-.308 1.18-.465 1.824-.465 2.414 0 4.375 1.786 4.375 4.5 0 2.52-1.637 4.14-3.863 4.593-1.13.284-2.33.284-3.46 0l-.879-.659" />
+  </svg>
+);
+
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
