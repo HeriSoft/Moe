@@ -55,7 +55,7 @@ const parseMessageContent = (text: string): React.ReactNode[] => {
         if (match.index > lastIndex) {
             const precedingText = text.substring(lastIndex, match.index);
             if (precedingText.trim()) {
-                 nodes.push(<p key={`text-${lastIndex}`} className="whitespace-pre-wrap">{renderFormattedText(precedingText)}</p>);
+                 nodes.push(<p key={`text-${lastIndex}`} className="whitespace-pre-wrap break-words">{renderFormattedText(precedingText)}</p>);
             }
         }
 
@@ -92,13 +92,13 @@ const parseMessageContent = (text: string): React.ReactNode[] => {
     if (lastIndex < text.length) {
         const remainingText = text.substring(lastIndex);
         if (remainingText.trim()) {
-            nodes.push(<p key={`text-${lastIndex}`} className="whitespace-pre-wrap">{renderFormattedText(remainingText)}</p>);
+            nodes.push(<p key={`text-${lastIndex}`} className="whitespace-pre-wrap break-words">{renderFormattedText(remainingText)}</p>);
         }
     }
     
     // If the original text was not empty but resulted in no nodes, render it as a single block
     if (nodes.length === 0 && text) {
-        nodes.push(<p key="single-text" className="whitespace-pre-wrap">{renderFormattedText(text)}</p>);
+        nodes.push(<p key="single-text" className="whitespace-pre-wrap break-words">{renderFormattedText(text)}</p>);
     }
     
     return nodes;
