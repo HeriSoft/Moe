@@ -6,25 +6,21 @@ import IORedis from 'ioredis';
 
 const { Pool } = pg;
 
-// Supabase provides a connection string with `sslmode=require`.
-// In some serverless environments, the default CA certificates are not available,
-// leading to a "self-signed certificate" error. The standard fix is `rejectUnauthorized: false`.
-// When that doesn't work, this alternative method modifies the connection string directly.
-// `sslmode=no-verify` is a node-postgres specific setting that enforces SSL but bypasses CA verification.
-let connectionString = process.env.POSTGRES_URL;
-if (connectionString) {
-    // Ensure we are using the non-verifying SSL mode.
-    if (connectionString.includes('sslmode=')) {
-        connectionString = connectionString.replace(/sslmode=[^&]*/, 'sslmode=no-verify');
-    } else {
-        connectionString += (connectionString.includes('?') ? '&' : '?') + 'sslmode=no-verify';
-    }
-}
+// Get the connection string from environment variables.
+const connectionString = process.env.POSTGRES_URL;
 
-// Initialize the connection pool.
-const pool = new Pool({
-  connectionString: connectionString,
-});
+// Initialize the connection pool only if the connection string is available.
+// Use the standard `ssl` object for handling connections in serverless environments
+// where the root CA might not be available. This is more robust than string manipulation.
+const pool = connectionString
+    ? new Pool({
+        connectionString,
+        ssl: {
+            rejectUnauthorized: false,
+        },
+      })
+    : null;
+
 
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
@@ -37,6 +33,7 @@ if (process.env.REDIS_URL) {
 // --- Helper Functions ---
 
 async function createTables() {
+    if (!pool) throw new Error("Database is not configured.");
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS movies (
@@ -71,8 +68,15 @@ let isDbInitialized = false;
 // --- Main Handler ---
 
 export default async function handler(req, res) {
+    // Guard against unconfigured database at the very beginning of the handler.
+    if (!pool) {
+        return res.status(503).json({
+            error: 'Service Unavailable',
+            details: 'Database is not configured. Please set the POSTGRES_URL environment variable.'
+        });
+    }
+
     // Ensure the database tables exist before proceeding.
-    // This runs only on the first invocation of a new serverless instance.
     if (!isDbInitialized) {
         try {
             await createTables();
