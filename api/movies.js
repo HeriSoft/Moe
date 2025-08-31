@@ -65,14 +65,27 @@ async function createTables() {
     }
 }
 
-// Ensure tables exist on startup, but don't block the module from loading.
-// Log any initialization errors.
-createTables().catch(e => console.error("Database initialization failed:", e));
-
+// Flag to ensure table creation only runs once per cold start.
+let isDbInitialized = false;
 
 // --- Main Handler ---
 
 export default async function handler(req, res) {
+    // Ensure the database tables exist before proceeding.
+    // This runs only on the first invocation of a new serverless instance.
+    if (!isDbInitialized) {
+        try {
+            await createTables();
+            isDbInitialized = true;
+        } catch (initError) {
+            console.error("Database initialization failed inside handler:", initError);
+            return res.status(503).json({
+                error: 'Service Unavailable',
+                details: 'The database could not be initialized. Please try again later.'
+            });
+        }
+    }
+    
     try {
         const { action, ...payload } = req.method === 'GET' ? req.query : req.body;
         const userEmail = req.headers['x-user-email'];
