@@ -5,38 +5,21 @@ import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
-// Using a generic function name as the source can be anything.
-// This function now just acts as a pass-through for clarity.
 const getVideoEmbedUrl = (url: string) => {
-    // Note: The logic for parsing Google Drive IDs is kept in case you mix sources,
-    // but it will directly return other URLs like from short.icu.
     if (!url) return '';
-    
-    // Check if it's a potential Google Drive URL/ID before attempting to parse.
-    // This is a simple heuristic.
-    if (url.includes('drive.google.com') || url.length < 50 && !url.startsWith('http')) {
+    if (url.includes('drive.google.com') || (url.length < 50 && !url.startsWith('http'))) {
         let fileId = '';
         try {
             const urlObj = new URL(url);
             const match = urlObj.pathname.match(/d\/([a-zA-Z0-9_-]{25,})/);
-            if (match && match[1]) {
-                fileId = match[1];
-            }
+            if (match && match[1]) fileId = match[1];
         } catch (e) {
-            if (url.length > 20 && !url.includes('/')) {
-                fileId = url;
-            }
+            if (url.length > 20 && !url.includes('/')) fileId = url;
         }
-        if (fileId) {
-            return `https://drive.google.com/embeddedplayer/${fileId}`;
-        }
+        if (fileId) return `https://drive.google.com/embeddedplayer/${fileId}`;
     }
-
-    // If it's not a Google Drive ID or a parsable URL, return the original string.
-    // This supports direct embed URLs like from short.icu.
     return url;
 };
-
 
 interface VideoCinemaModalProps {
   isOpen: boolean;
@@ -61,7 +44,8 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     setIsLoading(true);
     setError(null);
     try {
-        const limit = window.innerWidth < 768 ? '4' : '8';
+        // FIX: Use a smaller limit for mobile to reduce data usage and loading time
+        const limit = window.innerWidth < 768 ? '6' : '8';
         const params = new URLSearchParams({
             action: 'get_public_movies',
             page: String(page),
@@ -109,9 +93,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     setSelectedMovie(movie);
     setVideoUrl('');
     setError(null);
-
     const episodes = movie.episodes ? [...movie.episodes].sort((a, b) => a.episode_number - b.episode_number) : [];
-
     if (episodes.length > 0) {
         setSelectedEpisode(episodes[0].episode_number);
         setIsPlayerLoading(true);
@@ -131,12 +113,10 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     if (selectedMovie && isPlayerLoading) {
       const episode = sortedEpisodes.find(ep => ep.episode_number === selectedEpisode);
       const url = episode ? getVideoEmbedUrl(episode.video_drive_id) : '';
-      
       const timer = setTimeout(() => {
         setVideoUrl(url);
         setIsPlayerLoading(false);
       }, 150);
-
       return () => clearTimeout(timer);
     }
   }, [selectedMovie, selectedEpisode, isPlayerLoading, sortedEpisodes]);
@@ -150,47 +130,53 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
       aria-labelledby="cinema-title"
     >
       <div
-        className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-[95vw] h-[95vh] max-w-7xl flex flex-col p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200"
+        // FIX: Reduce padding on mobile
+        className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-[95vw] h-[95vh] max-w-7xl flex flex-col p-3 sm:p-6 m-4 text-slate-800 dark:text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-4 flex-shrink-0">
-          <h2 id="cinema-title" className="text-2xl font-bold">Video Cinema</h2>
+        <div className="flex justify-between items-center mb-3 sm:mb-4 flex-shrink-0">
+          {/* FIX: Reduce title font size on mobile */}
+          <h2 id="cinema-title" className="text-xl sm:text-2xl font-bold">Video Cinema</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close">
             <CloseIcon className="w-7 h-7" />
           </button>
         </div>
         
-        <div className="flex flex-col md:flex-row gap-6 flex-grow min-h-0">
-            <div className="flex flex-col w-full md:w-2/3 lg:w-3/4 min-h-0">
+        <div className="flex flex-col md:flex-row gap-4 sm:gap-6 flex-grow min-h-0">
+            {/* Left/Top Panel: Details & Player */}
+            {/* FIX: Allocate 60% of height on mobile, full height on desktop */}
+            <div className="flex flex-col w-full md:w-2/3 lg:w-3/4 min-h-0 h-3/5 md:h-full">
                  {selectedMovie ? (
                     <>
-                        <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                            <img src={getDriveFilePublicUrl(selectedMovie.thumbnail_drive_id)} alt={selectedMovie.title} className="w-full sm:w-40 h-auto sm:h-56 object-cover rounded-lg flex-shrink-0"/>
-                            <div className="flex-grow">
-                                <h3 className="text-2xl font-bold dark:text-white">{selectedMovie.title}</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1"><strong>Diễn viên:</strong> {selectedMovie.actors}</p>
-                                <p className="text-slate-600 dark:text-slate-300 mt-2 text-sm max-h-24 overflow-y-auto">{selectedMovie.description}</p>
-                                <div className="mt-4">
-                                    <h4 className="font-semibold mb-2">Tập phim:</h4>
-                                    <div className="flex flex-wrap gap-2 max-h-20 overflow-y-auto">
+                        {/* FIX: Make this section a row, with smaller, fixed-size thumbnail to save vertical space */}
+                        <div className="flex flex-row gap-3 sm:gap-4 mb-3 sm:mb-4 flex-shrink-0">
+                            <img src={getDriveFilePublicUrl(selectedMovie.thumbnail_drive_id)} alt={selectedMovie.title} 
+                                // FIX: Use a smaller, fixed-width thumbnail that doesn't shrink
+                                className="w-24 sm:w-32 h-auto object-cover rounded-md sm:rounded-lg flex-shrink-0"/>
+                            <div className="flex-grow min-w-0">
+                                {/* FIX: Reduce font size and line clamping for title and description on mobile */}
+                                <h3 className="text-lg sm:text-xl font-bold dark:text-white line-clamp-2">{selectedMovie.title}</h3>
+                                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-1"><strong>Diễn viên:</strong> {selectedMovie.actors}</p>
+                                <div className="mt-2">
+                                    <h4 className="font-semibold mb-1 sm:mb-2 text-sm">Tập phim:</h4>
+                                    <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-16 sm:max-h-20 overflow-y-auto">
                                         {sortedEpisodes.map((ep: MovieEpisode) => (
                                             <button key={ep.id || ep.episode_number} onClick={() => handleSelectEpisode(ep.episode_number)}
-                                                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${selectedEpisode === ep.episode_number ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`}>
-                                                Tập {ep.episode_number}
+                                                // FIX: Smaller padding and font on buttons for mobile
+                                                className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-xs sm:text-sm font-semibold transition-colors ${selectedEpisode === ep.episode_number ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`}>
+                                                {ep.episode_number}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
+                        {/* Player will now correctly fill the remaining space */}
+                        <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full flex items-center justify-center">
                            {error && <div className="text-red-500 p-4">{error}</div>}
-                           {/* THE KEY FIX: Using a simpler iframe without the 'sandbox' attribute to prevent conflicts. */}
                            {!error && videoUrl ? (
                                 <iframe 
-                                    src={videoUrl} 
-                                    key={videoUrl} 
-                                    title={selectedMovie.title + " - Episode " + selectedEpisode}
+                                    src={videoUrl} key={videoUrl} title={selectedMovie.title + " - Episode " + selectedEpisode}
                                     className="border-0 rounded-lg w-full h-full"
                                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                                     allowFullScreen
@@ -204,15 +190,17 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                     </>
                  ) : (
                     <div className="flex items-center justify-center h-full flex-col text-slate-400 bg-slate-100 dark:bg-[#2d2d40] rounded-lg">
-                        <FilmIcon className="w-24 h-24"/>
-                        <p className="mt-4 text-lg font-semibold">Select a movie to watch</p>
+                        <FilmIcon className="w-16 h-16 sm:w-24 sm:h-24"/>
+                        <p className="mt-4 text-base sm:text-lg font-semibold">Select a movie to watch</p>
                     </div>
                  )}
             </div>
 
-            <div className="flex flex-col w-full md:w-1/3 lg:w-1/4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-4 min-h-0">
-                <form onSubmit={handleSearch} className="relative mb-4 flex-shrink-0">
-                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search movies..." className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            {/* Right/Bottom Panel: Movie List */}
+            {/* FIX: Allocate 40% of height on mobile, full height on desktop */}
+            <div className="flex flex-col w-full md:w-1/3 lg:w-1/4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-3 sm:p-4 min-h-0 h-2/5 md:h-full">
+                <form onSubmit={handleSearch} className="relative mb-3 sm:mb-4 flex-shrink-0">
+                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search movies..." className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
                     <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-indigo-500">
                         <MagnifyingGlassIcon className="w-5 h-5"/>
                     </button>
@@ -224,12 +212,13 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                     <div className="flex items-center justify-center h-full text-red-500">{error}</div>
                 ) : (
                     <div className="flex-grow overflow-y-auto -mr-2 pr-2">
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* FIX: Use 3 columns on mobile for smaller thumbnails, then 2 for sidebar layout */}
+                        <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4">
                             {movies.map(movie => (
                                 <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
                                     <img src={getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex flex-col justify-end">
-                                        <h4 className="text-white font-bold text-sm leading-tight line-clamp-2">{movie.title}</h4>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 sm:p-2 flex flex-col justify-end">
+                                        <h4 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2">{movie.title}</h4>
                                     </div>
                                 </button>
                             ))}
@@ -237,10 +226,10 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                     </div>
                 )}
                  {totalPages > 1 && (
-                    <div className="flex justify-center items-center gap-2 mt-4 flex-shrink-0">
-                        <button onClick={() => fetchMovies(currentPage - 1, searchTerm)} disabled={currentPage <= 1 || isLoading} className="px-3 py-1 bg-slate-300 dark:bg-slate-600 rounded disabled:opacity-50">Prev</button>
+                    <div className="flex justify-center items-center gap-2 mt-3 sm:mt-4 flex-shrink-0">
+                        <button onClick={() => fetchMovies(currentPage - 1, searchTerm)} disabled={currentPage <= 1 || isLoading} className="px-3 py-1 bg-slate-300 dark:bg-slate-600 rounded disabled:opacity-50 text-sm">Prev</button>
                         <span className="text-sm">Page {currentPage} of {totalPages}</span>
-                        <button onClick={() => fetchMovies(currentPage + 1, searchTerm)} disabled={currentPage >= totalPages || isLoading} className="px-3 py-1 bg-slate-300 dark:bg-slate-600 rounded disabled:opacity-50">Next</button>
+                        <button onClick={() => fetchMovies(currentPage + 1, searchTerm)} disabled={currentPage >= totalPages || isLoading} className="px-3 py-1 bg-slate-300 dark:bg-slate-600 rounded disabled:opacity-50 text-sm">Next</button>
                     </div>
                  )}
             </div>
