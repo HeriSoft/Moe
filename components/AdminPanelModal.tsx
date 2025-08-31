@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon } from './icons';
 import type { UserProfile } from '../types';
 
 interface AdminPanelModalProps {
@@ -16,8 +16,18 @@ interface UserIpData {
 
 const ADMIN_API_ENDPOINT = '/api/admin';
 
+type AdminTab = 'logs' | 'ips' | 'users' | 'memberships' | 'payments';
+
+const PlaceholderComponent: React.FC<{ title: string; }> = ({ title }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400">
+        <h3 className="text-xl font-semibold">{title}</h3>
+        <p className="mt-2">This feature is under development and will be available soon.</p>
+    </div>
+);
+
+
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile }) => {
-  const [activeTab, setActiveTab] = useState<'logs' | 'ips'>('logs');
+  const [activeTab, setActiveTab] = useState<AdminTab>('logs');
   const [logs, setLogs] = useState<string[]>([]);
   const [userData, setUserData] = useState<UserIpData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -85,7 +95,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const TabButton: React.FC<{ tabId: 'logs' | 'ips'; title: string; icon: React.FC<any>; }> = ({ tabId, title, icon: Icon }) => (
+  const TabButton: React.FC<{ tabId: AdminTab; title: string; icon: React.FC<any>; }> = ({ tabId, title, icon: Icon }) => (
     <button
       onClick={() => setActiveTab(tabId)}
       className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold border-b-2 transition-colors ${
@@ -101,7 +111,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="admin-panel-title">
-      <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 id="admin-panel-title" className="text-2xl font-bold">Admin Panel</h2>
           <div className="flex items-center gap-4">
@@ -116,9 +126,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
 
         {error && <div className="p-3 mb-4 bg-red-500/10 text-red-500 rounded-lg text-sm">{error}</div>}
 
-        <div className="border-b border-slate-200 dark:border-slate-700 flex flex-shrink-0">
+        <div className="border-b border-slate-200 dark:border-slate-700 flex flex-shrink-0 flex-wrap">
           <TabButton tabId="logs" title="User Logs" icon={ClipboardDocumentListIcon} />
-          <TabButton tabId="ips" title="IP Management" icon={UserGroupIcon} />
+          <TabButton tabId="ips" title="IP Management" icon={ShieldCheckIcon} />
+          <TabButton tabId="users" title="Users" icon={UserGroupIcon} />
+          <TabButton tabId="memberships" title="Memberships" icon={SparklesIcon} />
+          <TabButton tabId="payments" title="Payments" icon={CurrencyDollarIcon} />
         </div>
 
         <div className="flex-grow overflow-y-auto mt-4 pr-2 -mr-4">
@@ -177,6 +190,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               </div>
             </div>
           )}
+          {activeTab === 'users' && <PlaceholderComponent title="User Management" />}
+          {activeTab === 'memberships' && <PlaceholderComponent title="Membership Plans" />}
+          {activeTab === 'payments' && <PlaceholderComponent title="Payment Settings (PayPal)" />}
         </div>
       </div>
     </div>
