@@ -1,5 +1,20 @@
 import { client } from '@gradio/client';
-import type { Message, Attachment } from '../types';
+import type { Message, Attachment, UserProfile } from '../types';
+
+export async function logUserLogin(user: UserProfile) {
+    try {
+        await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'logLogin',
+                payload: { user }
+            })
+        });
+    } catch (error) {
+        console.error("Failed to log user login:", error);
+    }
+}
 
 // We only need one service function now, which calls the proxy's streaming endpoint.
 // The proxy will handle all the logic for different models and functionalities.
@@ -10,7 +25,8 @@ export async function streamModelResponse(
     attachments: Attachment[] | null,
     isWebSearchEnabled: boolean,
     isDeepThinkEnabled: boolean,
-    systemInstruction?: string, // Added for personas
+    systemInstruction: string | undefined,
+    user: UserProfile | undefined,
 ) {
     const response = await fetch('/api/proxy', {
         method: 'POST',
@@ -24,7 +40,8 @@ export async function streamModelResponse(
                 attachments,
                 isWebSearchEnabled,
                 isDeepThinkEnabled,
-                systemInstruction, // Pass it to the proxy,
+                systemInstruction,
+                user, // Pass user profile for logging
             }
         })
     });
@@ -65,7 +82,7 @@ export async function streamModelResponse(
 
 
 // Updated to handle different models and settings
-export async function generateImage(prompt: string, settings: any): Promise<Attachment[]> {
+export async function generateImage(prompt: string, settings: any, user: UserProfile | undefined): Promise<Attachment[]> {
     const response = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -81,6 +98,7 @@ export async function generateImage(prompt: string, settings: any): Promise<Atta
                 quality: settings.quality,
                 style: settings.style,
               },
+              user, // Pass user profile for logging
           }
       })
     });
@@ -104,7 +122,7 @@ export async function generateImage(prompt: string, settings: any): Promise<Atta
 }
 
 // New function for image editing
-export async function editImage(prompt: string, image: Attachment, settings: any): Promise<{ text: string, attachments: Attachment[] }> {
+export async function editImage(prompt: string, image: Attachment, settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,6 +133,7 @@ export async function editImage(prompt: string, image: Attachment, settings: any
                 prompt,
                 image,
                 config: {}, // Pass any other settings if needed
+                user, // Pass user profile for logging
             }
         })
     });
@@ -127,13 +146,13 @@ export async function editImage(prompt: string, image: Attachment, settings: any
 
 
 // New function for translating input text
-export async function getTranslation(text: string, targetLanguage: string): Promise<string> {
+export async function getTranslation(text: string, targetLanguage: string, user: UserProfile | undefined): Promise<string> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             action: 'getTranslation',
-            payload: { text, targetLanguage }
+            payload: { text, targetLanguage, user }
         })
     });
     if (!response.ok) {
@@ -145,13 +164,13 @@ export async function getTranslation(text: string, targetLanguage: string): Prom
 }
 
 
-export async function generateSpeech(text: string): Promise<string> {
+export async function generateSpeech(text: string, user: UserProfile | undefined): Promise<string> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             action: 'generateSpeech',
-            payload: { text }
+            payload: { text, user }
         })
     });
     if (!response.ok) {
@@ -163,7 +182,7 @@ export async function generateSpeech(text: string): Promise<string> {
 }
 
 // New function for face swapping using a Gradio API
-export async function swapFace(targetImage: Attachment, sourceImage: Attachment): Promise<Attachment> {
+export async function swapFace(targetImage: Attachment, sourceImage: Attachment, user: UserProfile | undefined): Promise<Attachment> {
     console.log("Calling local proxy for face swap...");
 
     const response = await fetch('/api/proxy', {
@@ -173,25 +192,20 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment)
             action: 'swapFace',
             payload: { 
                 targetImage: targetImage, 
-                sourceImage: sourceImage 
+                sourceImage: sourceImage,
+                user, // Pass user profile for logging
             }
         })
     });
 
     console.log("Response status from proxy:", response.status);
 
-    // *** THAY ĐỔI QUAN TRỌNG NHẤT LÀ Ở ĐÂY ***
-
-    // Kiểm tra xem response có thành công không
     if (!response.ok) {
-        // Nếu thất bại, đọc body một lần để lấy chi tiết lỗi
         let errorDetails = `Proxy API request failed with status: ${response.status}`;
         try {
             const errorData = await response.json();
             errorDetails = errorData.details || errorData.error || JSON.stringify(errorData) || errorDetails;
         } catch (e) {
-            // Nếu không phải JSON, thử đọc dưới dạng text.
-            // Cần một try-catch riêng vì body có thể đã được đọc một phần
             try {
                  errorDetails = await response.text();
             } catch (textError) {
@@ -199,11 +213,9 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment)
             }
         }
         console.error("Proxy API error details:", errorDetails);
-        // Ném lỗi và dừng thực thi
         throw new Error(`Face swap failed via proxy: ${errorDetails}`);
     }
 
-    // Nếu thành công (response.ok is true), đọc body một lần để lấy kết quả
     try {
         const result = await response.json();
         console.log("Proxy API response for swapFace:", JSON.stringify(result, null, 2));
@@ -213,10 +225,9 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment)
             throw new Error("Invalid response from proxy for face swap. Missing image data.");
         }
 
-        return result; // Trả về kết quả
+        return result;
     } catch (e) {
         console.error("Failed to parse successful proxy response as JSON", e);
         throw new Error("Proxy returned a successful status, but the response body was not valid JSON.");
     }
-    // *** KẾT THÚC THAY ĐỔI ***
 }
