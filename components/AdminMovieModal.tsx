@@ -5,28 +5,30 @@ import * as googleDriveService from '../services/googleDriveService';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
-interface AdminMovieModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  userProfile: UserProfile | undefined;
-  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
-}
-
 const getDriveEmbedUrl = (driveUrlOrId: string) => {
     if (!driveUrlOrId) return '';
+    let fileId = '';
     try {
+        // Handle full URLs like "https://drive.google.com/file/d/FILE_ID/view"
         const url = new URL(driveUrlOrId);
         const match = url.pathname.match(/d\/([a-zA-Z0-9_-]{25,})/);
         if (match && match[1]) {
-            return `https://drive.google.com/file/d/${match[1]}/preview`;
+            fileId = match[1];
         }
     } catch (e) {
-        if (driveUrlOrId.length > 20) {
-            return `https://drive.google.com/file/d/${driveUrlOrId}/preview`;
+        // Handle raw IDs
+        if (driveUrlOrId.length > 20 && !driveUrlOrId.includes('/')) {
+            fileId = driveUrlOrId;
         }
+    }
+
+    if (fileId) {
+        // Use a reliable third-party player to bypass Google Drive's rate limiting.
+        return `https://gdriveplayer.to/embed.php?id=${fileId}`;
     }
     return '';
 };
+
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
@@ -38,6 +40,14 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     {children}
   </button>
 );
+
+// FIX: Add props interface for AdminMovieModal component.
+interface AdminMovieModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  userProfile: UserProfile | undefined;
+  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
+}
 
 export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClose, userProfile, setNotifications }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'add'>('list');
