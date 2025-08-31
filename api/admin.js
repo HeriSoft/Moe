@@ -8,7 +8,7 @@ const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
 // Helper to log admin actions
 async function logAction(email, message) {
-    const isKvConfigured = process.env.REDIS_URL;
+    const isKvConfigured = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
     if (!isKvConfigured || !email) return;
     try {
         const { kv } = await import('@vercel/kv');
@@ -23,12 +23,13 @@ async function logAction(email, message) {
 
 export default async function handler(req, res) {
     try {
-        const isKvConfigured = process.env.REDIS_URL;
+        const isKvConfigured = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 
         if (!isKvConfigured) {
             return res.status(503).json({
                 error: 'Service Unavailable',
-                details: 'This admin endpoint cannot function because the Vercel KV database is not configured. Please set the required KV environment variables in your Vercel project settings.'
+                // Sửa lại thông báo lỗi cho chính xác hơn
+                details: 'This admin endpoint cannot function because the Redis database is not configured. Please set the REDIS_URL environment variable.'
             });
         }
         

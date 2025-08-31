@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 
 // --- Vercel KV Setup for logging and IP blocking ---
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
-const isKvConfigured = process.env.REDIS_URL;
+const isKvConfigured = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
 
 
 // --- API Key Configuration ---
