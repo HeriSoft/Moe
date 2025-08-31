@@ -76,16 +76,27 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     fetchMovies(1, searchTerm);
   };
   
+  // FIX: Corrected the logic for selecting the first episode.
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie);
-    setVideoUrl('');
-    const firstEpisode = [...movie.episodes].sort((a,b) => a.episode_number - b.episode_number);
-    if (firstEpisode) {
-        setIsPlayerLoading(true);
-        setSelectedEpisode(firstEpisode.episode_number);
+    setVideoUrl(''); // Reset previous video
+    setError(null);   // Clear previous errors
+
+    // Safely sort the episodes, providing an empty array as a fallback.
+    const sortedEpisodes = movie.episodes ? [...movie.episodes].sort((a, b) => a.episode_number - b.episode_number) : [];
+
+    // Correctly check if the array has elements by using .length
+    if (sortedEpisodes.length > 0) {
+      // Access the first episode object at index [0]
+      const firstEpisode = sortedEpisodes[0];
+      
+      // Set the episode number and trigger the video player loading
+      setSelectedEpisode(firstEpisode.episode_number);
+      setIsPlayerLoading(true);
     } else {
-        setError("This movie does not have any episodes.");
-        setIsPlayerLoading(false);
+      // Handle the case where a movie has no episodes
+      setError("This movie does not have any episodes.");
+      setIsPlayerLoading(false);
     }
   };
 
@@ -154,7 +165,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                         </div>
                         <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
                            {videoUrl ? (
-                                // FIX: Add crucial 'allow' and 'sandbox' attributes to the iframe
                                 <iframe 
                                     src={videoUrl} 
                                     key={videoUrl} 
