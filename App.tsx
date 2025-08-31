@@ -6,10 +6,12 @@ import { LoginModal } from './components/LoginModal';
 import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } from './components/ImageSettingsModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { SwapFaceModal } from './components/SwapFaceModal';
+import { AdminPanelModal } from './components/AdminPanelModal'; // Import the new modal
 import {
   streamModelResponse,
   generateImage,
   editImage,
+  logUserLogin, // Import the new login logger
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
@@ -17,6 +19,7 @@ import type { ChatSession, Message, Attachment, UserProfile } from './types';
 
 const MAX_FILES = 4;
 const MAX_IMAGE_FILES = 1;
+const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
 const PERSONAS: { [key: string]: { name: string; icon: React.FC<any>; prompt: string; description: string; } } = {
   default: {
@@ -69,6 +72,9 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null); // State for auth errors
   const sessionsRef = useRef(chatSessions);
 
+  // --- New Admin Panel State ---
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+
   useEffect(() => {
     sessionsRef.current = chatSessions;
   }, [chatSessions]);
@@ -115,6 +121,7 @@ const App: React.FC = () => {
       if (loggedIn && profile) {
           setUserProfile(profile);
           loadChatsFromDrive();
+          logUserLogin(profile); // Log the login event
       } else {
           setUserProfile(undefined);
           setChatSessions([]); // Clear sessions on logout
@@ -454,14 +461,12 @@ const App: React.FC = () => {
         messages: [...currentChat.messages, userMessage],
       };
       setChatSessions(prev => prev.map(s => s.id === activeChatId ? currentChat as ChatSession : s));
-      // Save after adding user message
       await googleDriveService.saveSession(currentChat).catch(e => console.error("Save after user message failed:", e));
     }
     
     setIsLoading(true);
     setAttachments([]);
     
-    // Check if the user message has a drive attachment to pass context to the model's response
     const sourceDriveAttachment = userMessage.attachments?.find(att => att.driveFileId);
 
     try {
@@ -471,14 +476,14 @@ const App: React.FC = () => {
             if (messageText.startsWith('/image ')) {
                 const prompt = messageText.replace('/image ', '').trim();
                 if (!imageGenerationSettings) throw new Error("Image generation settings not configured.");
-                const images = await generateImage(prompt, imageGenerationSettings);
+                const images = await generateImage(prompt, imageGenerationSettings, userProfile);
                 resultMessage = { role: 'model', text: `Here are the generated images for: "${prompt}"`, attachments: images, timestamp: Date.now() };
             } else { // /edit
                 const prompt = messageText.replace('/edit ', '').trim();
                 const imageToEdit = messageAttachments.find(att => att.mimeType.startsWith('image/'));
                 if (!imageToEdit) throw new Error("An image attachment is required for the /edit command.");
                 if (!imageEditingSettings) throw new Error("Image editing settings not configured.");
-                const result = await editImage(prompt, imageToEdit, imageEditingSettings);
+                const result = await editImage(prompt, imageToEdit, imageEditingSettings, userProfile);
                 resultMessage = { role: 'model', text: result.text, attachments: result.attachments, timestamp: Date.now() };
             }
             finalChatState = { ...currentChat, messages: [...currentChat.messages, resultMessage] };
@@ -497,7 +502,7 @@ const App: React.FC = () => {
                 finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
             }
 
-            const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction);
+            const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction, userProfile);
             let isFirstChunk = true;
             let modelResponse = '';
 
@@ -507,7 +512,6 @@ const App: React.FC = () => {
                 setChatSessions(prev =>
                     prev.map(s => {
                         if (s.id !== activeChatId) return s;
-
                         let newMessages = [...s.messages];
                         let currentModelMessage = newMessages[newMessages.length - 1];
 
@@ -618,6 +622,14 @@ const App: React.FC = () => {
         .slice(0, 50); // Limit to latest 50 for performance
   }, [chatSessions]);
 
+  const handleProfileClick = () => {
+    if (userProfile?.email === ADMIN_EMAIL) {
+        setIsAdminPanelOpen(true);
+    } else {
+        setIsSettingsOpen(true);
+    }
+  };
+
   const activeChat = chatSessions.find(c => c.id === activeChatId);
 
   return (
@@ -637,7 +649,7 @@ const App: React.FC = () => {
         setActiveChat={setActiveChat}
         deleteChat={deleteChat}
         toggleFavorite={toggleFavorite}
-        onSettingsClick={() => setIsSettingsOpen(true)}
+        onSettingsClick={handleProfileClick}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(handleAuthChange)}
         isLoggedIn={isLoggedIn}
@@ -688,6 +700,7 @@ const App: React.FC = () => {
               setNotifications(prev => ["Please sign in to use the Face Swap feature.", ...prev.slice(0, 19)]);
             }
           }}
+          userProfile={userProfile}
         />
       </main>
       <SettingsModal
@@ -724,6 +737,12 @@ const App: React.FC = () => {
         isOpen={isSwapFaceModalOpen}
         onClose={() => setIsSwapFaceModalOpen(false)}
         setNotifications={setNotifications}
+        userProfile={userProfile}
+      />
+      <AdminPanelModal
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
+        userProfile={userProfile}
       />
     </div>
   );

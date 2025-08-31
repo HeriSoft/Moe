@@ -6,6 +6,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/admin.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
@@ -17,6 +21,10 @@
     {
       "source": "/api/proxy",
       "destination": "/api/proxy.js"
+    },
+    {
+      "source": "/api/admin",
+      "destination": "/api/admin.js"
     },
     {
       "source": "/(.*)",
