@@ -179,7 +179,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                         </div>
                         <div className="flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
                            {videoUrl ? (
-                                <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" allow="autoplay; fullscreen" className="border-0 rounded-lg"></iframe>
+                                <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" allow="autoplay; fullscreen" sandbox="allow-scripts allow-forms allow-presentation" className="border-0 rounded-lg"></iframe>
                            ) : isPlayerLoading ? (
                                <RefreshIcon className="w-10 h-10 text-slate-400 animate-spin"/>
                            ) : (
