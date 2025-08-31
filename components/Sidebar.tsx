@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
-import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon } from './icons';
+import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -10,6 +10,8 @@ interface SidebarProps {
   deleteChat: (id: string) => void;
   toggleFavorite: (id: string) => void;
   onSettingsClick: () => void;
+  onAdminPanelClick: () => void;
+  isAdmin: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
   isOpen: boolean;
@@ -23,7 +25,9 @@ const UserProfileSection: React.FC<{
   onSignIn: () => void;
   onSignOut: () => void;
   onProfileClick: () => void;
-}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick }) => {
+  onAdminPanelClick: () => void;
+  isAdmin: boolean;
+}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
     return (
         <div className="flex flex-col items-center w-full">
@@ -34,6 +38,15 @@ const UserProfileSection: React.FC<{
                     <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
                 </div>
             </button>
+            {isAdmin && (
+              <button
+                onClick={onAdminPanelClick}
+                className="w-full mt-2 px-3 py-1.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center justify-center gap-2"
+              >
+                <ShieldCheckIcon className="w-5 h-5" />
+                Admin Panel
+              </button>
+            )}
             <button
                 onClick={onSignOut}
                 className="w-full mt-2 px-3 py-1.5 text-sm font-semibold bg-slate-600 hover:bg-red-500 rounded-md transition-colors"
@@ -58,7 +71,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -158,6 +171,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
               onSignIn={onSignIn}
               onSignOut={onSignOut}
               onProfileClick={onSettingsClick}
+              onAdminPanelClick={onAdminPanelClick}
+              isAdmin={isAdmin}
           />
       </div>
     </aside>
