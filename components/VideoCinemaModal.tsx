@@ -51,10 +51,11 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     setIsLoading(true);
     setError(null);
     try {
+        const limit = window.innerWidth < 768 ? '4' : '8';
         const params = new URLSearchParams({
             action: 'get_public_movies',
             page: String(page),
-            limit: window.innerWidth < 768 ? '4' : '8',
+            limit: limit,
             searchTerm: search,
         });
         const response = await fetch(`${MOVIES_API_ENDPOINT}?${params.toString()}`);
@@ -86,11 +87,13 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     fetchMovies(1, searchTerm);
   };
   
-  useEffect(() => {
-    if (selectedMovie && selectedMovie.episodes.length > 0) {
-        setSelectedEpisode(selectedMovie.episodes[0].episode_number);
-    }
-  }, [selectedMovie]);
+  const handleSelectMovie = (movie: Movie) => {
+      setSelectedMovie(movie);
+      if (movie.episodes && movie.episodes.length > 0) {
+          const firstEpisode = movie.episodes.sort((a,b) => a.episode_number - b.episode_number)[0];
+          setSelectedEpisode(firstEpisode.episode_number);
+      }
+  };
 
   const embedUrl = selectedMovie ? getDriveEmbedUrl(selectedMovie.episodes.find(ep => ep.episode_number === selectedEpisode)?.video_drive_id || '') : '';
 
@@ -170,7 +173,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                     <div className="flex-grow overflow-y-auto -mr-2 pr-2">
                         <div className="grid grid-cols-2 gap-4">
                             {movies.map(movie => (
-                                <button key={movie.id} onClick={() => setSelectedMovie(movie)} className="group aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
+                                <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
                                     <img src={getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex flex-col justify-end">
                                         <h4 className="text-white font-bold text-sm leading-tight line-clamp-2">{movie.title}</h4>
