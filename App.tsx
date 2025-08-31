@@ -6,7 +6,8 @@ import { LoginModal } from './components/LoginModal';
 import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } from './components/ImageSettingsModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { SwapFaceModal } from './components/SwapFaceModal';
-import { AdminPanelModal } from './components/AdminPanelModal'; // Import the new modal
+import { AdminPanelModal } from './components/AdminPanelModal';
+import { MembershipModal } from './components/MembershipModal'; // Import the new modal
 import {
   streamModelResponse,
   generateImage,
@@ -72,8 +73,9 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null); // State for auth errors
   const sessionsRef = useRef(chatSessions);
 
-  // --- New Admin Panel State ---
+  // --- New Admin & Membership State ---
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
 
   useEffect(() => {
     sessionsRef.current = chatSessions;
@@ -547,18 +549,23 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Error sending message:", error);
       const detailedError = error instanceof Error ? error.message : String(error);
-      setNotifications(prev => [`[${new Date().toLocaleTimeString()}] ${detailedError}`, ...prev.slice(0, 19)]);
-      const errorMessage: Message = { role: 'model', text: `There was an unexpected error: ${detailedError}`, timestamp: Date.now() };
-      setChatSessions(prev =>
-          prev.map(s => {
-            if (s.id === activeChatId) {
-                const updatedChat = { ...s, messages: [...s.messages, errorMessage] };
-                googleDriveService.saveSession(updatedChat).catch(e => console.error("Failed to save error message", e));
-                return updatedChat;
-            }
-            return s;
-          })
-      );
+
+      if (detailedError.includes('This is a Pro feature')) {
+          setIsMembershipModalOpen(true);
+      } else {
+          setNotifications(prev => [`[${new Date().toLocaleTimeString()}] ${detailedError}`, ...prev.slice(0, 19)]);
+          const errorMessage: Message = { role: 'model', text: `There was an unexpected error: ${detailedError}`, timestamp: Date.now() };
+          setChatSessions(prev =>
+              prev.map(s => {
+                if (s.id === activeChatId) {
+                    const updatedChat = { ...s, messages: [...s.messages, errorMessage] };
+                    googleDriveService.saveSession(updatedChat).catch(e => console.error("Failed to save error message", e));
+                    return updatedChat;
+                }
+                return s;
+              })
+          );
+      }
     } finally {
       setIsLoading(false);
       setThinkingStatus(null);
@@ -733,11 +740,16 @@ const App: React.FC = () => {
         onClose={() => setIsSwapFaceModalOpen(false)}
         setNotifications={setNotifications}
         userProfile={userProfile}
+        onProFeatureBlock={() => setIsMembershipModalOpen(true)}
       />
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
         userProfile={userProfile}
+      />
+      <MembershipModal
+        isOpen={isMembershipModalOpen}
+        onClose={() => setIsMembershipModalOpen(false)}
       />
     </div>
   );
