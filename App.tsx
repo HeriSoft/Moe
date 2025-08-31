@@ -21,6 +21,7 @@ import type { ChatSession, Message, Attachment, UserProfile } from './types';
 const MAX_FILES = 4;
 const MAX_IMAGE_FILES = 1;
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
+const PAYLOAD_SIZE_LIMIT = 4 * 1024 * 1024; // 4 MB safety buffer
 
 const PERSONAS: { [key: string]: { name: string; icon: React.FC<any>; prompt: string; description: string; } } = {
   default: {
@@ -445,7 +446,28 @@ const App: React.FC = () => {
     if (!isLoggedIn) { setIsLoginModalOpen(true); return; }
 
     let currentChat = sessionsRef.current.find(c => c.id === activeChatId);
-    if (!currentChat) return;
+    if (!currentChat || currentChat.isLocked) return;
+
+    // --- Payload Size Check ---
+    const payloadString = JSON.stringify(currentChat.messages);
+    const payloadSize = new Blob([payloadString]).size;
+
+    if (payloadSize > PAYLOAD_SIZE_LIMIT) {
+        console.warn(`Chat ${activeChatId} has exceeded the size limit of ${PAYLOAD_SIZE_LIMIT} bytes. Locking chat.`);
+        const lockedChat: ChatSession = { ...currentChat, isLocked: true };
+        
+        try {
+            await googleDriveService.saveSession(lockedChat);
+            setChatSessions(prev => prev.map(s => s.id === activeChatId ? lockedChat : s));
+            setNotifications(prev => ["This chat has too much media and has been locked. Please start a new chat.", ...prev.slice(0, 19)]);
+        } catch (error) {
+            console.error("Failed to save locked chat state:", error);
+            const errorMessage = error instanceof Error ? error.message : "Could not lock the chat due to a save error.";
+            setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+        }
+        return; // Stop execution
+    }
+    // --- End Payload Size Check ---
     
     const userMessage: Message = {
       role: 'user',
@@ -702,6 +724,7 @@ const App: React.FC = () => {
           onAttachFromDrive={handleAttachFromDrive}
           onSaveToDrive={handleSaveToDrive}
           startChatWithPrompt={startChatWithPrompt}
+          startNewChat={startNewChat}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
           onOpenSwapFaceModal={() => {
             if (isLoggedIn) {
