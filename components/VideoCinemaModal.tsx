@@ -5,11 +5,8 @@ import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
-// FIX: Rename function to be more generic and simply return the provided URL.
-// This allows embedding from any third-party source like short.icu.
 const getVideoEmbedUrl = (embedUrl: string) => {
     if (!embedUrl || typeof embedUrl !== 'string') return '';
-    // The function now directly returns the URL stored in the database.
     return embedUrl;
 };
 
@@ -82,9 +79,14 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie);
     setVideoUrl('');
-    setIsPlayerLoading(true);
-    const firstEpisode = [...movie.episodes].sort((a,b) => a.episode_number - b.episode_number)[0];
-    setSelectedEpisode(firstEpisode?.episode_number || 1);
+    const firstEpisode = [...movie.episodes].sort((a,b) => a.episode_number - b.episode_number);
+    if (firstEpisode) {
+        setIsPlayerLoading(true);
+        setSelectedEpisode(firstEpisode.episode_number);
+    } else {
+        setError("This movie does not have any episodes.");
+        setIsPlayerLoading(false);
+    }
   };
 
   const handleSelectEpisode = (episodeNumber: number) => {
@@ -96,7 +98,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   useEffect(() => {
     if (selectedMovie && isPlayerLoading) {
       const episode = sortedEpisodes.find(ep => ep.episode_number === selectedEpisode);
-      // Use the new generic function
       const url = episode ? getVideoEmbedUrl(episode.video_drive_id) : '';
       
       const timer = setTimeout(() => {
@@ -153,11 +154,21 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                         </div>
                         <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
                            {videoUrl ? (
-                                <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" frameBorder="0" scrolling="0" allowFullScreen className="border-0 rounded-lg"></iframe>
+                                // FIX: Add crucial 'allow' and 'sandbox' attributes to the iframe
+                                <iframe 
+                                    src={videoUrl} 
+                                    key={videoUrl} 
+                                    title={selectedMovie.title + " - Episode " + selectedEpisode}
+                                    className="border-0 rounded-lg w-full h-full"
+                                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media; gyroscope; accelerometer"
+                                    sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+                                ></iframe>
                            ) : isPlayerLoading ? (
                                <RefreshIcon className="w-10 h-10 text-slate-400 animate-spin"/>
                            ) : (
-                                <div className="flex items-center justify-center h-full text-slate-400">Could not load video.</div>
+                                <div className="flex items-center justify-center h-full text-slate-400 text-center p-4">
+                                  {error || "Could not load video. The video provider may not allow embedding."}
+                                </div>
                            )}
                         </div>
                     </>
@@ -180,7 +191,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
 
                 {isLoading ? (
                      <div className="flex items-center justify-center h-full"><RefreshIcon className="w-8 h-8 animate-spin text-slate-400"/></div>
-                ) : error ? (
+                ) : error && !movies.length ? (
                     <div className="flex items-center justify-center h-full text-red-500">{error}</div>
                 ) : (
                     <div className="flex-grow overflow-y-auto -mr-2 pr-2">
