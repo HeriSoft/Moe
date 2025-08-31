@@ -77,8 +77,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
              <FeatureListItem>
               High-quality **Text-to-Speech** audio generation.
             </FeatureListItem>
+             <FeatureListItem>
+              Access exclusive models like **GPT-5, Claude, and GPT-o3**.
+            </FeatureListItem>
             <FeatureListItem>
-              Priority access to **new features** and models.
+              Generate videos with the upcoming **Video Generation** feature.
+            </FeatureListItem>
+            <FeatureListItem>
+              Priority access to all **new features** as they are released.
             </FeatureListItem>
           </ul>
         </div>
