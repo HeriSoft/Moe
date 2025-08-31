@@ -551,7 +551,9 @@ const App: React.FC = () => {
       const detailedError = error instanceof Error ? error.message : String(error);
 
       if (detailedError.includes('This is a Pro feature')) {
-          setIsMembershipModalOpen(true);
+          if (userProfile?.email !== ADMIN_EMAIL) {
+            setIsMembershipModalOpen(true);
+          }
       } else {
           setNotifications(prev => [`[${new Date().toLocaleTimeString()}] ${detailedError}`, ...prev.slice(0, 19)]);
           const errorMessage: Message = { role: 'model', text: `There was an unexpected error: ${detailedError}`, timestamp: Date.now() };
@@ -631,6 +633,13 @@ const App: React.FC = () => {
 
   const activeChat = chatSessions.find(c => c.id === activeChatId);
   const isAdmin = userProfile?.email === ADMIN_EMAIL;
+  
+  const handleProFeatureBlock = () => {
+      if (userProfile?.email !== ADMIN_EMAIL) {
+          setIsMembershipModalOpen(true);
+      }
+  };
+
 
   return (
     <div className="relative flex h-screen w-full font-sans overflow-hidden">
@@ -703,6 +712,7 @@ const App: React.FC = () => {
             }
           }}
           userProfile={userProfile}
+          onProFeatureBlock={handleProFeatureBlock}
         />
       </main>
       <SettingsModal
@@ -740,7 +750,7 @@ const App: React.FC = () => {
         onClose={() => setIsSwapFaceModalOpen(false)}
         setNotifications={setNotifications}
         userProfile={userProfile}
-        onProFeatureBlock={() => setIsMembershipModalOpen(true)}
+        onProFeatureBlock={handleProFeatureBlock}
       />
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
