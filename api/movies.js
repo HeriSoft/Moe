@@ -23,13 +23,11 @@ if (process.env.REDIS_URL) {
 let pool;
 // Check for the environment variable to instantiate the pool
 if (process.env.POSTGRES_URL) {
+    // By appending sslmode=require, we enforce an SSL connection without
+    // the strict certificate validation that fails in some serverless environments.
+    const connectionString = `${process.env.POSTGRES_URL}?sslmode=require`;
     pool = new Pool({
-        connectionString: process.env.POSTGRES_URL,
-        ssl: {
-            // This is often required for cloud database providers like Supabase
-            // when connecting from serverless environments like Vercel.
-            rejectUnauthorized: false,
-        },
+        connectionString: connectionString,
     });
 } else {
     // Log a warning if the database URL is not set, so the app doesn't crash silently.
