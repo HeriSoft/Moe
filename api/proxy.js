@@ -192,20 +192,23 @@ export default async function handler(req, res) {
     try {
         const { action, payload } = req.body;
         const userEmail = payload?.user?.email;
+        const isAdmin = userEmail === ADMIN_EMAIL;
 
         // --- FEATURE GATING ---
         const proActions = ['swapFace', 'generateImages', 'editImage', 'generateSpeech'];
-        if (proActions.includes(action)) {
-            const isAdmin = userEmail === ADMIN_EMAIL;
-            // Only perform the Pro check if the user is NOT an admin.
-            if (!isAdmin) {
-                const userIsPro = await isUserPro(userEmail);
-                if (!userIsPro) {
-                    return res.status(403).json({
-                        error: 'Forbidden',
-                        details: 'This is a Pro feature. Please upgrade your account to use it.'
-                    });
-                }
+        const proModels = ['gpt-4.1', 'gpt-5', 'o3'];
+
+        const isProAction = proActions.includes(action);
+        const isProModel = action === 'generateContentStream' && proModels.includes(payload.model);
+
+        if ((isProAction || isProModel) && !isAdmin) {
+            const userIsPro = await isUserPro(userEmail);
+            if (!userIsPro) {
+                const featureName = isProModel ? `the ${payload.model} model` : 'this feature';
+                return res.status(403).json({
+                    error: 'Forbidden',
+                    details: `This is a Pro feature. Please upgrade your account to use ${featureName}.`
+                });
             }
         }
         // --- END FEATURE GATING ---
@@ -223,7 +226,6 @@ export default async function handler(req, res) {
             }
 
             case 'generateContentStream': {
-                // ... (Logic của case này không thay đổi, giữ nguyên như file gốc của bạn)
                 await logAction(userEmail, `chatted using ${payload.model}`);
                 const { model, history, newMessage, attachments, isWebSearchEnabled, isDeepThinkEnabled, systemInstruction } = payload;
 
@@ -272,6 +274,8 @@ export default async function handler(req, res) {
 
                 const updatedPayload = { ...payload, newMessage: finalNewMessage, attachment: imageAttachment, attachments: null, systemInstruction };
         
+                const openAICompatibleModels = ['gpt-4.1', 'gpt-5-mini', 'gpt-5', 'o3', 'o3-mini'];
+
                 if (model.startsWith('gemini')) {
                     if (!ai) throw new Error("Gemini API key not configured.");
                     res.setHeader('Content-Type', 'text/event-stream');
@@ -309,7 +313,7 @@ export default async function handler(req, res) {
                     res.end();
                     return;
 
-                } else if (model.startsWith('gpt-')) {
+                } else if (openAICompatibleModels.includes(model)) {
                     if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
                     await handleOpenAIStream(res, OPENAI_API_URL, OPENAI_API_KEY, updatedPayload, isWebSearchEnabled, false);
                     return;
@@ -403,7 +407,7 @@ export default async function handler(req, res) {
                 // ... (Logic của case này không thay đổi, giữ nguyên như file gốc của bạn)
                 await logAction(userEmail, 'played Swapface');
                 const { targetImage, sourceImage } = payload;
-                const GRADIO_PUBLIC_URL = "https://5aebcfa925224f9e49.gradio.live";
+                const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
                 
                 const uploadFileAndGetRef = async (image) => {
                     const buffer = Buffer.from(image.data, 'base64');
