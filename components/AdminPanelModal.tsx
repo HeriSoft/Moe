@@ -1,0 +1,174 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon } from './icons';
+import type { UserProfile } from '../types';
+
+interface AdminPanelModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  userProfile: UserProfile | undefined;
+}
+
+interface UserIpData {
+    email: string;
+    ip: string;
+    isBlocked: boolean;
+}
+
+const ADMIN_API_ENDPOINT = '/api/admin';
+
+export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile }) => {
+  const [activeTab, setActiveTab] = useState<'logs' | 'ips'>('logs');
+  const [logs, setLogs] = useState<string[]>([]);
+  const [userData, setUserData] = useState<UserIpData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!isOpen || !userProfile) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+        const headers = { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email };
+        const [logsResponse, ipsResponse] = await Promise.all([
+            fetch(`${ADMIN_API_ENDPOINT}?action=get_logs`, { headers }),
+            fetch(`${ADMIN_API_ENDPOINT}?action=get_user_ip_data`, { headers })
+        ]);
+
+        if (!logsResponse.ok) throw new Error(`Failed to fetch logs: ${logsResponse.statusText}`);
+        if (!ipsResponse.ok) throw new Error(`Failed to fetch IP data: ${ipsResponse.statusText}`);
+
+        const logsData = await logsResponse.json();
+        const ipsData = await ipsResponse.json();
+
+        setLogs(logsData.logs || []);
+        setUserData(ipsData.userData || []);
+
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+        setError(errorMessage);
+    } finally {
+        setIsLoading(false);
+    }
+  }, [isOpen, userProfile]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+  
+  const handleIpAction = async (ip: string, email: string, action: 'block_ip' | 'unblock_ip') => {
+    if (!userProfile) return;
+    try {
+        const response = await fetch(ADMIN_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+            body: JSON.stringify({ action, ip, email }),
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.details || `Failed to ${action}.`);
+        }
+        // Refresh data after action
+        fetchData();
+    } catch (e) {
+         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+         setError(errorMessage);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const TabButton: React.FC<{ tabId: 'logs' | 'ips'; title: string; icon: React.FC<any>; }> = ({ tabId, title, icon: Icon }) => (
+    <button
+      onClick={() => setActiveTab(tabId)}
+      className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-semibold border-b-2 transition-colors ${
+        activeTab === tabId
+          ? 'border-indigo-500 text-indigo-500'
+          : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+      }`}
+    >
+      <Icon className="w-5 h-5" />
+      {title}
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="admin-panel-title">
+      <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4 flex-shrink-0">
+          <h2 id="admin-panel-title" className="text-2xl font-bold">Admin Panel</h2>
+          <div className="flex items-center gap-4">
+            <button onClick={fetchData} disabled={isLoading} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50" aria-label="Refresh data">
+              <RefreshIcon className={`w-6 h-6 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close admin panel">
+              <CloseIcon className="w-7 h-7" />
+            </button>
+          </div>
+        </div>
+
+        {error && <div className="p-3 mb-4 bg-red-500/10 text-red-500 rounded-lg text-sm">{error}</div>}
+
+        <div className="border-b border-slate-200 dark:border-slate-700 flex flex-shrink-0">
+          <TabButton tabId="logs" title="User Logs" icon={ClipboardDocumentListIcon} />
+          <TabButton tabId="ips" title="IP Management" icon={UserGroupIcon} />
+        </div>
+
+        <div className="flex-grow overflow-y-auto mt-4">
+          {activeTab === 'logs' && (
+            <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg font-mono text-xs">
+                {isLoading ? <p>Loading logs...</p> : logs.map((log, index) => <p key={index}>{log}</p>)}
+            </div>
+          )}
+          {activeTab === 'ips' && (
+            <div className="flow-root">
+              <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+                  <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                    <thead>
+                      <tr>
+                        <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 dark:text-white sm:pl-0">User Email</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">Last Seen IP</th>
+                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 dark:text-white">Status</th>
+                        <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-0"><span className="sr-only">Action</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {isLoading ? (
+                        <tr><td colSpan={4} className="text-center p-4">Loading user data...</td></tr>
+                      ) : (
+                        userData.map(({ email, ip, isBlocked }) => (
+                          <tr key={email}>
+                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 dark:text-white sm:pl-0">{email}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono">{ip}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm">
+                              {isBlocked ? (
+                                <span className="inline-flex items-center rounded-md bg-red-50 dark:bg-red-500/10 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-600/20">Blocked</span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-md bg-green-50 dark:bg-green-500/10 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20">Active</span>
+                              )}
+                            </td>
+                            <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
+                                {isBlocked ? (
+                                    <button onClick={() => handleIpAction(ip, email, 'unblock_ip')} className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">
+                                        <ShieldCheckIcon className="w-5 h-5 inline mr-1"/>Unlock
+                                    </button>
+                                ) : (
+                                    <button onClick={() => handleIpAction(ip, email, 'block_ip')} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
+                                        <ShieldExclamationIcon className="w-5 h-5 inline mr-1"/>Block
+                                    </button>
+                                )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

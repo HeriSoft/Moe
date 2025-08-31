@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { ChatSession, Attachment, Message } from '../types';
+import type { ChatSession, Attachment, Message, UserProfile } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
 import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon, FaceSwapIcon } from './icons';
@@ -101,6 +101,7 @@ interface ChatViewProps {
   startChatWithPrompt: (prompt: string) => void; // For prompt starters
   onOpenMediaGallery: () => void; // For media gallery
   onOpenSwapFaceModal: () => void; // For Swap Face
+  userProfile: UserProfile | undefined; // For logging
 }
 
 const PROMPT_STARTERS = [
@@ -177,7 +178,7 @@ const COMMANDS = [
     { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
 ];
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery, onOpenSwapFaceModal }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery, onOpenSwapFaceModal, userProfile }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -209,14 +210,11 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   }, [commandToPrepend, clearCommandToPrepend]);
 
   // --- TEXT TO SPEECH ---
-  // Initialize and clean up the single audio element for the component
   useEffect(() => {
     audioRef.current = new Audio();
     const handleAudioEnd = () => {
         setAudioState(prevState => {
-            if (prevState.audioUrl) {
-                URL.revokeObjectURL(prevState.audioUrl);
-            }
+            if (prevState.audioUrl) URL.revokeObjectURL(prevState.audioUrl);
             return { messageId: null, audioUrl: null, isLoading: false };
         });
     };
@@ -228,7 +226,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             audioRef.current.pause();
             audioRef.current = null;
         }
-        // Also revoke URL on unmount just in case
         setAudioState(prevState => {
              if (prevState.audioUrl) URL.revokeObjectURL(prevState.audioUrl);
              return { messageId: null, audioUrl: null, isLoading: false };
@@ -236,7 +233,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
     };
   }, []);
 
-  // Stop audio and clean up state when switching chats
   useEffect(() => {
     return () => {
         if (audioRef.current) audioRef.current.pause();
@@ -249,41 +245,26 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   const handleToggleTTS = useCallback(async (messageId: string, text: string) => {
     if (!audioRef.current) return;
     const audioPlayer = audioRef.current;
-
-    // Use a variable to track if the clicked message was already playing
     let wasPlaying = false;
     
-    // Use functional update to get the latest state and avoid stale closures
     setAudioState(currentState => {
-        // Case 1: Clicked the same message that is currently playing/loading. Stop it.
         if (currentState.messageId === messageId) {
             wasPlaying = true;
             audioPlayer.pause();
-            if (currentState.audioUrl) {
-                URL.revokeObjectURL(currentState.audioUrl);
-            }
+            if (currentState.audioUrl) URL.revokeObjectURL(currentState.audioUrl);
             return { messageId: null, audioUrl: null, isLoading: false };
         }
-
-        // Case 2: Another message was playing. Stop it before starting the new one.
         if (currentState.messageId) {
             audioPlayer.pause();
-            if (currentState.audioUrl) {
-                URL.revokeObjectURL(currentState.audioUrl);
-            }
+            if (currentState.audioUrl) URL.revokeObjectURL(currentState.audioUrl);
         }
-        
-        // Case 3: Start loading the new message.
         return { messageId: messageId, audioUrl: null, isLoading: true };
     });
 
-    // If we just stopped the currently playing audio, don't proceed to fetch and play again.
-    if (wasPlaying) {
-        return;
-    }
+    if (wasPlaying) return;
 
     try {
-        const base64Audio = await generateSpeech(text);
+        const base64Audio = await generateSpeech(text, userProfile);
         const byteCharacters = atob(base64Audio);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
@@ -296,18 +277,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         audioPlayer.src = url;
         audioPlayer.play().catch(e => {
             console.error("Audio playback failed:", e);
-            // If playback fails, revoke the URL and reset state.
             URL.revokeObjectURL(url);
             setAudioState({ messageId: null, audioUrl: null, isLoading: false });
         });
         
-        // Update state to reflect that we are now playing
         setAudioState({ messageId: messageId, audioUrl: url, isLoading: false });
 
     } catch (error) {
         console.error("Failed to generate speech:", error);
         setNotifications(prev => ["Failed to generate speech. Please try again.", ...prev.slice(0, 19)]);
-        // Reset state on error, ensuring we only reset if it's the one that failed
         setAudioState(currentState => {
             if (currentState.messageId === messageId) {
                 return { messageId: null, audioUrl: null, isLoading: false };
@@ -315,7 +293,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             return currentState;
         });
     }
-  }, [setNotifications]);
+  }, [setNotifications, userProfile]);
 
 
   useEffect(() => {
@@ -423,7 +401,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
     setIsTranslating(true);
     try {
-        const translatedText = await getTranslation(input, lang);
+        const translatedText = await getTranslation(input, lang, userProfile);
         setInput(translatedText);
     } catch (error) {
         console.error(error);
