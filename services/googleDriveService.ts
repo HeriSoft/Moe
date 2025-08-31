@@ -421,13 +421,14 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 /**
  * Creates a publicly viewable URL for a file in Google Drive.
- * Note: The file itself must have its sharing permissions set to "Anyone with the link can view".
- * This function does not change file permissions.
+ * This is specifically for serving thumbnails reliably.
  * @param fileId The ID of the file.
- * @returns A direct content URL for the file.
+ * @returns A direct thumbnail URL for the image file.
  */
 export function getDriveFilePublicUrl(fileId: string): string {
-    return `https://drive.google.com/uc?id=${fileId}`;
+    // Use the dedicated thumbnail endpoint for better reliability and performance.
+    // sz=w512 requests a thumbnail with a width of 512px for better quality.
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w512`;
 }
 
 
