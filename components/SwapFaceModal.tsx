@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, PhotoIcon, ArrowPathIcon, DownloadIcon } from './icons';
 import { swapFace } from '../services/geminiService';
@@ -51,9 +49,10 @@ interface SwapFaceModalProps {
   onClose: () => void;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   userProfile: UserProfile | undefined;
+  onProFeatureBlock: () => void;
 }
 
-export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, setNotifications, userProfile }) => {
+export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, setNotifications, userProfile, onProFeatureBlock }) => {
   const [targetImage, setTargetImage] = useState<Attachment | null>(null);
   const [sourceImage, setSourceImage] = useState<Attachment | null>(null);
   const [resultImage, setResultImage] = useState<Attachment | null>(null);
@@ -98,8 +97,13 @@ export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, s
       setResultImage(result);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "An unknown error occurred during face swap.";
-      setError(errorMessage);
-      setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+      if (errorMessage.includes('This is a Pro feature')) {
+          onProFeatureBlock();
+          onClose(); // Close the swap modal to show the membership one
+      } else {
+          setError(errorMessage);
+          setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+      }
     } finally {
       setIsLoading(false);
     }
