@@ -1,6 +1,30 @@
 import { client } from '@gradio/client';
 import type { Message, Attachment, UserProfile } from '../types';
 
+/**
+ * A robust error handler for fetch requests to the proxy.
+ * It tries to parse the error response as JSON, but falls back to text 
+ * if that fails. This prevents crashes when the server (e.g., Vercel)
+ * returns a non-JSON error like "413 Payload Too Large".
+ * @param response The raw Response object from a failed fetch call.
+ * @throws An Error with a detailed message from the response body.
+ */
+async function handleProxyError(response: Response): Promise<never> {
+    let errorDetails = `Proxy request failed with status ${response.status}`;
+    try {
+        const errorData = await response.json();
+        errorDetails = errorData.details || errorData.error || JSON.stringify(errorData);
+    } catch (e) {
+        try {
+            errorDetails = await response.text();
+        } catch (textError) {
+            // Fallback, the initial error message is used.
+        }
+    }
+    throw new Error(errorDetails);
+}
+
+
 export async function logUserLogin(user: UserProfile) {
     try {
         await fetch('/api/proxy', {
@@ -47,8 +71,7 @@ export async function streamModelResponse(
     });
 
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || `[${response.status}] Proxy request failed`);
+        await handleProxyError(response);
     }
 
     if (!response.body) {
@@ -104,8 +127,7 @@ export async function generateImage(prompt: string, settings: any, user: UserPro
     });
     
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Proxy request failed');
+        await handleProxyError(response);
     }
 
     const data = await response.json();
@@ -138,8 +160,7 @@ export async function editImage(prompt: string, image: Attachment, settings: any
         })
     });
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Image editing request failed');
+        await handleProxyError(response);
     }
     return await response.json();
 }
@@ -156,8 +177,7 @@ export async function getTranslation(text: string, targetLanguage: string, user:
         })
     });
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Translation request failed');
+        await handleProxyError(response);
     }
     const data = await response.json();
     return data.translatedText;
@@ -174,8 +194,7 @@ export async function generateSpeech(text: string, user: UserProfile | undefined
         })
     });
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Speech generation request failed');
+        await handleProxyError(response);
     }
     const data = await response.json();
     return data.audioContent; // This will be the base64 string
@@ -201,19 +220,13 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment,
     console.log("Response status from proxy:", response.status);
 
     if (!response.ok) {
-        let errorDetails = `Proxy API request failed with status: ${response.status}`;
+        // Use the centralized error handler and wrap its error in a more specific one for this context.
         try {
-            const errorData = await response.json();
-            errorDetails = errorData.details || errorData.error || JSON.stringify(errorData) || errorDetails;
-        } catch (e) {
-            try {
-                 errorDetails = await response.text();
-            } catch (textError) {
-                console.error("Could not read error response body", textError);
-            }
+            await handleProxyError(response);
+        } catch (e: any) {
+            console.error("Proxy API error details for face swap:", e.message);
+            throw new Error(`Face swap failed via proxy: ${e.message}`);
         }
-        console.error("Proxy API error details:", errorDetails);
-        throw new Error(`Face swap failed via proxy: ${errorDetails}`);
     }
 
     try {
