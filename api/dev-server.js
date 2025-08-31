@@ -13,11 +13,16 @@ const PORT = 3000;
 // This function adapts a Node.js request/response to the Vercel handler signature
 async function callVercelHandler(handler, req, res) {
     // 1. Buffer the incoming request body
-    const buffers = [];
-    for await (const chunk of req) {
-        buffers.push(chunk);
+    let bodyString = '';
+    // FIX: Only buffer the request body for methods that are expected to have one.
+    // For GET requests, the `for await` loop would hang indefinitely, causing a timeout.
+    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+        const buffers = [];
+        for await (const chunk of req) {
+            buffers.push(chunk);
+        }
+        bodyString = Buffer.concat(buffers).toString();
     }
-    const bodyString = Buffer.concat(buffers).toString();
 
     // 2. Mock the Vercel Request object
     const vercelReq = {
