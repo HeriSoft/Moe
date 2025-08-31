@@ -102,6 +102,7 @@ interface ChatViewProps {
   onOpenMediaGallery: () => void; // For media gallery
   onOpenSwapFaceModal: () => void; // For Swap Face
   userProfile: UserProfile | undefined; // For logging
+  onProFeatureBlock: () => void; // Callback for Pro feature gate
 }
 
 const PROMPT_STARTERS = [
@@ -178,7 +179,7 @@ const COMMANDS = [
     { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
 ];
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery, onOpenSwapFaceModal, userProfile }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery, onOpenSwapFaceModal, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -285,7 +286,12 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
     } catch (error) {
         console.error("Failed to generate speech:", error);
-        setNotifications(prev => ["Failed to generate speech. Please try again.", ...prev.slice(0, 19)]);
+        const detailedError = error instanceof Error ? error.message : String(error);
+        if (detailedError.includes('This is a Pro feature')) {
+            onProFeatureBlock();
+        } else {
+            setNotifications(prev => ["Failed to generate speech. Please try again.", ...prev.slice(0, 19)]);
+        }
         setAudioState(currentState => {
             if (currentState.messageId === messageId) {
                 return { messageId: null, audioUrl: null, isLoading: false };
@@ -293,7 +299,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             return currentState;
         });
     }
-  }, [setNotifications, userProfile]);
+  }, [setNotifications, userProfile, onProFeatureBlock]);
 
 
   useEffect(() => {
