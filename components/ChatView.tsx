@@ -102,6 +102,7 @@ interface ChatViewProps {
   startNewChat: () => void; // For the locked chat button
   onOpenMediaGallery: () => void; // For media gallery
   onOpenSwapFaceModal: () => void; // For Swap Face
+  onOpenVideoCinema: () => void; // For Video Cinema
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
 }
@@ -180,7 +181,7 @@ const COMMANDS = [
     { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
 ];
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenSwapFaceModal, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenSwapFaceModal, onOpenVideoCinema, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -481,6 +482,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         <div className="flex items-center space-x-2 sm:space-x-4">
             {activeChat && (
               <>
+              <button title="Video Cinema" aria-label="Open Video Cinema" onClick={onOpenVideoCinema} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
+                  <VideoIcon className="w-5 h-5" />
+              </button>
               <button title="Media Gallery" aria-label="Open Media Gallery" onClick={onOpenMediaGallery} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
                   <FolderOpenIcon className="w-5 h-5" />
               </button>
