@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, FilmIcon } from './icons';
-import type { UserProfile, Movie } from '../types';
+import type { UserProfile, Movie, MovieEpisode } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
@@ -47,6 +47,10 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // New states to manage video player loading and prevent UI freezing
+  const [videoUrl, setVideoUrl] = useState<string>('');
+  const [isPlayerLoading, setIsPlayerLoading] = useState<boolean>(false);
+
   const fetchMovies = useCallback(async (page: number, search: string) => {
     setIsLoading(true);
     setError(null);
@@ -74,13 +78,23 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     }
   }, []);
 
+  // Effect to run when the modal opens/closes
   useEffect(() => {
     if (isOpen) {
       fetchMovies(1, '');
       setSelectedMovie(null);
+      setVideoUrl('');
+      setIsPlayerLoading(false);
       setSearchTerm('');
     }
   }, [isOpen, fetchMovies]);
+
+  // Memoize the sorted episodes for the selected movie to avoid re-sorting on every render.
+  const sortedEpisodes = useMemo(() => {
+      if (!selectedMovie?.episodes) return [];
+      return [...selectedMovie.episodes].sort((a, b) => a.episode_number - b.episode_number);
+  }, [selectedMovie]);
+  
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,14 +102,37 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   };
   
   const handleSelectMovie = (movie: Movie) => {
-      setSelectedMovie(movie);
-      if (movie.episodes && movie.episodes.length > 0) {
-          const firstEpisode = movie.episodes.sort((a,b) => a.episode_number - b.episode_number)[0];
-          setSelectedEpisode(firstEpisode.episode_number);
-      }
+    setSelectedMovie(movie);
+    // Hide the old video and show a loader immediately
+    setVideoUrl('');
+    setIsPlayerLoading(true);
+    // Select the first episode
+    const firstEpisode = [...movie.episodes].sort((a,b) => a.episode_number - b.episode_number)[0];
+    setSelectedEpisode(firstEpisode?.episode_number || 1);
   };
 
-  const embedUrl = selectedMovie ? getDriveEmbedUrl(selectedMovie.episodes.find(ep => ep.episode_number === selectedEpisode)?.video_drive_id || '') : '';
+  const handleSelectEpisode = (episodeNumber: number) => {
+    setSelectedEpisode(episodeNumber);
+    // Hide the old video and show a loader when changing episodes
+    setVideoUrl('');
+    setIsPlayerLoading(true);
+  };
+
+  // This effect decouples the heavy iframe loading from the main UI update, preventing freezes.
+  useEffect(() => {
+    if (selectedMovie && isPlayerLoading) {
+      const episode = sortedEpisodes.find(ep => ep.episode_number === selectedEpisode);
+      const url = episode ? getDriveEmbedUrl(episode.video_drive_id) : '';
+      
+      // Use a timeout to allow the browser to render the movie details before loading the iframe
+      const timer = setTimeout(() => {
+        setVideoUrl(url);
+        setIsPlayerLoading(false); // Stop showing the main loader once the URL is set
+      }, 150);
+
+      return () => clearTimeout(timer);
+    }
+  }, [selectedMovie, selectedEpisode, isPlayerLoading, sortedEpisodes]);
 
   return (
     <div
@@ -130,8 +167,8 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                                 <div className="mt-4">
                                     <h4 className="font-semibold mb-2">Tập phim:</h4>
                                     <div className="flex flex-wrap gap-2 max-h-20 overflow-y-auto">
-                                        {selectedMovie.episodes.sort((a,b) => a.episode_number - b.episode_number).map(ep => (
-                                            <button key={ep.episode_number} onClick={() => setSelectedEpisode(ep.episode_number)}
+                                        {sortedEpisodes.map((ep: MovieEpisode) => (
+                                            <button key={ep.id || ep.episode_number} onClick={() => handleSelectEpisode(ep.episode_number)}
                                                 className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${selectedEpisode === ep.episode_number ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`}>
                                                 Tập {ep.episode_number}
                                             </button>
@@ -140,11 +177,13 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                                 </div>
                             </div>
                         </div>
-                        <div className="flex-grow bg-black rounded-lg w-full h-64 md:h-auto">
-                           {embedUrl ? (
-                                <iframe src={embedUrl} width="100%" height="100%" allow="autoplay" className="border-0 rounded-lg"></iframe>
+                        <div className="flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
+                           {videoUrl ? (
+                                <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" allow="autoplay; fullscreen" className="border-0 rounded-lg"></iframe>
+                           ) : isPlayerLoading ? (
+                               <RefreshIcon className="w-10 h-10 text-slate-400 animate-spin"/>
                            ) : (
-                               <div className="flex items-center justify-center h-full text-slate-400">Could not load video.</div>
+                                <div className="flex items-center justify-center h-full text-slate-400">Could not load video.</div>
                            )}
                         </div>
                     </>
