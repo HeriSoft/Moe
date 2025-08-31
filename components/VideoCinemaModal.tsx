@@ -5,10 +5,38 @@ import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
-const getVideoEmbedUrl = (embedUrl: string) => {
-    if (!embedUrl || typeof embedUrl !== 'string') return '';
-    return embedUrl;
+// Using a generic function name as the source can be anything.
+// This function now just acts as a pass-through for clarity.
+const getVideoEmbedUrl = (url: string) => {
+    // Note: The logic for parsing Google Drive IDs is kept in case you mix sources,
+    // but it will directly return other URLs like from short.icu.
+    if (!url) return '';
+    
+    // Check if it's a potential Google Drive URL/ID before attempting to parse.
+    // This is a simple heuristic.
+    if (url.includes('drive.google.com') || url.length < 50 && !url.startsWith('http')) {
+        let fileId = '';
+        try {
+            const urlObj = new URL(url);
+            const match = urlObj.pathname.match(/d\/([a-zA-Z0-9_-]{25,})/);
+            if (match && match[1]) {
+                fileId = match[1];
+            }
+        } catch (e) {
+            if (url.length > 20 && !url.includes('/')) {
+                fileId = url;
+            }
+        }
+        if (fileId) {
+            return `https://drive.google.com/embeddedplayer/${fileId}`;
+        }
+    }
+
+    // If it's not a Google Drive ID or a parsable URL, return the original string.
+    // This supports direct embed URLs like from short.icu.
+    return url;
 };
+
 
 interface VideoCinemaModalProps {
   isOpen: boolean;
@@ -25,7 +53,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [isPlayerLoading, setIsPlayerLoading] = useState<boolean>(false);
 
@@ -63,6 +91,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
       setVideoUrl('');
       setIsPlayerLoading(false);
       setSearchTerm('');
+      setError(null);
     }
   }, [isOpen, fetchMovies]);
 
@@ -76,27 +105,19 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     fetchMovies(1, searchTerm);
   };
   
-  // FIX: Corrected the logic for selecting the first episode.
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie);
-    setVideoUrl(''); // Reset previous video
-    setError(null);   // Clear previous errors
+    setVideoUrl('');
+    setError(null);
 
-    // Safely sort the episodes, providing an empty array as a fallback.
-    const sortedEpisodes = movie.episodes ? [...movie.episodes].sort((a, b) => a.episode_number - b.episode_number) : [];
+    const episodes = movie.episodes ? [...movie.episodes].sort((a, b) => a.episode_number - b.episode_number) : [];
 
-    // Correctly check if the array has elements by using .length
-    if (sortedEpisodes.length > 0) {
-      // Access the first episode object at index [0]
-      const firstEpisode = sortedEpisodes[0];
-      
-      // Set the episode number and trigger the video player loading
-      setSelectedEpisode(firstEpisode.episode_number);
-      setIsPlayerLoading(true);
+    if (episodes.length > 0) {
+        setSelectedEpisode(episodes[0].episode_number);
+        setIsPlayerLoading(true);
     } else {
-      // Handle the case where a movie has no episodes
-      setError("This movie does not have any episodes.");
-      setIsPlayerLoading(false);
+        setError("This movie has no episodes available to play.");
+        setIsPlayerLoading(false);
     }
   };
 
@@ -140,7 +161,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
         </div>
         
         <div className="flex flex-col md:flex-row gap-6 flex-grow min-h-0">
-            {/* Left/Top Panel: Details & Player */}
             <div className="flex flex-col w-full md:w-2/3 lg:w-3/4 min-h-0">
                  {selectedMovie ? (
                     <>
@@ -164,22 +184,22 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                             </div>
                         </div>
                         <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
-                           {videoUrl ? (
+                           {error && <div className="text-red-500 p-4">{error}</div>}
+                           {/* THE KEY FIX: Using a simpler iframe without the 'sandbox' attribute to prevent conflicts. */}
+                           {!error && videoUrl ? (
                                 <iframe 
                                     src={videoUrl} 
                                     key={videoUrl} 
                                     title={selectedMovie.title + " - Episode " + selectedEpisode}
                                     className="border-0 rounded-lg w-full h-full"
-                                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media; gyroscope; accelerometer"
-                                    sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                    allowFullScreen
                                 ></iframe>
-                           ) : isPlayerLoading ? (
+                           ) : !error && isPlayerLoading ? (
                                <RefreshIcon className="w-10 h-10 text-slate-400 animate-spin"/>
-                           ) : (
-                                <div className="flex items-center justify-center h-full text-slate-400 text-center p-4">
-                                  {error || "Could not load video. The video provider may not allow embedding."}
-                                </div>
-                           )}
+                           ) : !error && !videoUrl ? (
+                                <div className="flex items-center justify-center h-full text-slate-400 p-4 text-center">Could not load video. Please check the source.</div>
+                           ) : null}
                         </div>
                     </>
                  ) : (
@@ -190,7 +210,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                  )}
             </div>
 
-            {/* Right/Bottom Panel: Movie List */}
             <div className="flex flex-col w-full md:w-1/3 lg:w-1/4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-4 min-h-0">
                 <form onSubmit={handleSearch} className="relative mb-4 flex-shrink-0">
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search movies..." className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -201,13 +220,13 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
 
                 {isLoading ? (
                      <div className="flex items-center justify-center h-full"><RefreshIcon className="w-8 h-8 animate-spin text-slate-400"/></div>
-                ) : error && !movies.length ? (
+                ) : error && movies.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-red-500">{error}</div>
                 ) : (
                     <div className="flex-grow overflow-y-auto -mr-2 pr-2">
                         <div className="grid grid-cols-2 gap-4">
                             {movies.map(movie => (
-                                <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
+                                <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
                                     <img src={getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex flex-col justify-end">
                                         <h4 className="text-white font-bold text-sm leading-tight line-clamp-2">{movie.title}</h4>
