@@ -5,14 +5,25 @@ import pg from 'pg';
 import IORedis from 'ioredis';
 
 const { Pool } = pg;
+
+// Supabase provides a connection string with `sslmode=require`.
+// In some serverless environments, the default CA certificates are not available,
+// leading to a "self-signed certificate" error. The standard fix is `rejectUnauthorized: false`.
+// When that doesn't work, this alternative method modifies the connection string directly.
+// `sslmode=no-verify` is a node-postgres specific setting that enforces SSL but bypasses CA verification.
+let connectionString = process.env.POSTGRES_URL;
+if (connectionString) {
+    // Ensure we are using the non-verifying SSL mode.
+    if (connectionString.includes('sslmode=')) {
+        connectionString = connectionString.replace(/sslmode=[^&]*/, 'sslmode=no-verify');
+    } else {
+        connectionString += (connectionString.includes('?') ? '&' : '?') + 'sslmode=no-verify';
+    }
+}
+
 // Initialize the connection pool.
-// It will automatically use the POSTGRES_URL from environment variables.
 const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-  // Supabase requires SSL and this configuration is robust for serverless environments.
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  connectionString: connectionString,
 });
 
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
