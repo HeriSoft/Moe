@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile } from '../types';
 import { MessageComponent } from './Message';
 // FIX: Add ModelIcon to imports
-import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon, FaceSwapIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon, FaceSwapIcon, PlusIcon } from './icons';
 import { generateSpeech, getTranslation, swapFace } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
@@ -99,6 +99,7 @@ interface ChatViewProps {
   onAttachFromDrive: () => void;
   onSaveToDrive: (message: Message) => Promise<void>;
   startChatWithPrompt: (prompt: string) => void; // For prompt starters
+  startNewChat: () => void; // For the locked chat button
   onOpenMediaGallery: () => void; // For media gallery
   onOpenSwapFaceModal: () => void; // For Swap Face
   userProfile: UserProfile | undefined; // For logging
@@ -179,7 +180,7 @@ const COMMANDS = [
     { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
 ];
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, onOpenMediaGallery, onOpenSwapFaceModal, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenSwapFaceModal, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -580,128 +581,142 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
       </div>
 
       <footer className="flex-shrink-0 p-2 sm:p-4 sm:pt-0">
-        <div className="relative w-full bg-slate-100 dark:bg-[#2d2d40] text-slate-800 dark:text-slate-200 rounded-xl p-2 shadow-sm">
-            {isSlashMenuOpen && (
-                <div ref={slashMenuRef} className="absolute bottom-full mb-2 w-full sm:w-96 bg-white dark:bg-[#171725] rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-10">
-                    <p className="text-xs font-semibold text-slate-400 px-2 pb-1">COMMANDS</p>
-                    {COMMANDS.map(command => {
-                        const Icon = command.icon;
-                        return (
-                            <button key={command.cmd} onClick={() => handleCommandClick(command.cmd)} className="w-full flex items-start gap-3 p-2 rounded-md text-left hover:bg-slate-100 dark:hover:bg-slate-800">
-                                <div className="p-1.5 bg-slate-200 dark:bg-slate-700 rounded-md">
-                                <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                                </div>
-                                <div>
-                                <p className="font-semibold text-slate-800 dark:text-slate-200">{command.label}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">{command.description}</p>
-                                </div>
-                            </button>
-                        )
-                    })}
-                </div>
-            )}
-            {isTranslateMenuOpen && (
-                 <div className="absolute bottom-full left-0 right-0 p-2">
-                    <div className="bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-2 grid grid-cols-4 gap-2">
-                        {languages.map(lang => (
-                             <button key={lang.code} onClick={() => handleTranslate(lang.code)} className="p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                                {lang.name}
-                             </button>
+        {activeChat?.isLocked ? (
+            <div className="w-full bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 rounded-xl p-4 shadow-sm text-center">
+                <p className="font-semibold">Media capacity for this chat is full.</p>
+                <p className="text-sm mb-4">Please create a new chat to continue.</p>
+                <button 
+                    onClick={startNewChat}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center transition-colors mx-auto"
+                >
+                    <PlusIcon className="w-5 h-5 mr-2" />
+                    New Chat
+                </button>
+            </div>
+        ) : (
+            <div className="relative w-full bg-slate-100 dark:bg-[#2d2d40] text-slate-800 dark:text-slate-200 rounded-xl p-2 shadow-sm">
+                {isSlashMenuOpen && (
+                    <div ref={slashMenuRef} className="absolute bottom-full mb-2 w-full sm:w-96 bg-white dark:bg-[#171725] rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-10">
+                        <p className="text-xs font-semibold text-slate-400 px-2 pb-1">COMMANDS</p>
+                        {COMMANDS.map(command => {
+                            const Icon = command.icon;
+                            return (
+                                <button key={command.cmd} onClick={() => handleCommandClick(command.cmd)} className="w-full flex items-start gap-3 p-2 rounded-md text-left hover:bg-slate-100 dark:hover:bg-slate-800">
+                                    <div className="p-1.5 bg-slate-200 dark:bg-slate-700 rounded-md">
+                                    <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                                    </div>
+                                    <div>
+                                    <p className="font-semibold text-slate-800 dark:text-slate-200">{command.label}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{command.description}</p>
+                                    </div>
+                                </button>
+                            )
+                        })}
+                    </div>
+                )}
+                {isTranslateMenuOpen && (
+                     <div className="absolute bottom-full left-0 right-0 p-2">
+                        <div className="bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-2 grid grid-cols-4 gap-2">
+                            {languages.map(lang => (
+                                 <button key={lang.code} onClick={() => handleTranslate(lang.code)} className="p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                    {lang.name}
+                                 </button>
+                            ))}
+                        </div>
+                     </div>
+                )}
+                {attachments.length > 0 && (
+                    <div className="p-2 flex flex-wrap gap-2">
+                        {attachments.map((att, index) => (
+                            <div key={index} className="relative w-fit group">
+                                {att.mimeType.startsWith('image/') ? (
+                                    <img src={`data:${att.mimeType};base64,${att.data}`} alt={att.fileName} className="h-20 w-20 object-cover rounded-md" />
+                                ) : (
+                                    <div className="h-20 w-20 flex flex-col items-center justify-center bg-slate-200 dark:bg-slate-600 rounded-md p-1">
+                                        <DocumentPlusIcon className="w-8 h-8 text-slate-500 dark:text-slate-400"/>
+                                        <p className="text-xs text-center truncate w-full text-slate-600 dark:text-slate-300 mt-1" title={att.fileName}>{att.fileName}</p>
+                                    </div>
+                                )}
+                                <button onClick={() => removeAttachment(index)} className="absolute -top-1 -right-1 bg-slate-600 text-white rounded-full p-0.5 hover:bg-slate-800 opacity-75 group-hover:opacity-100" aria-label="Remove attachment">
+                                   <CloseIcon className="w-4 h-4" />
+                                </button>
+                            </div>
                         ))}
                     </div>
-                 </div>
-            )}
-            {attachments.length > 0 && (
-                <div className="p-2 flex flex-wrap gap-2">
-                    {attachments.map((att, index) => (
-                        <div key={index} className="relative w-fit group">
-                            {att.mimeType.startsWith('image/') ? (
-                                <img src={`data:${att.mimeType};base64,${att.data}`} alt={att.fileName} className="h-20 w-20 object-cover rounded-md" />
-                            ) : (
-                                <div className="h-20 w-20 flex flex-col items-center justify-center bg-slate-200 dark:bg-slate-600 rounded-md p-1">
-                                    <DocumentPlusIcon className="w-8 h-8 text-slate-500 dark:text-slate-400"/>
-                                    <p className="text-xs text-center truncate w-full text-slate-600 dark:text-slate-300 mt-1" title={att.fileName}>{att.fileName}</p>
-                                </div>
-                            )}
-                            <button onClick={() => removeAttachment(index)} className="absolute -top-1 -right-1 bg-slate-600 text-white rounded-full p-0.5 hover:bg-slate-800 opacity-75 group-hover:opacity-100" aria-label="Remove attachment">
-                               <CloseIcon className="w-4 h-4" />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-            <form onSubmit={handleSubmit} className="relative">
-            <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    handleSubmit(e);
-                }
-                }}
-                placeholder="Type your message or '/' for commands..."
-                rows={1}
-                className="w-full bg-transparent p-4 pr-16 resize-none focus:outline-none"
-                disabled={isLoading || isTranslating}
-                aria-label="Chat message input"
-            />
-            <button
-                type="submit"
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors"
-                disabled={isLoading || (!input.trim() && attachments.length === 0)}
-                aria-label="Send message"
-            >
-                <SendIcon className="w-5 h-5" />
-            </button>
-            </form>
-            <div className="flex items-center justify-start flex-wrap gap-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1">
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="*/*" multiple />
-                <button title={"Attach file from computer"} aria-label="Attach file from computer" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                    <AttachmentIcon className="w-5 h-5" />
+                )}
+                <form onSubmit={handleSubmit} className="relative">
+                <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={handleInputChange}
+                    onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        handleSubmit(e);
+                    }
+                    }}
+                    placeholder="Type your message or '/' for commands..."
+                    rows={1}
+                    className="w-full bg-transparent p-4 pr-16 resize-none focus:outline-none"
+                    disabled={isLoading || isTranslating}
+                    aria-label="Chat message input"
+                />
+                <button
+                    type="submit"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors"
+                    disabled={isLoading || (!input.trim() && attachments.length === 0)}
+                    aria-label="Send message"
+                >
+                    <SendIcon className="w-5 h-5" />
                 </button>
-                <button title={"Attach from Google Drive"} aria-label="Attach from Google Drive" onClick={onAttachFromDrive} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                    <GoogleDriveIcon className="w-5 h-5" />
-                </button>
-                <button title={"Web Search"} aria-label="Web Search" onClick={toggleWebSearch} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isWebSearchEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
-                    <WebSearchIcon className="w-5 h-5" />
-                </button>
-                <button title={isRecording ? "Stop recording" : "Start recording"} aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={toggleRecording} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isRecording ? 'bg-red-100 dark:bg-red-900/50 !text-red-500' : ''}`}>
-                    {isRecording ? <StopCircleIcon className="w-5 h-5" /> : <MicrophoneIcon className="w-5 h-5" />}
-                </button>
-                <button title={"Translate"} aria-label="Translate" onClick={() => setIsTranslateMenuOpen(prev => !prev)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isTranslateMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`} disabled={!input.trim()}>
-                    <TranslateIcon className="w-5 h-5" />
-                </button>
-                 <div className="relative" ref={imageMenuRef}>
-                    <button title="Image Tools" aria-label="Image Tools" onClick={() => setIsImageMenuOpen(p => !p)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isImageMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
-                        <ImageIcon className="w-5 h-5" />
+                </form>
+                <div className="flex items-center justify-start flex-wrap gap-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1">
+                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="*/*" multiple />
+                    <button title={"Attach file from computer"} aria-label="Attach file from computer" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                        <AttachmentIcon className="w-5 h-5" />
                     </button>
-                    {isImageMenuOpen && (
-                         <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-48 bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-1 z-20">
-                            <button onClick={() => { openImageSettingsModal('generation'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
-                                <ImageIcon className="w-5 h-5" />
-                                Image Generation
-                            </button>
-                             <button onClick={() => { openImageSettingsModal('editing'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
-                                <EditIcon className="w-5 h-5" />
-                                Image Editing
-                            </button>
-                         </div>
+                    <button title={"Attach from Google Drive"} aria-label="Attach from Google Drive" onClick={onAttachFromDrive} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                        <GoogleDriveIcon className="w-5 h-5" />
+                    </button>
+                    <button title={"Web Search"} aria-label="Web Search" onClick={toggleWebSearch} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isWebSearchEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
+                        <WebSearchIcon className="w-5 h-5" />
+                    </button>
+                    <button title={isRecording ? "Stop recording" : "Start recording"} aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={toggleRecording} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isRecording ? 'bg-red-100 dark:bg-red-900/50 !text-red-500' : ''}`}>
+                        {isRecording ? <StopCircleIcon className="w-5 h-5" /> : <MicrophoneIcon className="w-5 h-5" />}
+                    </button>
+                    <button title={"Translate"} aria-label="Translate" onClick={() => setIsTranslateMenuOpen(prev => !prev)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isTranslateMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`} disabled={!input.trim()}>
+                        <TranslateIcon className="w-5 h-5" />
+                    </button>
+                     <div className="relative" ref={imageMenuRef}>
+                        <button title="Image Tools" aria-label="Image Tools" onClick={() => setIsImageMenuOpen(p => !p)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isImageMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
+                            <ImageIcon className="w-5 h-5" />
+                        </button>
+                        {isImageMenuOpen && (
+                             <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-48 bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-1 z-20">
+                                <button onClick={() => { openImageSettingsModal('generation'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
+                                    <ImageIcon className="w-5 h-5" />
+                                    Image Generation
+                                </button>
+                                 <button onClick={() => { openImageSettingsModal('editing'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
+                                    <EditIcon className="w-5 h-5" />
+                                    Image Editing
+                                </button>
+                             </div>
+                        )}
+                    </div>
+                     <button title={"Swap Face"} aria-label="Swap Face" onClick={onOpenSwapFaceModal} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                        <FaceSwapIcon className="w-5 h-5" />
+                    </button>
+                     <button title={"Tạo video (Sắp ra mắt)"} aria-label="Generate Video" onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
+                        <VideoIcon className="w-5 h-5" />
+                    </button>
+                    {isDeepSeekModel && (
+                      <button title={"Deep Think"} aria-label="Toggle Deep Think mode" onClick={toggleDeepThink} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isDeepThinkEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
+                          <DeepThinkIcon className="w-5 h-5" />
+                      </button>
                     )}
                 </div>
-                 <button title={"Swap Face"} aria-label="Swap Face" onClick={onOpenSwapFaceModal} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                    <FaceSwapIcon className="w-5 h-5" />
-                </button>
-                 <button title={"Tạo video (Sắp ra mắt)"} aria-label="Generate Video" onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
-                    <VideoIcon className="w-5 h-5" />
-                </button>
-                {isDeepSeekModel && (
-                  <button title={"Deep Think"} aria-label="Toggle Deep Think mode" onClick={toggleDeepThink} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isDeepThinkEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
-                      <DeepThinkIcon className="w-5 h-5" />
-                  </button>
-                )}
             </div>
-        </div>
+        )}
          <p className="text-xs text-center text-slate-400 dark:text-slate-500 mt-2">
             Moe Chat may produce inaccurate information about people, places, or facts.
          </p>
