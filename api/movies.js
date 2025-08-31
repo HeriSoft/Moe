@@ -1,8 +1,19 @@
 // File: /api/movies.js
 // Handles all database interactions for movies.
 
-import { sql } from '@vercel/postgres';
+import pg from 'pg';
 import IORedis from 'ioredis';
+
+const { Pool } = pg;
+// Initialize the connection pool.
+// It will automatically use the POSTGRES_URL from environment variables.
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  // Supabase requires SSL and this configuration is robust for serverless environments.
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
 
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
@@ -16,7 +27,7 @@ if (process.env.REDIS_URL) {
 
 async function createTables() {
     try {
-        await sql`
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS movies (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 title VARCHAR(255) NOT NULL,
@@ -25,8 +36,8 @@ async function createTables() {
                 thumbnail_drive_id VARCHAR(255) NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-        `;
-        await sql`
+        `);
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS episodes (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 movie_id UUID REFERENCES movies(id) ON DELETE CASCADE,
@@ -35,15 +46,17 @@ async function createTables() {
                 video_drive_id VARCHAR(255) NOT NULL,
                 UNIQUE(movie_id, episode_number)
             );
-        `;
+        `);
         console.log("Tables 'movies' and 'episodes' are ready.");
     } catch (error) {
         console.error("Error creating tables:", error);
         throw new Error("Failed to initialize database tables.");
     }
 }
-// Ensure tables exist on startup
-createTables();
+
+// Ensure tables exist on startup, but don't block the module from loading.
+// Log any initialization errors.
+createTables().catch(e => console.error("Database initialization failed:", e));
 
 
 // --- Main Handler ---
@@ -71,32 +84,35 @@ export default async function handler(req, res) {
                 let moviesQuery;
                 let countQuery;
 
+                const baseSelect = `
+                    SELECT m.*, COALESCE(e.episodes, '[]'::json) as episodes FROM movies m
+                    LEFT JOIN (
+                        SELECT movie_id, json_agg(json_build_object('id', id, 'episode_number', episode_number, 'title', title, 'video_drive_id', video_drive_id) ORDER BY episode_number) as episodes
+                        FROM episodes GROUP BY movie_id
+                    ) e ON m.id = e.movie_id
+                `;
+
                 if (searchTerm) {
-                    moviesQuery = sql`
-                        SELECT m.*, COALESCE(e.episodes, '[]'::json) as episodes FROM movies m
-                        LEFT JOIN (
-                            SELECT movie_id, json_agg(json_build_object('id', id, 'episode_number', episode_number, 'title', title, 'video_drive_id', video_drive_id) ORDER BY episode_number) as episodes
-                            FROM episodes GROUP BY movie_id
-                        ) e ON m.id = e.movie_id
-                        WHERE m.title ILIKE ${'%' + searchTerm + '%'} OR m.actors ILIKE ${'%' + searchTerm + '%'}
-                        ORDER BY m.created_at DESC
-                        LIMIT ${limitNum} OFFSET ${offset};
-                    `;
-                    countQuery = sql`SELECT COUNT(*) FROM movies WHERE title ILIKE ${'%' + searchTerm + '%'} OR actors ILIKE ${'%' + searchTerm + '%'};`;
+                    moviesQuery = {
+                        text: `${baseSelect} WHERE m.title ILIKE $1 OR m.actors ILIKE $1 ORDER BY m.created_at DESC LIMIT $2 OFFSET $3;`,
+                        values: [`%${searchTerm}%`, limitNum, offset]
+                    };
+                    countQuery = {
+                        text: `SELECT COUNT(*) FROM movies WHERE title ILIKE $1 OR actors ILIKE $1;`,
+                        values: [`%${searchTerm}%`]
+                    };
                 } else {
-                    moviesQuery = sql`
-                        SELECT m.*, COALESCE(e.episodes, '[]'::json) as episodes FROM movies m
-                        LEFT JOIN (
-                            SELECT movie_id, json_agg(json_build_object('id', id, 'episode_number', episode_number, 'title', title, 'video_drive_id', video_drive_id) ORDER BY episode_number) as episodes
-                            FROM episodes GROUP BY movie_id
-                        ) e ON m.id = e.movie_id
-                        ORDER BY m.created_at DESC
-                        LIMIT ${limitNum} OFFSET ${offset};
-                    `;
-                    countQuery = sql`SELECT COUNT(*) FROM movies;`;
+                    moviesQuery = {
+                        text: `${baseSelect} ORDER BY m.created_at DESC LIMIT $1 OFFSET $2;`,
+                        values: [limitNum, offset]
+                    };
+                    countQuery = { text: `SELECT COUNT(*) FROM movies;` };
                 }
 
-                const [{ rows: movies }, { rows: countResult }] = await Promise.all([moviesQuery, countQuery]);
+                const [{ rows: movies }, { rows: countResult }] = await Promise.all([
+                    pool.query(moviesQuery),
+                    pool.query(countQuery)
+                ]);
                 const totalMovies = parseInt(countResult[0].count, 10);
                 const totalPages = Math.ceil(totalMovies / limitNum);
 
@@ -110,18 +126,21 @@ export default async function handler(req, res) {
             // --- ADMIN ACTIONS ---
             case 'get_admin_movies': {
                 if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
-                // Similar to public, but without caching to ensure fresh data for admin
-                 const { page = '1', limit = '10' } = payload;
+                const { page = '1', limit = '10' } = payload;
                 const pageNum = parseInt(page, 10);
                 const limitNum = parseInt(limit, 10);
                 const offset = (pageNum - 1) * limitNum;
                 
-                const moviesQuery = sql`
-                    SELECT * FROM movies ORDER BY created_at DESC LIMIT ${limitNum} OFFSET ${offset};
-                `;
-                const countQuery = sql`SELECT COUNT(*) FROM movies;`;
+                const moviesQuery = {
+                    text: `SELECT * FROM movies ORDER BY created_at DESC LIMIT $1 OFFSET $2;`,
+                    values: [limitNum, offset]
+                };
+                const countQuery = { text: `SELECT COUNT(*) FROM movies;` };
                 
-                const [{ rows: movies }, { rows: countResult }] = await Promise.all([moviesQuery, countQuery]);
+                const [{ rows: movies }, { rows: countResult }] = await Promise.all([
+                    pool.query(moviesQuery),
+                    pool.query(countQuery)
+                ]);
                 const totalMovies = parseInt(countResult[0].count, 10);
                 const totalPages = Math.ceil(totalMovies / limitNum);
 
@@ -135,7 +154,7 @@ export default async function handler(req, res) {
                     return res.status(400).json({ error: 'Title, thumbnail, and at least one episode are required.' });
                 }
 
-                const client = await sql.connect();
+                const client = await pool.connect();
                 try {
                     await client.query('BEGIN');
                     const movieResult = await client.query(
@@ -166,8 +185,8 @@ export default async function handler(req, res) {
                 const { movieId } = payload;
                 if (!movieId) return res.status(400).json({ error: 'Movie ID is required.' });
 
-                await sql`DELETE FROM movies WHERE id = ${movieId};`;
-                 if (redis) await redis.flushdb(); // Clear cache on data change
+                await pool.query('DELETE FROM movies WHERE id = $1', [movieId]);
+                if (redis) await redis.flushdb(); // Clear cache on data change
                 return res.status(200).json({ success: true });
             }
 
