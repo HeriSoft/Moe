@@ -1,4 +1,5 @@
 
+
 // File: /api/admin.js
 // This is a Vercel Serverless Function for administrative tasks.
 // It's protected and only accessible by the designated admin user.
@@ -52,7 +53,6 @@ export default async function handler(req, res) {
             }
 
             case 'POST': {
-                // FIX: Destructure body only for POST requests to avoid TypeError on GET requests.
                 const { action, ip, email } = req.body;
                 if (action === 'block_ip') {
                     if (!ip) return res.status(400).json({ error: 'IP address is required' });

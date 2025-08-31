@@ -1,4 +1,5 @@
 
+
 // File: /api/proxy.js
 // This is a Vercel Serverless Function that acts as a multi-API proxy.
 // It routes requests to Google Gemini, OpenAI, or DeepSeek based on the model name.
@@ -161,7 +162,8 @@ export default async function handler(req, res) {
                     await logAction(userEmail, 'logged in');
                     if (isKvConfigured) {
                         const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
-                        await kv.hset('user_ips', { [userEmail]: userIp });
+                        // FIX: Corrected kv.hset syntax. It should be (key, field, value), not (key, { object }).
+                        await kv.hset('user_ips', userEmail, userIp);
                     }
                 }
                 return res.status(200).json({ success: true });
@@ -347,7 +349,7 @@ export default async function handler(req, res) {
             case 'swapFace': {
                 await logAction(userEmail, 'played Swapface');
                 const { targetImage, sourceImage } = payload;
-                const GRADIO_PUBLIC_URL = "https://5aebcfa925224f9e49.gradio.live";
+                const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
                 
                 const uploadFileAndGetRef = async (image) => {
                     const buffer = Buffer.from(image.data, 'base64');
