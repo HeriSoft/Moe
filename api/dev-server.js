@@ -1,17 +1,17 @@
 
 // File: api/dev-server.js
 // This server wrapper is for local development ONLY.
-// It allows the Vercel function in proxy.js to be run with a standard Node.js process.
-// It also forwards requests intended for the python service.
+// It routes requests to the correct Vercel function handler based on the URL.
+
 import http from 'http';
-import handler from './proxy.js';
+// Import handlers from the respective files
+import proxyHandler from './proxy.js';
+import adminHandler from './admin.js';
 
 const PORT = 3000;
 
-const server = http.createServer(async (req, res) => {
-    // Vercel's handler function expects a specific request/response interface.
-    // We create simple adapters here to bridge Node's native http server with the handler.
-
+// This function adapts a Node.js request/response to the Vercel handler signature
+async function callVercelHandler(handler, req, res) {
     // 1. Buffer the incoming request body
     const buffers = [];
     for await (const chunk of req) {
@@ -24,6 +24,7 @@ const server = http.createServer(async (req, res) => {
         method: req.method,
         headers: req.headers,
         body: bodyString ? JSON.parse(bodyString) : null,
+        // Parse URL to get query parameters correctly
         query: Object.fromEntries(new URL(req.url, `http://${req.headers.host}`).searchParams),
     };
 
@@ -66,25 +67,40 @@ const server = http.createServer(async (req, res) => {
     };
 
     try {
-        // 4. Call the imported Vercel function handler
+        // 4. Call the provided Vercel function handler
         await handler(vercelReq, vercelRes);
     } catch (error) {
         console.error('Error in local API dev server:', error);
-        // Ensure headers are not already sent before writing error response
         if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ error: 'Internal Server Error in dev-server.js wrapper', details: error.message }));
         }
     }
+}
+
+
+const server = http.createServer(async (req, res) => {
+    // Basic routing based on the request URL
+    const url = new URL(req.url, `http://${req.headers.host}`);
+
+    if (url.pathname.startsWith('/api/proxy')) {
+        await callVercelHandler(proxyHandler, req, res);
+    } else if (url.pathname.startsWith('/api/admin')) {
+        await callVercelHandler(adminHandler, req, res);
+    } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found', details: `API route ${url.pathname} not handled by local dev server.` }));
+    }
 });
 
+
 // Set a longer keep-alive timeout to prevent ECONNRESET errors during streaming.
-// The default is 5 seconds, which can be too short if the AI model takes time to respond.
 server.keepAliveTimeout = 300000; // 5 minutes
 
 server.listen(PORT, () => {
     console.log(`[API] Local Node.js dev server listening on http://localhost:${PORT}`);
+    console.log(`[API] Routing /api/proxy -> proxy.js`);
+    console.log(`[API] Routing /api/admin -> admin.js`);
     console.log(`[Vite] Frontend should be proxying /api requests to this server.`);
-    console.log('[Python] For face swapping, make sure the Python dev server is also running (e.g., on port 3001).');
 });
