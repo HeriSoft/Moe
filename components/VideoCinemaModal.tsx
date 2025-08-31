@@ -44,7 +44,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     setIsLoading(true);
     setError(null);
     try {
-        // FIX: Use a smaller limit for mobile to reduce data usage and loading time
         const limit = window.innerWidth < 768 ? '6' : '8';
         const params = new URLSearchParams({
             action: 'get_public_movies',
@@ -130,12 +129,10 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
       aria-labelledby="cinema-title"
     >
       <div
-        // FIX: Reduce padding on mobile
         className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-[95vw] h-[95vh] max-w-7xl flex flex-col p-3 sm:p-6 m-4 text-slate-800 dark:text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-3 sm:mb-4 flex-shrink-0">
-          {/* FIX: Reduce title font size on mobile */}
           <h2 id="cinema-title" className="text-xl sm:text-2xl font-bold">Video Cinema</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close">
             <CloseIcon className="w-7 h-7" />
@@ -143,26 +140,28 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
         </div>
         
         <div className="flex flex-col md:flex-row gap-4 sm:gap-6 flex-grow min-h-0">
-            {/* Left/Top Panel: Details & Player */}
-            {/* FIX: Allocate 60% of height on mobile, full height on desktop */}
             <div className="flex flex-col w-full md:w-2/3 lg:w-3/4 min-h-0 h-3/5 md:h-full">
                  {selectedMovie ? (
                     <>
-                        {/* FIX: Make this section a row, with smaller, fixed-size thumbnail to save vertical space */}
                         <div className="flex flex-row gap-3 sm:gap-4 mb-3 sm:mb-4 flex-shrink-0">
                             <img src={getDriveFilePublicUrl(selectedMovie.thumbnail_drive_id)} alt={selectedMovie.title} 
-                                // FIX: Use a smaller, fixed-width thumbnail that doesn't shrink
                                 className="w-24 sm:w-32 h-auto object-cover rounded-md sm:rounded-lg flex-shrink-0"/>
                             <div className="flex-grow min-w-0">
-                                {/* FIX: Reduce font size and line clamping for title and description on mobile */}
                                 <h3 className="text-lg sm:text-xl font-bold dark:text-white line-clamp-2">{selectedMovie.title}</h3>
-                                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-1"><strong>Diễn viên:</strong> {selectedMovie.actors}</p>
+                                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-1 truncate"><strong>Diễn viên:</strong> {selectedMovie.actors}</p>
+                                
+                                {/* FIX: Re-add the description with responsive line-clamping */}
+                                {selectedMovie.description && (
+                                    <p className="text-slate-600 dark:text-slate-300 mt-1 sm:mt-2 text-xs sm:text-sm line-clamp-2 sm:line-clamp-3">
+                                        {selectedMovie.description}
+                                    </p>
+                                )}
+
                                 <div className="mt-2">
                                     <h4 className="font-semibold mb-1 sm:mb-2 text-sm">Tập phim:</h4>
                                     <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-16 sm:max-h-20 overflow-y-auto">
                                         {sortedEpisodes.map((ep: MovieEpisode) => (
                                             <button key={ep.id || ep.episode_number} onClick={() => handleSelectEpisode(ep.episode_number)}
-                                                // FIX: Smaller padding and font on buttons for mobile
                                                 className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-xs sm:text-sm font-semibold transition-colors ${selectedEpisode === ep.episode_number ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`}>
                                                 {ep.episode_number}
                                             </button>
@@ -171,7 +170,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                                 </div>
                             </div>
                         </div>
-                        {/* Player will now correctly fill the remaining space */}
                         <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full flex items-center justify-center">
                            {error && <div className="text-red-500 p-4">{error}</div>}
                            {!error && videoUrl ? (
@@ -196,8 +194,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                  )}
             </div>
 
-            {/* Right/Bottom Panel: Movie List */}
-            {/* FIX: Allocate 40% of height on mobile, full height on desktop */}
             <div className="flex flex-col w-full md:w-1/3 lg:w-1/4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-3 sm:p-4 min-h-0 h-2/5 md:h-full">
                 <form onSubmit={handleSearch} className="relative mb-3 sm:mb-4 flex-shrink-0">
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search movies..." className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
@@ -212,7 +208,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                     <div className="flex items-center justify-center h-full text-red-500">{error}</div>
                 ) : (
                     <div className="flex-grow overflow-y-auto -mr-2 pr-2">
-                        {/* FIX: Use 3 columns on mobile for smaller thumbnails, then 2 for sidebar layout */}
                         <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4">
                             {movies.map(movie => (
                                 <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
