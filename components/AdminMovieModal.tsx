@@ -23,8 +23,8 @@ const getDriveEmbedUrl = (driveUrlOrId: string) => {
     }
 
     if (fileId) {
-        // Use a reliable third-party player to bypass Google Drive's rate limiting.
-        return `https://gdriveplayer.to/embed.php?id=${fileId}`;
+        // FIX: Use the official /embeddedplayer/ URL for consistency, security, and reliability.
+        return `https://drive.google.com/embeddedplayer/${fileId}`;
     }
     return '';
 };
