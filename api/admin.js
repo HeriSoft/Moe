@@ -8,7 +8,7 @@ const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
 // Helper to log admin actions
 async function logAction(email, message) {
-    const isKvConfigured = process.env.KV_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+    const isKvConfigured = process.env.REDIS_URL;
     if (!isKvConfigured || !email) return;
     try {
         const { kv } = await import('@vercel/kv');
@@ -23,7 +23,7 @@ async function logAction(email, message) {
 
 export default async function handler(req, res) {
     try {
-        const isKvConfigured = process.env.KV_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+        const isKvConfigured = process.env.REDIS_URL;
 
         if (!isKvConfigured) {
             return res.status(503).json({
