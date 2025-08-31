@@ -622,15 +622,8 @@ const App: React.FC = () => {
         .slice(0, 50); // Limit to latest 50 for performance
   }, [chatSessions]);
 
-  const handleProfileClick = () => {
-    if (userProfile?.email === ADMIN_EMAIL) {
-        setIsAdminPanelOpen(true);
-    } else {
-        setIsSettingsOpen(true);
-    }
-  };
-
   const activeChat = chatSessions.find(c => c.id === activeChatId);
+  const isAdmin = userProfile?.email === ADMIN_EMAIL;
 
   return (
     <div className="relative flex h-screen w-full font-sans overflow-hidden">
@@ -649,7 +642,9 @@ const App: React.FC = () => {
         setActiveChat={setActiveChat}
         deleteChat={deleteChat}
         toggleFavorite={toggleFavorite}
-        onSettingsClick={handleProfileClick}
+        onSettingsClick={() => setIsSettingsOpen(true)}
+        onAdminPanelClick={() => setIsAdminPanelOpen(true)}
+        isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(handleAuthChange)}
         isLoggedIn={isLoggedIn}
