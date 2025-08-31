@@ -75,6 +75,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
     }
   };
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const TabButton: React.FC<{ tabId: 'logs' | 'ips'; title: string; icon: React.FC<any>; }> = ({ tabId, title, icon: Icon }) => (
@@ -113,10 +121,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           <TabButton tabId="ips" title="IP Management" icon={UserGroupIcon} />
         </div>
 
-        <div className="flex-grow overflow-y-auto mt-4">
+        <div className="flex-grow overflow-y-auto mt-4 pr-2 -mr-4">
           {activeTab === 'logs' && (
-            <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg font-mono text-xs">
-                {isLoading ? <p>Loading logs...</p> : logs.map((log, index) => <p key={index}>{log}</p>)}
+            <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg font-mono text-xs text-slate-600 dark:text-slate-300">
+                {isLoading ? <p>Loading logs...</p> : logs.length > 0 ? logs.map((log, index) => <p key={index}>{log}</p>) : <p>No logs found.</p>}
             </div>
           )}
           {activeTab === 'ips' && (
@@ -134,8 +142,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {isLoading ? (
-                        <tr><td colSpan={4} className="text-center p-4">Loading user data...</td></tr>
-                      ) : (
+                        <tr><td colSpan={4} className="text-center p-4 text-slate-500">Loading user data...</td></tr>
+                      ) : userData.length > 0 ? (
                         userData.map(({ email, ip, isBlocked }) => (
                           <tr key={email}>
                             <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 dark:text-white sm:pl-0">{email}</td>
@@ -149,17 +157,19 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                             </td>
                             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
                                 {isBlocked ? (
-                                    <button onClick={() => handleIpAction(ip, email, 'unblock_ip')} className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">
-                                        <ShieldCheckIcon className="w-5 h-5 inline mr-1"/>Unlock
+                                    <button onClick={() => handleIpAction(ip, email, 'unblock_ip')} className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 flex items-center gap-1">
+                                        <ShieldCheckIcon className="w-4 h-4"/>Unlock
                                     </button>
                                 ) : (
-                                    <button onClick={() => handleIpAction(ip, email, 'block_ip')} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
-                                        <ShieldExclamationIcon className="w-5 h-5 inline mr-1"/>Block
+                                    <button onClick={() => handleIpAction(ip, email, 'block_ip')} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1">
+                                        <ShieldExclamationIcon className="w-4 h-4"/>Block
                                     </button>
                                 )}
                             </td>
                           </tr>
                         ))
+                      ) : (
+                        <tr><td colSpan={4} className="text-center p-4 text-slate-500">No user IP data found.</td></tr>
                       )}
                     </tbody>
                   </table>
