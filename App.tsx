@@ -7,6 +7,8 @@ import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } fro
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { SwapFaceModal } from './components/SwapFaceModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
+import { AdminMovieModal } from './components/AdminMovieModal'; // New
+import { VideoCinemaModal } from './components/VideoCinemaModal'; // New
 import { MembershipModal } from './components/MembershipModal'; // Import the new modal
 import {
   streamModelResponse,
@@ -76,6 +78,8 @@ const App: React.FC = () => {
 
   // --- New Admin & Membership State ---
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isAdminMovieModalOpen, setIsAdminMovieModalOpen] = useState(false); // New
+  const [isVideoCinemaModalOpen, setIsVideoCinemaModalOpen] = useState(false); // New
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
 
   useEffect(() => {
@@ -682,6 +686,7 @@ const App: React.FC = () => {
         toggleFavorite={toggleFavorite}
         onSettingsClick={() => setIsSettingsOpen(true)}
         onAdminPanelClick={() => setIsAdminPanelOpen(true)}
+        onAdminMovieModalClick={() => setIsAdminMovieModalOpen(true)}
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(handleAuthChange)}
@@ -726,6 +731,7 @@ const App: React.FC = () => {
           startChatWithPrompt={startChatWithPrompt}
           startNewChat={startNewChat}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
+          onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
           onOpenSwapFaceModal={() => {
             if (isLoggedIn) {
               setIsSwapFaceModalOpen(true);
@@ -778,6 +784,17 @@ const App: React.FC = () => {
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
+        userProfile={userProfile}
+      />
+      <AdminMovieModal
+        isOpen={isAdminMovieModalOpen}
+        onClose={() => setIsAdminMovieModalOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
+      />
+       <VideoCinemaModal
+        isOpen={isVideoCinemaModalOpen}
+        onClose={() => setIsVideoCinemaModalOpen(false)}
         userProfile={userProfile}
       />
       <MembershipModal
