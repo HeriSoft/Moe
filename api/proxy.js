@@ -23,6 +23,8 @@ const isRedisConfigured = !!redis;
 const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const ADMIN_EMAIL = 'heripixiv@gmail.com';
+
 
 // --- API Clients & Endpoints ---
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
@@ -194,12 +196,16 @@ export default async function handler(req, res) {
         // --- FEATURE GATING ---
         const proActions = ['swapFace', 'generateImages', 'editImage', 'generateSpeech'];
         if (proActions.includes(action)) {
-            const userIsPro = await isUserPro(userEmail);
-            if (!userIsPro) {
-                return res.status(403).json({ 
-                    error: 'Forbidden', 
-                    details: 'This is a Pro feature. Please upgrade your account to use it.' 
-                });
+            const isAdmin = userEmail === ADMIN_EMAIL;
+            // Only perform the Pro check if the user is NOT an admin.
+            if (!isAdmin) {
+                const userIsPro = await isUserPro(userEmail);
+                if (!userIsPro) {
+                    return res.status(403).json({
+                        error: 'Forbidden',
+                        details: 'This is a Pro feature. Please upgrade your account to use it.'
+                    });
+                }
             }
         }
         // --- END FEATURE GATING ---
