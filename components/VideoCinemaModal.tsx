@@ -9,34 +9,28 @@ const getDriveEmbedUrl = (driveUrlOrId: string) => {
     if (!driveUrlOrId) return '';
     let fileId = '';
     try {
-        // Handle full URLs like "https://drive.google.com/file/d/FILE_ID/view"
         const url = new URL(driveUrlOrId);
         const match = url.pathname.match(/d\/([a-zA-Z0-9_-]{25,})/);
         if (match && match[1]) {
             fileId = match[1];
         }
     } catch (e) {
-        // Handle raw IDs
         if (driveUrlOrId.length > 20 && !driveUrlOrId.includes('/')) {
             fileId = driveUrlOrId;
         }
     }
 
     if (fileId) {
-        // FIX: Use the official /embeddedplayer/ URL, which is designed for iframing and avoids CSP issues.
-        // The /preview URL sends headers that prevent it from being embedded on other sites.
         return `https://drive.google.com/embeddedplayer/${fileId}`;
     }
     return '';
 };
 
-// FIX: Add props interface for VideoCinemaModal component.
 interface VideoCinemaModalProps {
   isOpen: boolean;
   onClose: () => void;
   userProfile: UserProfile | undefined;
 }
-
 
 export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -47,8 +41,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // New states to manage video player loading and prevent UI freezing
+  
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [isPlayerLoading, setIsPlayerLoading] = useState<boolean>(false);
 
@@ -79,7 +72,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
     }
   }, []);
 
-  // Effect to run when the modal opens/closes
+  // FIX: Reset all relevant states when the modal is opened.
   useEffect(() => {
     if (isOpen) {
       fetchMovies(1, '');
@@ -87,48 +80,54 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
       setVideoUrl('');
       setIsPlayerLoading(false);
       setSearchTerm('');
+      setError(null);
     }
   }, [isOpen, fetchMovies]);
 
-  // Memoize the sorted episodes for the selected movie to avoid re-sorting on every render.
   const sortedEpisodes = useMemo(() => {
       if (!selectedMovie?.episodes) return [];
       return [...selectedMovie.episodes].sort((a, b) => a.episode_number - b.episode_number);
   }, [selectedMovie]);
   
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     fetchMovies(1, searchTerm);
   };
   
+  // FIX: Add defensive checks to handle movies with no episodes.
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie);
-    // Hide the old video and show a loader immediately
     setVideoUrl('');
+    setError(null); // Clear previous errors
+
+    const episodes = [...(movie.episodes || [])].sort((a,b) => a.episode_number - b.episode_number);
+
+    if (episodes.length === 0) {
+        setError("This movie has no episodes available to play.");
+        setIsPlayerLoading(false);
+        return; // Stop execution if there are no episodes
+    }
+    
     setIsPlayerLoading(true);
-    // Select the first episode
-    const firstEpisode = [...movie.episodes].sort((a,b) => a.episode_number - b.episode_number)[0];
-    setSelectedEpisode(firstEpisode?.episode_number || 1);
+    setSelectedEpisode(episodes[0].episode_number);
   };
 
   const handleSelectEpisode = (episodeNumber: number) => {
     setSelectedEpisode(episodeNumber);
-    // Hide the old video and show a loader when changing episodes
     setVideoUrl('');
     setIsPlayerLoading(true);
   };
 
-  // This effect decouples the heavy iframe loading from the main UI update, preventing freezes.
   useEffect(() => {
     if (selectedMovie && isPlayerLoading) {
       const episode = sortedEpisodes.find(ep => ep.episode_number === selectedEpisode);
       const url = episode ? getDriveEmbedUrl(episode.video_drive_id) : '';
       
-      // Use a timeout to allow the browser to render the movie details before loading the iframe
       const timer = setTimeout(() => {
         setVideoUrl(url);
-        setIsPlayerLoading(false); // Stop showing the main loader once the URL is set
+        // We set player loading to false here, but the iframe itself might still be loading.
+        // The UI will show the iframe container immediately.
+        setIsPlayerLoading(false);
       }, 150);
 
       return () => clearTimeout(timer);
@@ -155,7 +154,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
         </div>
         
         <div className="flex flex-col md:flex-row gap-6 flex-grow min-h-0">
-            {/* Left/Top Panel: Details & Player */}
             <div className="flex flex-col w-full md:w-2/3 lg:w-3/4 min-h-0">
                  {selectedMovie ? (
                     <>
@@ -179,13 +177,14 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                             </div>
                         </div>
                         <div className="relative overflow-hidden flex-grow bg-black rounded-lg w-full h-64 md:h-auto flex items-center justify-center">
-                           {videoUrl ? (
+                           {error && <div className="text-red-500 p-4">{error}</div>}
+                           {!error && videoUrl ? (
                                 <iframe src={videoUrl} key={videoUrl} width="100%" height="100%" allow="autoplay; fullscreen" className="border-0 rounded-lg"></iframe>
-                           ) : isPlayerLoading ? (
+                           ) : !error && isPlayerLoading ? (
                                <RefreshIcon className="w-10 h-10 text-slate-400 animate-spin"/>
-                           ) : (
-                                <div className="flex items-center justify-center h-full text-slate-400">Could not load video.</div>
-                           )}
+                           ) : !error && !videoUrl ? (
+                                <div className="flex items-center justify-center h-full text-slate-400">Could not load video. Check file permissions on Google Drive.</div>
+                           ) : null}
                         </div>
                     </>
                  ) : (
@@ -196,7 +195,6 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                  )}
             </div>
 
-            {/* Right/Bottom Panel: Movie List */}
             <div className="flex flex-col w-full md:w-1/3 lg:w-1/4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-4 min-h-0">
                 <form onSubmit={handleSearch} className="relative mb-4 flex-shrink-0">
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search movies..." className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -207,13 +205,13 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
 
                 {isLoading ? (
                      <div className="flex items-center justify-center h-full"><RefreshIcon className="w-8 h-8 animate-spin text-slate-400"/></div>
-                ) : error ? (
+                ) : error && movies.length === 0 ? ( // Only show API error if there are no movies to display
                     <div className="flex items-center justify-center h-full text-red-500">{error}</div>
                 ) : (
                     <div className="flex-grow overflow-y-auto -mr-2 pr-2">
                         <div className="grid grid-cols-2 gap-4">
                             {movies.map(movie => (
-                                <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
+                                <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
                                     <img src={getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex flex-col justify-end">
                                         <h4 className="text-white font-bold text-sm leading-tight line-clamp-2">{movie.title}</h4>
