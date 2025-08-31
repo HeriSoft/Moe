@@ -4,19 +4,36 @@
 // This is a Vercel Serverless Function for administrative tasks.
 // It's protected and only accessible by the designated admin user.
 
-import { kv } from '@vercel/kv';
-
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
-const isKvConfigured = process.env.KV_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+
+// Helper to log admin actions
+async function logAction(email, message) {
+    const isKvConfigured = process.env.KV_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+    if (!isKvConfigured || !email) return;
+    try {
+        const { kv } = await import('@vercel/kv');
+        const timestamp = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        const logEntry = `[${timestamp}] (ADMIN) ${email} ${message}`;
+        await kv.lpush('user_logs', logEntry);
+        await kv.ltrim('user_logs', 0, 999);
+    } catch (e) {
+        console.error("KV Admin Logging Error:", e);
+    }
+}
 
 export default async function handler(req, res) {
     try {
+        const isKvConfigured = process.env.KV_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+
         if (!isKvConfigured) {
             return res.status(503).json({
                 error: 'Service Unavailable',
-                details: 'This admin endpoint cannot function because the Vercel KV database is not configured in your .env.local file.'
+                details: 'This admin endpoint cannot function because the Vercel KV database is not configured. Please set the required KV environment variables in your Vercel project settings.'
             });
         }
+        
+        // Dynamically import kv now that we know it's configured.
+        const { kv } = await import('@vercel/kv');
         
         // This is a simple protection mechanism. For production, you'd use a more robust
         // session/token-based authentication and check the user's role from a database.
@@ -78,18 +95,5 @@ export default async function handler(req, res) {
             error: 'An internal server error occurred.',
             details: error.message
         });
-    }
-}
-
-// Helper to log admin actions
-async function logAction(email, message) {
-    if (!isKvConfigured || !email) return;
-    try {
-        const timestamp = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
-        const logEntry = `[${timestamp}] (ADMIN) ${email} ${message}`;
-        await kv.lpush('user_logs', logEntry);
-        await kv.ltrim('user_logs', 0, 999);
-    } catch (e) {
-        console.error("KV Admin Logging Error:", e);
     }
 }
