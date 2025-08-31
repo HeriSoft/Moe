@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
-import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon } from './icons';
+import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -11,6 +11,7 @@ interface SidebarProps {
   toggleFavorite: (id: string) => void;
   onSettingsClick: () => void;
   onAdminPanelClick: () => void;
+  onAdminMovieModalClick: () => void; // New prop for movie admin
   isAdmin: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -26,8 +27,9 @@ const UserProfileSection: React.FC<{
   onSignOut: () => void;
   onProfileClick: () => void;
   onAdminPanelClick: () => void;
+  onAdminMovieModalClick: () => void; // New prop for movie admin
   isAdmin: boolean;
-}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, isAdmin }) => {
+}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
     return (
         <div className="flex flex-col items-center w-full">
@@ -39,13 +41,22 @@ const UserProfileSection: React.FC<{
                 </div>
             </button>
             {isAdmin && (
-              <button
-                onClick={onAdminPanelClick}
-                className="w-full mt-2 px-3 py-1.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center justify-center gap-2"
-              >
-                <ShieldCheckIcon className="w-5 h-5" />
-                Admin Panel
-              </button>
+              <div className="w-full mt-2 space-y-2">
+                <button
+                  onClick={onAdminPanelClick}
+                  className="w-full px-3 py-1.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <ShieldCheckIcon className="w-5 h-5" />
+                  Admin Panel
+                </button>
+                <button
+                  onClick={onAdminMovieModalClick}
+                  className="w-full px-3 py-1.5 text-sm font-semibold bg-sky-600 hover:bg-sky-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <TicketIcon className="w-5 h-5" />
+                  Movie Management
+                </button>
+              </div>
             )}
             <button
                 onClick={onSignOut}
@@ -71,7 +82,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -172,6 +183,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
               onSignOut={onSignOut}
               onProfileClick={onSettingsClick}
               onAdminPanelClick={onAdminPanelClick}
+              onAdminMovieModalClick={onAdminMovieModalClick}
               isAdmin={isAdmin}
           />
       </div>
