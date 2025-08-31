@@ -1,16 +1,31 @@
 // File: /api/movies.js
 // Handles all database interactions for movies.
 
-// FIX: Reverted from @vercel/postgres to the standard 'pg' library.
-// The "ENOTFOUND api.pooler.supabase.com" error indicates the project is
-// configured to use a Supabase database, for which '@vercel/postgres' is not suitable.
-// This version uses a generic 'pg' Pool, configured with SSL settings appropriate
-// for connecting to external databases like Supabase from a Vercel environment,
-// which also prevents the previous "self-signed certificate" error.
 import pg from 'pg';
 import IORedis from 'ioredis';
 
 const { Pool } = pg;
+
+// Supabase provides a connection string with `sslmode=require`.
+// In some serverless environments, the default CA certificates are not available,
+// leading to a "self-signed certificate" error. The standard fix is `rejectUnauthorized: false`.
+// When that doesn't work, this alternative method modifies the connection string directly.
+// `sslmode=no-verify` is a node-postgres specific setting that enforces SSL but bypasses CA verification.
+let connectionString = process.env.POSTGRES_URL;
+if (connectionString) {
+    // Ensure we are using the non-verifying SSL mode.
+    if (connectionString.includes('sslmode=')) {
+        connectionString = connectionString.replace(/sslmode=[^&]*/, 'sslmode=no-verify');
+    } else {
+        connectionString += (connectionString.includes('?') ? '&' : '?') + 'sslmode=no-verify';
+    }
+}
+
+// Initialize the connection pool.
+const pool = new Pool({
+  connectionString: connectionString,
+});
+
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
 // Setup Redis for caching if available
@@ -19,23 +34,9 @@ if (process.env.REDIS_URL) {
     redis = new IORedis(process.env.REDIS_URL);
 }
 
-// --- Database Setup ---
-let pool;
-// Check for the environment variable to instantiate the pool
-if (process.env.POSTGRES_URL) {
-    // By appending sslmode=require, we enforce an SSL connection without
-    // the strict certificate validation that fails in some serverless environments.
-    const connectionString = `${process.env.POSTGRES_URL}?sslmode=require`;
-    pool = new Pool({
-        connectionString: connectionString,
-    });
-} else {
-    // Log a warning if the database URL is not set, so the app doesn't crash silently.
-    console.warn("POSTGRES_URL environment variable not set. Database functionality will be disabled.");
-}
+// --- Helper Functions ---
 
 async function createTables() {
-    if (!pool) return; // Don't try to create tables if the pool isn't initialized
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS movies (
@@ -68,15 +69,10 @@ async function createTables() {
 let isDbInitialized = false;
 
 // --- Main Handler ---
-export default async function handler(req, res) {
-    // Gracefully handle missing database configuration
-    if (!pool) {
-        return res.status(503).json({
-            error: 'Service Unavailable',
-            details: 'The database is not configured. Please set the POSTGRES_URL environment variable.'
-        });
-    }
 
+export default async function handler(req, res) {
+    // Ensure the database tables exist before proceeding.
+    // This runs only on the first invocation of a new serverless instance.
     if (!isDbInitialized) {
         try {
             await createTables();
@@ -105,17 +101,14 @@ export default async function handler(req, res) {
 
                 const cacheKey = `movies:public:search:${searchTerm}:page:${pageNum}:limit:${limitNum}`;
                 if (redis) {
-                    try {
-                        const cachedData = await redis.get(cacheKey);
-                        if (cachedData) return res.status(200).json(JSON.parse(cachedData));
-                    } catch (e) { console.error("Redis GET error:", e); }
+                    const cachedData = await redis.get(cacheKey);
+                    if (cachedData) return res.status(200).json(JSON.parse(cachedData));
                 }
 
-                let moviesResult;
-                let countResult;
-                const searchPattern = `%${searchTerm}%`;
+                let moviesQuery;
+                let countQuery;
 
-                const baseSelectQuery = `
+                const baseSelect = `
                     SELECT m.*, COALESCE(e.episodes, '[]'::json) as episodes FROM movies m
                     LEFT JOIN (
                         SELECT movie_id, json_agg(json_build_object('id', id, 'episode_number', episode_number, 'title', title, 'video_drive_id', video_drive_id) ORDER BY episode_number) as episodes
@@ -124,24 +117,32 @@ export default async function handler(req, res) {
                 `;
 
                 if (searchTerm) {
-                    moviesResult = await pool.query(`${baseSelectQuery} WHERE m.title ILIKE $1 OR m.actors ILIKE $1 ORDER BY m.created_at DESC LIMIT $2 OFFSET $3`, [searchPattern, limitNum, offset]);
-                    countResult = await pool.query(`SELECT COUNT(*) FROM movies WHERE title ILIKE $1 OR actors ILIKE $1`, [searchPattern]);
+                    moviesQuery = {
+                        text: `${baseSelect} WHERE m.title ILIKE $1 OR m.actors ILIKE $1 ORDER BY m.created_at DESC LIMIT $2 OFFSET $3;`,
+                        values: [`%${searchTerm}%`, limitNum, offset]
+                    };
+                    countQuery = {
+                        text: `SELECT COUNT(*) FROM movies WHERE title ILIKE $1 OR actors ILIKE $1;`,
+                        values: [`%${searchTerm}%`]
+                    };
                 } else {
-                    moviesResult = await pool.query(`${baseSelectQuery} ORDER BY m.created_at DESC LIMIT $1 OFFSET $2`, [limitNum, offset]);
-                    countResult = await pool.query(`SELECT COUNT(*) FROM movies`);
+                    moviesQuery = {
+                        text: `${baseSelect} ORDER BY m.created_at DESC LIMIT $1 OFFSET $2;`,
+                        values: [limitNum, offset]
+                    };
+                    countQuery = { text: `SELECT COUNT(*) FROM movies;` };
                 }
 
-                const movies = moviesResult.rows;
-                const totalMovies = parseInt(countResult.rows[0].count, 10);
+                const [{ rows: movies }, { rows: countResult }] = await Promise.all([
+                    pool.query(moviesQuery),
+                    pool.query(countQuery)
+                ]);
+                const totalMovies = parseInt(countResult[0].count, 10);
                 const totalPages = Math.ceil(totalMovies / limitNum);
 
                 const result = { movies, totalPages, currentPage: pageNum };
 
-                if (redis) {
-                    try {
-                        await redis.set(cacheKey, JSON.stringify(result), 'EX', 300); // Cache for 5 mins
-                    } catch(e) { console.error("Redis SET error:", e); }
-                }
+                if (redis) await redis.set(cacheKey, JSON.stringify(result), 'EX', 300); // Cache for 5 mins
 
                 return res.status(200).json(result);
             }
@@ -154,9 +155,16 @@ export default async function handler(req, res) {
                 const limitNum = parseInt(limit, 10);
                 const offset = (pageNum - 1) * limitNum;
                 
-                const { rows: movies } = await pool.query('SELECT * FROM movies ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limitNum, offset]);
-                const { rows: countResult } = await pool.query('SELECT COUNT(*) FROM movies');
+                const moviesQuery = {
+                    text: `SELECT * FROM movies ORDER BY created_at DESC LIMIT $1 OFFSET $2;`,
+                    values: [limitNum, offset]
+                };
+                const countQuery = { text: `SELECT COUNT(*) FROM movies;` };
                 
+                const [{ rows: movies }, { rows: countResult }] = await Promise.all([
+                    pool.query(moviesQuery),
+                    pool.query(countQuery)
+                ]);
                 const totalMovies = parseInt(countResult[0].count, 10);
                 const totalPages = Math.ceil(totalMovies / limitNum);
 
@@ -171,35 +179,29 @@ export default async function handler(req, res) {
                 }
 
                 const client = await pool.connect();
-                let movieId;
                 try {
                     await client.query('BEGIN');
                     const movieResult = await client.query(
-                        'INSERT INTO movies (title, description, actors, thumbnail_drive_id) VALUES ($1, $2, $3, $4) RETURNING id',
+                        `INSERT INTO movies (title, description, actors, thumbnail_drive_id) VALUES ($1, $2, $3, $4) RETURNING id;`,
                         [title, description, actors, thumbnail_drive_id]
                     );
-                    movieId = movieResult.rows[0].id;
+                    const movieId = movieResult.rows[0].id;
 
-                    const episodeInsertions = episodes.map(ep => 
-                        client.query(
-                            'INSERT INTO episodes (movie_id, episode_number, title, video_drive_id) VALUES ($1, $2, $3, $4)',
+                    for (const ep of episodes) {
+                        await client.query(
+                            `INSERT INTO episodes (movie_id, episode_number, title, video_drive_id) VALUES ($1, $2, $3, $4);`,
                             [movieId, ep.episode_number, ep.title || null, ep.video_drive_id]
-                        )
-                    );
-                    await Promise.all(episodeInsertions);
-                    
+                        );
+                    }
                     await client.query('COMMIT');
+                    if (redis) await redis.flushdb(); // Clear cache on data change
+                    return res.status(201).json({ success: true, movieId });
                 } catch (e) {
                     await client.query('ROLLBACK');
-                    throw e; // Rethrow the error to be caught by the outer try-catch block
+                    throw e;
                 } finally {
                     client.release();
                 }
-                
-                if (redis) {
-                    try { await redis.flushdb(); } catch (e) { console.error("Redis FLUSHDB error:", e); }
-                }
-                return res.status(201).json({ success: true, movieId });
             }
             
             case 'delete_movie': {
@@ -208,9 +210,7 @@ export default async function handler(req, res) {
                 if (!movieId) return res.status(400).json({ error: 'Movie ID is required.' });
 
                 await pool.query('DELETE FROM movies WHERE id = $1', [movieId]);
-                if (redis) {
-                   try { await redis.flushdb(); } catch (e) { console.error("Redis FLUSHDB error:", e); }
-                }
+                if (redis) await redis.flushdb(); // Clear cache on data change
                 return res.status(200).json({ success: true });
             }
 
@@ -219,10 +219,9 @@ export default async function handler(req, res) {
         }
     } catch (error) {
         console.error('Error in movies API:', error);
-        const details = error.message || 'An unknown database error occurred.';
         return res.status(500).json({
             error: 'An internal server error occurred.',
-            details: details
+            details: error.message
         });
     }
 }
