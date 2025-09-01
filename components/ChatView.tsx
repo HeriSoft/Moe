@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile } from '../types';
 import { MessageComponent } from './Message';
-// FIX: Add ModelIcon to imports
-import { SendIcon, AttachmentIcon, WebSearchIcon, ImageIcon, VideoIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, EditIcon, GoogleDriveIcon, FolderOpenIcon, ArrowUpTrayIcon, FaceSwapIcon, PlusIcon } from './icons';
-import { generateSpeech, getTranslation, swapFace } from '../services/geminiService';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon } from './icons';
+import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
 declare global {
@@ -93,15 +92,12 @@ interface ChatViewProps {
   clearNotifications: () => void;
   personas: any; // The global persona definitions
   setPersona: (personaKey: string) => void;
-  openImageSettingsModal: (mode: 'generation' | 'editing') => void;
-  commandToPrepend: string;
-  clearCommandToPrepend: () => void;
+  onOpenGenerationModal: () => void;
   onAttachFromDrive: () => void;
   onSaveToDrive: (message: Message) => Promise<void>;
   startChatWithPrompt: (prompt: string) => void; // For prompt starters
   startNewChat: () => void; // For the locked chat button
   onOpenMediaGallery: () => void; // For media gallery
-  onOpenSwapFaceModal: () => void; // For Swap Face
   onOpenVideoCinema: () => void; // For Video Cinema
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
@@ -175,43 +171,24 @@ interface AudioState {
     isLoading: boolean;
 }
 
-const COMMANDS = [
-    { cmd: '/image', label: 'Generate Image', icon: ImageIcon, description: 'Create an image from a text prompt.' },
-    { cmd: '/edit', label: 'Edit Image', icon: EditIcon, description: 'Edit an attached image with a prompt.' },
-    { cmd: '/search', label: 'Web Search', icon: WebSearchIcon, description: 'Enable search for up-to-date answers.' },
-];
-
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, openImageSettingsModal, commandToPrepend, clearCommandToPrepend, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenSwapFaceModal, onOpenVideoCinema, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false);
-  const [isImageMenuOpen, setIsImageMenuOpen] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioState, setAudioState] = useState<AudioState>({ messageId: null, audioUrl: null, isLoading: false });
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false);
-
 
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
-  const imageMenuRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLDivElement>(null);
-  const slashMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  useEffect(() => {
-    if (commandToPrepend) {
-        setInput(prev => `${commandToPrepend}${prev}`);
-        clearCommandToPrepend();
-        textareaRef.current?.focus();
-    }
-  }, [commandToPrepend, clearCommandToPrepend]);
-
   // --- TEXT TO SPEECH ---
   useEffect(() => {
     audioRef.current = new Audio();
@@ -355,12 +332,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
             setIsNotificationsOpen(false);
         }
-        if (imageMenuRef.current && !imageMenuRef.current.contains(event.target as Node)) {
-            setIsImageMenuOpen(false);
-        }
-        if (slashMenuRef.current && !slashMenuRef.current.contains(event.target as Node)) {
-            setIsSlashMenuOpen(false);
-        }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -431,32 +402,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
           setAttachments(e.dataTransfer.files);
       }
   };
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const value = e.target.value;
-      setInput(value);
-      if (value.trim() === '/') {
-          setIsSlashMenuOpen(true);
-      } else {
-          setIsSlashMenuOpen(false);
-      }
-  };
-  
-  const handleCommandClick = (cmd: string) => {
-      if (cmd === '/search') {
-          toggleWebSearch();
-          setInput(''); 
-      } else if (cmd === '/image') {
-          openImageSettingsModal('generation');
-          setInput('');
-      } else if (cmd === '/edit') {
-          openImageSettingsModal('editing');
-          setInput('');
-      }
-      setIsSlashMenuOpen(false);
-      textareaRef.current?.focus();
-  }
-
 
   const currentModelName = activeChat?.model ?? defaultModel;
   const isDeepSeekModel = currentModelName === 'deepseek-v3.1';
@@ -483,7 +428,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             {activeChat && (
               <>
               <button title="Video Cinema" aria-label="Open Video Cinema" onClick={onOpenVideoCinema} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
-                  <VideoIcon className="w-5 h-5" />
+                  <ModelIcon className="w-5 h-5" />
               </button>
               <button title="Media Gallery" aria-label="Open Media Gallery" onClick={onOpenMediaGallery} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
                   <FolderOpenIcon className="w-5 h-5" />
@@ -539,7 +484,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
       <div className="relative flex-1 overflow-hidden" onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
         {isDraggingOver && (
             <div className="absolute inset-2 bg-indigo-500/20 border-4 border-dashed border-indigo-400 rounded-2xl z-30 flex flex-col items-center justify-center pointer-events-none">
-                <ArrowUpTrayIcon className="w-16 h-16 text-indigo-300" />
+                <ModelIcon className="w-16 h-16 text-indigo-300" />
                 <p className="mt-4 text-xl font-semibold text-indigo-200">Drop files to attach</p>
             </div>
         )}
@@ -599,25 +544,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             </div>
         ) : (
             <div className="relative w-full bg-slate-100 dark:bg-[#2d2d40] text-slate-800 dark:text-slate-200 rounded-xl p-2 shadow-sm">
-                {isSlashMenuOpen && (
-                    <div ref={slashMenuRef} className="absolute bottom-full mb-2 w-full sm:w-96 bg-white dark:bg-[#171725] rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-10">
-                        <p className="text-xs font-semibold text-slate-400 px-2 pb-1">COMMANDS</p>
-                        {COMMANDS.map(command => {
-                            const Icon = command.icon;
-                            return (
-                                <button key={command.cmd} onClick={() => handleCommandClick(command.cmd)} className="w-full flex items-start gap-3 p-2 rounded-md text-left hover:bg-slate-100 dark:hover:bg-slate-800">
-                                    <div className="p-1.5 bg-slate-200 dark:bg-slate-700 rounded-md">
-                                    <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                                    </div>
-                                    <div>
-                                    <p className="font-semibold text-slate-800 dark:text-slate-200">{command.label}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{command.description}</p>
-                                    </div>
-                                </button>
-                            )
-                        })}
-                    </div>
-                )}
                 {isTranslateMenuOpen && (
                      <div className="absolute bottom-full left-0 right-0 p-2">
                         <div className="bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-2 grid grid-cols-4 gap-2">
@@ -652,13 +578,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                 <textarea
                     ref={textareaRef}
                     value={input}
-                    onChange={handleInputChange}
+                    onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         handleSubmit(e);
                     }
                     }}
-                    placeholder="Type your message or '/' for commands..."
+                    placeholder="Type your message..."
                     rows={1}
                     className="w-full bg-transparent p-4 pr-16 resize-none focus:outline-none"
                     disabled={isLoading || isTranslating}
@@ -690,28 +616,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                     <button title={"Translate"} aria-label="Translate" onClick={() => setIsTranslateMenuOpen(prev => !prev)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isTranslateMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`} disabled={!input.trim()}>
                         <TranslateIcon className="w-5 h-5" />
                     </button>
-                     <div className="relative" ref={imageMenuRef}>
-                        <button title="Image Tools" aria-label="Image Tools" onClick={() => setIsImageMenuOpen(p => !p)} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isImageMenuOpen ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
-                            <ImageIcon className="w-5 h-5" />
-                        </button>
-                        {isImageMenuOpen && (
-                             <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 w-48 bg-white dark:bg-[#171725] rounded-lg shadow-lg border border-slate-200 dark:border-slate-600 p-1 z-20">
-                                <button onClick={() => { openImageSettingsModal('generation'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
-                                    <ImageIcon className="w-5 h-5" />
-                                    Image Generation
-                                </button>
-                                 <button onClick={() => { openImageSettingsModal('editing'); setIsImageMenuOpen(false); }} className="w-full text-left flex items-center gap-3 p-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-slate-800 dark:text-slate-200">
-                                    <EditIcon className="w-5 h-5" />
-                                    Image Editing
-                                </button>
-                             </div>
-                        )}
-                    </div>
-                     <button title={"Swap Face"} aria-label="Swap Face" onClick={onOpenSwapFaceModal} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                        <FaceSwapIcon className="w-5 h-5" />
-                    </button>
-                     <button title={"Tạo video (Sắp ra mắt)"} aria-label="Generate Video" onClick={() => alert('Tính năng tạo video sẽ sớm ra mắt!')} className="p-2 rounded-md text-slate-400/60 dark:text-slate-500/60 cursor-not-allowed">
-                        <VideoIcon className="w-5 h-5" />
+                     <button title={"Creative Tools"} aria-label="Open Creative Tools" onClick={onOpenGenerationModal} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                        <SparklesIcon className="w-5 h-5" />
                     </button>
                     {isDeepSeekModel && (
                       <button title={"Deep Think"} aria-label="Toggle Deep Think mode" onClick={toggleDeepThink} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isDeepThinkEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
