@@ -3,18 +3,15 @@ import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { ImageSettingsModal, ImageGenerationSettings, ImageEditingSettings } from './components/ImageSettingsModal';
+import { GenerationModal } from './components/GenerationModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
-import { SwapFaceModal } from './components/SwapFaceModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { AdminMovieModal } from './components/AdminMovieModal'; // New
 import { VideoCinemaModal } from './components/VideoCinemaModal'; // New
 import { MembershipModal } from './components/MembershipModal'; // Import the new modal
 import {
   streamModelResponse,
-  generateImage,
-  editImage,
-  logUserLogin, // Import the new login logger
+  logUserLogin,
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
@@ -81,25 +78,19 @@ const App: React.FC = () => {
   const [isAdminMovieModalOpen, setIsAdminMovieModalOpen] = useState(false); // New
   const [isVideoCinemaModalOpen, setIsVideoCinemaModalOpen] = useState(false); // New
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
+  
+  // --- New Unified Generation Modal State ---
+  const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
+
 
   useEffect(() => {
     sessionsRef.current = chatSessions;
   }, [chatSessions]);
 
 
-  // New state for image features
-  const [isImageSettingsModalOpen, setIsImageSettingsModalOpen] = useState(false);
-  const [imageModalMode, setImageModalMode] = useState<'generation' | 'editing'>('generation');
-  const [imageGenerationSettings, setImageGenerationSettings] = useState<ImageGenerationSettings | null>(null);
-  const [imageEditingSettings, setImageEditingSettings] = useState<ImageEditingSettings | null>(null);
-  const [commandToPrepend, setCommandToPrepend] = useState('');
-  
   // New state for new features
   const [promptForNewChat, setPromptForNewChat] = useState<string | null>(null);
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
-  const [isSwapFaceModalOpen, setIsSwapFaceModalOpen] = useState(false);
-
-
 
   const loadChatsFromDrive = useCallback(async () => {
     setIsLoading(true);
@@ -369,22 +360,6 @@ const App: React.FC = () => {
   
   const toggleDeepThink = () => setIsDeepThinkEnabled(prev => !prev);
 
-  const openImageSettingsModal = (mode: 'generation' | 'editing') => {
-    if (!isLoggedIn) { setIsLoginModalOpen(true); return; }
-    setImageModalMode(mode);
-    setIsImageSettingsModalOpen(true);
-  };
-
-  const handleApplyImageSettings = (settings: any, mode: 'generation' | 'editing') => {
-    if (mode === 'generation') {
-        setImageGenerationSettings(settings);
-        setCommandToPrepend('/image ');
-    } else {
-        setImageEditingSettings(settings);
-        setCommandToPrepend('/edit ');
-    }
-  };
-
   const handleAttachFromDrive = useCallback(() => {
     if (!isLoggedIn) {
         setIsLoginModalOpen(true);
@@ -499,77 +474,57 @@ const App: React.FC = () => {
 
     try {
         let finalChatState: ChatSession = currentChat;
-        if (messageText.startsWith('/image ') || messageText.startsWith('/edit ')) {
-            let resultMessage: Message;
-            if (messageText.startsWith('/image ')) {
-                const prompt = messageText.replace('/image ', '').trim();
-                if (!imageGenerationSettings) throw new Error("Image generation settings not configured.");
-                const images = await generateImage(prompt, imageGenerationSettings, userProfile);
-                resultMessage = { role: 'model', text: `Here are the generated images for: "${prompt}"`, attachments: images, timestamp: Date.now() };
-            } else { // /edit
-                const prompt = messageText.replace('/edit ', '').trim();
-                const imageToEdit = messageAttachments.find(att => att.mimeType.startsWith('image/'));
-                if (!imageToEdit) throw new Error("An image attachment is required for the /edit command.");
-                if (!imageEditingSettings) throw new Error("Image editing settings not configured.");
-                const result = await editImage(prompt, imageToEdit, imageEditingSettings, userProfile);
-                resultMessage = { role: 'model', text: result.text, attachments: result.attachments, timestamp: Date.now() };
-            }
-            finalChatState = { ...currentChat, messages: [...currentChat.messages, resultMessage] };
-            setChatSessions(prev => prev.map(s => s.id === activeChatId ? finalChatState : s));
+        const historyForAPI = customHistory || [...currentChat.messages];
+        const webSearch = isWebSearchEnabled;
+        const deepThink = isDeepThinkEnabled;
+        const activePersonaKey = currentChat.persona || 'default';
+        const systemInstruction = PERSONAS[activePersonaKey]?.prompt;
+        setIsWebSearchEnabled(false);
+        setIsDeepThinkEnabled(false);
+        let finalModel = currentChat.model;
+        if (currentChat.model === 'deepseek-v3.1') {
+            finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
+        }
 
-        } else {
-            const historyForAPI = customHistory || [...currentChat.messages];
-            const webSearch = isWebSearchEnabled;
-            const deepThink = isDeepThinkEnabled;
-            const activePersonaKey = currentChat.persona || 'default';
-            const systemInstruction = PERSONAS[activePersonaKey]?.prompt;
-            setIsWebSearchEnabled(false);
-            setIsDeepThinkEnabled(false);
-            let finalModel = currentChat.model;
-            if (currentChat.model === 'deepseek-v3.1') {
-                finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
-            }
+        const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction, userProfile);
+        let isFirstChunk = true;
+        let modelResponse = '';
 
-            const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction, userProfile);
-            let isFirstChunk = true;
-            let modelResponse = '';
+        for await (const chunk of stream) {
+            if (chunk.status) setThinkingStatus(chunk.status);
 
-            for await (const chunk of stream) {
-                if (chunk.status) setThinkingStatus(chunk.status);
+            setChatSessions(prev =>
+                prev.map(s => {
+                    if (s.id !== activeChatId) return s;
+                    let newMessages = [...s.messages];
+                    let currentModelMessage = newMessages[newMessages.length - 1];
 
-                setChatSessions(prev =>
-                    prev.map(s => {
-                        if (s.id !== activeChatId) return s;
-                        let newMessages = [...s.messages];
-                        let currentModelMessage = newMessages[newMessages.length - 1];
+                    if (isFirstChunk && chunk.text) {
+                         const newMsg: Message = { role: 'model', text: '', timestamp: Date.now() };
+                         if (sourceDriveAttachment) {
+                             newMsg.sourceDriveFileId = sourceDriveAttachment.driveFileId;
+                             newMsg.sourceDriveFileName = sourceDriveAttachment.fileName;
+                             newMsg.sourceDriveFileMimeType = sourceDriveAttachment.mimeType;
+                         }
+                         newMessages.push(newMsg);
+                         currentModelMessage = newMsg;
+                         isFirstChunk = false;
+                         setThinkingStatus(null);
+                    }
 
-                        if (isFirstChunk && chunk.text) {
-                             const newMsg: Message = { role: 'model', text: '', timestamp: Date.now() };
-                             if (sourceDriveAttachment) {
-                                 newMsg.sourceDriveFileId = sourceDriveAttachment.driveFileId;
-                                 newMsg.sourceDriveFileName = sourceDriveAttachment.fileName;
-                                 newMsg.sourceDriveFileMimeType = sourceDriveAttachment.mimeType;
-                             }
-                             newMessages.push(newMsg);
-                             currentModelMessage = newMsg;
-                             isFirstChunk = false;
-                             setThinkingStatus(null);
-                        }
+                    if (chunk.text && currentModelMessage?.role === 'model') {
+                        modelResponse += chunk.text;
+                        currentModelMessage.text = modelResponse;
+                    }
+                    
+                    if (chunk.groundingMetadata && currentModelMessage?.role === 'model') {
+                        currentModelMessage.groundingMetadata = chunk.groundingMetadata;
+                    }
 
-                        if (chunk.text && currentModelMessage?.role === 'model') {
-                            modelResponse += chunk.text;
-                            currentModelMessage.text = modelResponse;
-                        }
-                        
-                        if (chunk.groundingMetadata && currentModelMessage?.role === 'model') {
-                            currentModelMessage.groundingMetadata = chunk.groundingMetadata;
-                        }
-
-                        finalChatState = { ...s, messages: newMessages };
-                        return finalChatState;
-                    })
-                );
-            }
+                    finalChatState = { ...s, messages: newMessages };
+                    return finalChatState;
+                })
+            );
         }
         await googleDriveService.saveSession(finalChatState);
     } catch (error) {
@@ -666,6 +621,15 @@ const App: React.FC = () => {
       }
   };
 
+  const handleOpenGenerationModal = () => {
+    if (isLoggedIn) {
+        setIsGenerationModalOpen(true);
+    } else {
+        setIsLoginModalOpen(true);
+        setNotifications(prev => ["Please sign in to use Creative Tools.", ...prev.slice(0, 19)]);
+    }
+  };
+
 
   return (
     <div className="relative flex h-screen w-full font-sans overflow-hidden">
@@ -723,23 +687,13 @@ const App: React.FC = () => {
           clearNotifications={() => setNotifications([])}
           personas={PERSONAS}
           setPersona={handleSetPersona}
-          openImageSettingsModal={openImageSettingsModal}
-          commandToPrepend={commandToPrepend}
-          clearCommandToPrepend={() => setCommandToPrepend('')}
+          onOpenGenerationModal={handleOpenGenerationModal}
           onAttachFromDrive={handleAttachFromDrive}
           onSaveToDrive={handleSaveToDrive}
           startChatWithPrompt={startChatWithPrompt}
           startNewChat={startNewChat}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
           onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
-          onOpenSwapFaceModal={() => {
-            if (isLoggedIn) {
-              setIsSwapFaceModalOpen(true);
-            } else {
-              setIsLoginModalOpen(true);
-              setNotifications(prev => ["Please sign in to use the Face Swap feature.", ...prev.slice(0, 19)]);
-            }
-          }}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
         />
@@ -762,24 +716,18 @@ const App: React.FC = () => {
             setIsLoginModalOpen(false);
         }}
       />
-      <ImageSettingsModal
-        isOpen={isImageSettingsModalOpen}
-        onClose={() => setIsImageSettingsModalOpen(false)}
-        onApply={handleApplyImageSettings}
-        mode={imageModalMode}
+      <GenerationModal
+        isOpen={isGenerationModalOpen}
+        onClose={() => setIsGenerationModalOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
+        onProFeatureBlock={handleProFeatureBlock}
       />
       <MediaGalleryModal
           isOpen={isMediaGalleryOpen}
           onClose={() => setIsMediaGalleryOpen(false)}
           mediaItems={recentMedia}
           setActiveChat={setActiveChat}
-      />
-      <SwapFaceModal
-        isOpen={isSwapFaceModalOpen}
-        onClose={() => setIsSwapFaceModalOpen(false)}
-        setNotifications={setNotifications}
-        userProfile={userProfile}
-        onProFeatureBlock={handleProFeatureBlock}
       />
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
