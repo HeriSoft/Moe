@@ -112,8 +112,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                 result = await generateImage(prompt, genSettings, userProfile);
             } else if (activeMode === 'edit') {
                 if (!prompt) throw new Error("A prompt is required for image editing.");
-                if (!inputImage1) throw new Error("An image is required for editing.");
-                const { attachments, text } = await editImage(prompt, inputImage1, editSettings, userProfile);
+                if (!inputImage1) throw new Error("At least one image is required for editing.");
+                const imagesToEdit = [inputImage1, inputImage2].filter(Boolean) as Attachment[];
+                const { attachments, text } = await editImage(prompt, imagesToEdit, editSettings, userProfile);
                 result = attachments;
                 resultText = text;
             } else if (activeMode === 'faceSwap') {
@@ -216,36 +217,64 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                 </div>
 
                 {/* Right Panel: Interaction */}
-                <div className="w-full sm:w-2/3 sm:pl-6 flex flex-col overflow-y-auto">
-                    <div className="flex-grow flex flex-col">
-                        <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={activeMode === 'faceSwap' ? "Prompt is optional for Face Swap..." : "Enter your prompt here..."} className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled={activeMode === 'video'}/>
-
-                        { (activeMode === 'edit' || activeMode === 'faceSwap') &&
-                            <div className={`grid ${activeMode === 'faceSwap' ? 'grid-cols-2' : 'grid-cols-1'} gap-4 my-4`}>
-                                <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title={activeMode === 'edit' ? "Image to Edit" : "Target Image"} />
-                                {activeMode === 'faceSwap' && <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" />}
-                            </div>
-                        }
-                        
-                        <div className="flex-grow my-4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-4 min-h-[200px]">
-                            {isLoading && <ArrowPathIcon className="w-12 h-12 text-slate-400 animate-spin" />}
-                            {!isLoading && error && <p className="text-center text-red-500">{error}</p>}
-                            {!isLoading && !error && output.length > 0 && 
-                                <div className={`grid gap-4 ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                    {output.map((item, index) => (
-                                        <div key={index} className="relative group">
-                                            <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-contain max-h-64"/>
-                                            <button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"><DownloadIcon className="w-5 h-5"/></button>
-                                        </div>
-                                    ))}
+                <div className="w-full sm:w-2/3 sm:pl-6 flex flex-col h-full overflow-hidden">
+                    {/* Main content area that splits on large screens */}
+                    <div className="flex-grow flex flex-col lg:flex-row gap-6 py-4 min-h-0 overflow-y-auto">
+                        {/* Input Section (Left side on LG) */}
+                        <div className="w-full lg:w-1/2 flex flex-col gap-4">
+                            <label htmlFor="generation-prompt" className="text-lg font-semibold">Input</label>
+                            
+                            {(activeMode === 'image' || activeMode === 'edit') && (
+                                <textarea 
+                                    id="generation-prompt"
+                                    value={prompt} 
+                                    onChange={e => setPrompt(e.target.value)} 
+                                    placeholder="Enter your prompt here..."
+                                    className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                                />
+                            )}
+                            
+                            {activeMode === 'edit' &&
+                                <div className="grid grid-cols-2 gap-4">
+                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Image to Edit" />
+                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Second Image (Optional)" />
                                 </div>
                             }
-                            {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                            {activeMode === 'faceSwap' &&
+                                <div className="grid grid-cols-2 gap-4">
+                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" />
+                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" />
+                                </div>
+                            }
+                        </div>
+
+                        {/* Output Section (Right side on LG) */}
+                        <div className="w-full lg:w-1/2 flex flex-col gap-4">
+                            <h3 className="text-lg font-semibold">Output</h3>
+                            <div className="flex-grow bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2 min-h-[250px] lg:min-h-0">
+                                {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
+                                {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
+                                {!isLoading && !error && output.length > 0 && 
+                                    <div className={`grid gap-2 w-full h-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                        {output.map((item, index) => (
+                                            <div key={index} className="relative group w-full aspect-square">
+                                                <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-contain w-full h-full"/>
+                                                <button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Download image">
+                                                    <DownloadIcon className="w-5 h-5"/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                }
+                                {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex-shrink-0 mt-auto">
-                        {/* FIX: Simplified the disabled logic to remove the redundant `activeMode === 'video'` check, which was causing a TypeScript error. */}
+                    {/* Generate Button at the bottom */}
+                    <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
+                        {/* FIX: Removed redundant `activeMode === 'video'` check which caused a TypeScript error. 
+                            The `!canGenerate` logic already covers this case correctly. */}
                         <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                             {isLoading ? 'Generating...' : 'Generate'}
                         </button>
