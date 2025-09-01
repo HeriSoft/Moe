@@ -26,7 +26,7 @@ const Slider: React.FC<{ label: string; value: number; min: number; max: number;
   </div>
 );
 
-const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: File) => void; title: string }> = ({ image, onImageSet, title }) => {
+const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: File) => void; title: string; textSize?: string }> = ({ image, onImageSet, title, textSize = 'text-sm' }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -35,7 +35,7 @@ const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: Fil
   };
   return (
     <div className="flex flex-col items-center">
-        <h4 className="font-semibold mb-2 text-sm text-slate-600 dark:text-slate-300">{title}</h4>
+        <h4 className={`font-semibold mb-2 text-slate-600 dark:text-slate-300 text-center ${textSize}`}>{title}</h4>
         <input type="file" ref={inputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/webp"/>
         <button onClick={() => inputRef.current?.click()} className="w-full aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 text-center">
             {image ? <img src={`data:${image.mimeType};base64,${image.data}`} alt="preview" className="w-full h-full object-cover rounded-md" /> : <PhotoIcon className="w-10 h-10" />}
@@ -98,7 +98,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         reader.readAsDataURL(file);
     };
 
-    // FIX: Corrected logic for all creative modes and removed invalid type comparisons.
     const handleGenerate = async () => {
         setIsLoading(true);
         setError(null);
@@ -158,13 +157,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const dalleRatios = ["1:1", "16:9", "9:16"];
     const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'edit' && !!inputImage1) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2);
-
-    const TabButton: React.FC<{ mode: CreativeMode, title: string, icon: React.FC<any> }> = ({ mode, title, icon: Icon }) => (
-        <button onClick={() => setActiveMode(mode)} className={`w-full text-left p-2 rounded-md flex items-center gap-3 transition-colors ${activeMode === mode ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-            <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300 flex-shrink-0" />
-            <span className="font-semibold text-slate-800 dark:text-white">{title}</span>
-        </button>
-    );
     
     const getAspectRatioClass = () => {
         if (activeMode !== 'image') {
@@ -185,15 +177,23 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         <h2 className="text-2xl font-bold flex items-center gap-2"><SparklesIcon className="w-7 h-7"/> Creative Tools</h2>
                         <button onClick={onClose} className="sm:hidden text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><CloseIcon className="w-7 h-7" /></button>
                     </div>
-                    <div className="space-y-2 mb-4">
-                        <TabButton mode="image" title="Image Generation" icon={ImageIcon} />
-                        <TabButton mode="edit" title="Image Editing" icon={EditIcon} />
-                        <TabButton mode="faceSwap" title="Face Swap" icon={FaceSwapIcon} />
-                        <TabButton mode="video" title="Video Generation" icon={VideoIcon} />
+                     <div className="mb-4">
+                        <label htmlFor="creative-mode-select" className="block text-sm font-medium mb-1 text-slate-600 dark:text-slate-400">Tool</label>
+                        <select 
+                            id="creative-mode-select"
+                            value={activeMode} 
+                            onChange={(e) => setActiveMode(e.target.value as CreativeMode)} 
+                            className="w-full input-style"
+                        >
+                            <option value="image">Image Generation</option>
+                            <option value="edit">Image Editing</option>
+                            <option value="faceSwap">Face Swap</option>
+                            <option value="video">Video Generation</option>
+                        </select>
                     </div>
                     <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
                         {activeMode === 'image' && <>
-                            <h3 className="font-semibold text-lg">Generation Settings</h3>
+                            <h3 className="font-semibold text-lg">Model Settings</h3>
                             <div>
                                 <label className="block text-sm font-medium mb-1">Model</label>
                                 <select value={genSettings.model} onChange={(e) => setGenSettings(s => ({ ...s, model: e.target.value as ImageGenerationSettings['model'] }))} className="w-full input-style">
@@ -214,7 +214,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             </>}
                         </>}
                          {activeMode === 'edit' && <>
-                            <h3 className="font-semibold text-lg">Editing Settings</h3>
+                            <h3 className="font-semibold text-lg">Model Settings</h3>
                              <div>
                                 <label className="block text-sm font-medium mb-1">Model</label>
                                 <select value={editSettings.model} onChange={(e) => setEditSettings(s => ({ ...s, model: e.target.value as ImageEditingSettings['model'] }))} className="w-full input-style">
@@ -235,7 +235,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         <div className="w-full lg:w-1/2 flex flex-col gap-4">
                             <label htmlFor="generation-prompt" className="text-lg font-semibold">Input</label>
                             
-                            {/* FIX: Removed invalid conditional checks for placeholder and disabled attributes. */}
                             {(activeMode === 'image' || activeMode === 'edit') && (
                                 <textarea 
                                     id="generation-prompt"
@@ -248,8 +247,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             
                             {activeMode === 'edit' &&
                                 <div className="grid grid-cols-2 gap-4">
-                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Image to Edit" />
-                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Second Image (Optional)" />
+                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Image to Edit" textSize="text-sm" />
+                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Second Image (Optional)" textSize="text-xs" />
                                 </div>
                             }
                             {activeMode === 'faceSwap' &&
@@ -292,7 +291,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
                     {/* Generate Button at the bottom */}
                     <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
-                        {/* FIX: Removed redundant and erroneous 'activeMode === "video"' check. */}
+                        {/* FIX: Remove redundant `activeMode === 'video'` check from disabled logic. The `!canGenerate` already covers this case. */}
                         <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                             {isLoading ? 'Generating...' : 'Generate'}
                         </button>
