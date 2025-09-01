@@ -172,7 +172,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
             <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col sm:flex-row p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={e => e.stopPropagation()}>
                 {/* Left Panel: Settings */}
-                <div className="w-full sm:w-1/3 sm:pr-6 border-b sm:border-b-0 sm:border-r border-slate-200 dark:border-slate-700 pb-4 sm:pb-0 mb-4 sm:mb-0 overflow-y-auto">
+                <div className="w-full sm:w-1/3 sm:pr-6 border-b sm:border-b-0 sm:border-r border-slate-200 dark:border-slate-700 pb-4 sm:pb-0 mb-4 sm:mb-0 flex-shrink-0 sm:overflow-y-auto">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-2xl font-bold flex items-center gap-2"><SparklesIcon className="w-7 h-7"/> Creative Tools</h2>
                         <button onClick={onClose} className="sm:hidden text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><CloseIcon className="w-7 h-7" /></button>
@@ -228,7 +228,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                 </div>
 
                 {/* Right Panel: Interaction */}
-                <div className="w-full sm:w-2/3 sm:pl-6 flex flex-col h-full overflow-hidden">
+                <div className="w-full sm:w-2/3 sm:pl-6 flex flex-col flex-grow min-h-0 overflow-hidden">
                     {/* Main content area that splits on large screens */}
                     <div className="flex-grow flex flex-col lg:flex-row gap-6 py-4 min-h-0 overflow-y-auto">
                         {/* Input Section (Left side on LG) */}
@@ -291,7 +291,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
                     {/* Generate Button at the bottom */}
                     <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
-                        {/* FIX: Remove redundant `activeMode === 'video'` check from disabled logic. The `!canGenerate` already covers this case. */}
                         <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                             {isLoading ? 'Generating...' : 'Generate'}
                         </button>
