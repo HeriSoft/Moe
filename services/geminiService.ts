@@ -144,7 +144,7 @@ export async function generateImage(prompt: string, settings: any, user: UserPro
 }
 
 // New function for image editing
-export async function editImage(prompt: string, image: Attachment, settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
+export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -153,7 +153,7 @@ export async function editImage(prompt: string, image: Attachment, settings: any
             payload: {
                 model: settings.model,
                 prompt,
-                image,
+                images,
                 config: {}, // Pass any other settings if needed
                 user, // Pass user profile for logging
             }
