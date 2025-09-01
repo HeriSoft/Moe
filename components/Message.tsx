@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Message, Attachment, GroundingChunk } from '../types';
-import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon, SaveToDriveIcon, WebSearchIcon } from './icons';
+import { UserIcon, ModelIcon, CopyIcon, CheckIcon, DocumentPlusIcon, EditIcon, RefreshIcon, SpeakerWaveIcon, SpeakerXMarkIcon, DownloadIcon, SaveToDriveIcon, WebSearchIcon, TrashIcon } from './icons';
 import { CodeBlock } from './CodeBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { renderFormattedText } from './utils';
@@ -10,6 +10,7 @@ interface MessageProps {
   message: Message;
   onEdit: (newText: string) => void;
   onRefresh: () => void;
+  onDelete: () => void;
   isSpeaking: boolean;
   isTTsLoading: boolean;
   audioUrl: string | null;
@@ -129,7 +130,7 @@ const AttachmentGrid: React.FC<{ attachments: Attachment[] }> = ({ attachments }
 );
 
 
-export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh, isSpeaking, isTTsLoading, audioUrl, onToggleTTS, onSaveToDrive }) => {
+export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRefresh, onDelete, isSpeaking, isTTsLoading, audioUrl, onToggleTTS, onSaveToDrive }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.text);
@@ -265,6 +266,9 @@ export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRe
                                 <DownloadIcon className="w-4 h-4" />
                             </a>
                         )}
+                        <button onClick={onDelete} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors" aria-label="Delete message">
+                            <TrashIcon className="w-4 h-4" />
+                        </button>
                       </>
                   )}
               </div>

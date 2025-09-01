@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, CameraIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
@@ -74,6 +74,7 @@ interface ChatViewProps {
   sendMessage: (message: string, attachments?: Attachment[], history?: any[]) => Promise<void>;
   handleEditMessage: (messageIndex: number, newText: string) => Promise<void>;
   handleRefreshResponse: (messageIndex: number) => Promise<void>;
+  handleDeleteSingleMessage: (messageIndex: number) => Promise<void>;
   isLoading: boolean;
   thinkingStatus: string | null;
   attachments: Attachment[];
@@ -171,7 +172,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -428,7 +429,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             {activeChat && (
               <>
               <button title="Video Cinema" aria-label="Open Video Cinema" onClick={onOpenVideoCinema} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
-                  <ModelIcon className="w-5 h-5" />
+                  <CameraIcon className="w-5 h-5" />
               </button>
               <button title="Media Gallery" aria-label="Open Media Gallery" onClick={onOpenMediaGallery} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
                   <FolderOpenIcon className="w-5 h-5" />
@@ -504,6 +505,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                         message={msg}
                         onEdit={(newText) => handleEditMessage(index, newText)}
                         onRefresh={() => handleRefreshResponse(index)}
+                        onDelete={() => handleDeleteSingleMessage(index)}
                         isSpeaking={audioState.messageId === messageId}
                         isTTsLoading={audioState.isLoading && audioState.messageId === messageId}
                         audioUrl={audioState.messageId === messageId ? audioState.audioUrl : null}
