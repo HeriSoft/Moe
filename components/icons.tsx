@@ -358,7 +358,6 @@ export const ModelIcon = RobotIcon;
 export const AttachmentIcon = LinkIcon;
 export const WebSearchIcon = MagnifyingGlassIcon;
 export const ImageIcon = PhotoIcon;
-export const CameraIcon = PhotoIcon;
 export const VideoIcon = FilmIcon;
 export const MenuIcon = Bars3Icon;
 export const CheckIcon = CheckCircleIcon;
