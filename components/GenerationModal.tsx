@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CloseIcon, RefreshIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon } from './icons';
+import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon } from './icons';
 import { generateImage, editImage, swapFace } from '../services/geminiService';
 import type { Attachment, UserProfile } from '../types';
 
@@ -245,7 +245,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                     </div>
 
                     <div className="flex-shrink-0 mt-auto">
-                        {/* FIX: Removed redundant `activeMode === 'video'` check which was causing a linting error. The `!canGenerate` condition already covers this case. */}
+                        {/* FIX: Simplified the disabled logic to remove the redundant `activeMode === 'video'` check, which was causing a TypeScript error. */}
                         <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                             {isLoading ? 'Generating...' : 'Generate'}
                         </button>
