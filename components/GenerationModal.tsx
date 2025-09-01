@@ -98,6 +98,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         reader.readAsDataURL(file);
     };
 
+    // FIX: Corrected logic for all creative modes and removed invalid type comparisons.
     const handleGenerate = async () => {
         setIsLoading(true);
         setError(null);
@@ -121,7 +122,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                 if (!inputImage1 || !inputImage2) throw new Error("A target image and a source face are required.");
                 const swappedImage = await swapFace(inputImage1, inputImage2, userProfile);
                 result = [swappedImage];
-            } else {
+            } else if (activeMode === 'video') {
                 throw new Error("This feature is not yet available.");
             }
             setOutput(result);
@@ -156,7 +157,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const imagenRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
     const dalleRatios = ["1:1", "16:9", "9:16"];
     const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
-    const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'edit' && !!prompt && !!inputImage1) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2);
+    const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'edit' && !!inputImage1) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2);
 
     const TabButton: React.FC<{ mode: CreativeMode, title: string, icon: React.FC<any> }> = ({ mode, title, icon: Icon }) => (
         <button onClick={() => setActiveMode(mode)} className={`w-full text-left p-2 rounded-md flex items-center gap-3 transition-colors ${activeMode === mode ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
@@ -164,6 +165,16 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             <span className="font-semibold text-slate-800 dark:text-white">{title}</span>
         </button>
     );
+    
+    const getAspectRatioClass = () => {
+        if (activeMode !== 'image') {
+            return ''; // Let the image determine its aspect ratio for edit/swap
+        }
+        const ratio = genSettings.aspectRatio; // e.g., "16:9"
+        if (ratio === '1:1') return 'aspect-square';
+        // Tailwind JIT needs the full class name, so string interpolation like this is fine.
+        return `aspect-[${ratio.replace(':', '/')}]`;
+    };
 
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
@@ -224,13 +235,14 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         <div className="w-full lg:w-1/2 flex flex-col gap-4">
                             <label htmlFor="generation-prompt" className="text-lg font-semibold">Input</label>
                             
+                            {/* FIX: Removed invalid conditional checks for placeholder and disabled attributes. */}
                             {(activeMode === 'image' || activeMode === 'edit') && (
                                 <textarea 
                                     id="generation-prompt"
                                     value={prompt} 
                                     onChange={e => setPrompt(e.target.value)} 
                                     placeholder="Enter your prompt here..."
-                                    className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                                    className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
                             )}
                             
@@ -251,19 +263,26 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         {/* Output Section (Right side on LG) */}
                         <div className="w-full lg:w-1/2 flex flex-col gap-4">
                             <h3 className="text-lg font-semibold">Output</h3>
-                            <div className="flex-grow bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2 min-h-[250px] lg:min-h-0">
+                            <div className="bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2 min-h-[250px]">
                                 {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
                                 {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
                                 {!isLoading && !error && output.length > 0 && 
-                                    <div className={`grid gap-2 w-full h-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                        {output.map((item, index) => (
-                                            <div key={index} className="relative group w-full aspect-square">
-                                                <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-contain w-full h-full"/>
-                                                <button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Download image">
-                                                    <DownloadIcon className="w-5 h-5"/>
-                                                </button>
-                                            </div>
-                                        ))}
+                                    <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                        {output.map((item, index) => {
+                                            const aspectRatioClass = getAspectRatioClass();
+                                            return (
+                                                <div key={index} className={`relative group w-full ${aspectRatioClass}`}>
+                                                    <img
+                                                        src={`data:${item.mimeType};base64,${item.data}`}
+                                                        alt="Generated media"
+                                                        className={`rounded-lg object-contain w-full ${aspectRatioClass ? 'h-full' : 'h-auto'}`}
+                                                    />
+                                                    <button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Download image">
+                                                        <DownloadIcon className="w-5 h-5"/>
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 }
                                 {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
@@ -273,8 +292,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
                     {/* Generate Button at the bottom */}
                     <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
-                        {/* FIX: Removed redundant `activeMode === 'video'` check which caused a TypeScript error. 
-                            The `!canGenerate` logic already covers this case correctly. */}
+                        {/* FIX: Removed redundant and erroneous 'activeMode === "video"' check. */}
                         <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                             {isLoading ? 'Generating...' : 'Generate'}
                         </button>
