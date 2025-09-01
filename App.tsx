@@ -591,6 +591,37 @@ const App: React.FC = () => {
     }
   };
   
+  const handleDeleteSingleMessage = useCallback(async (messageIndex: number) => {
+    if (!activeChatId || !isLoggedIn) return;
+
+    const session = sessionsRef.current.find(s => s.id === activeChatId);
+    if (!session || !session.messages[messageIndex]) return;
+
+    // Specifically prevent deleting the very first greeting message.
+    if (messageIndex === 0) {
+        setNotifications(prev => ["Cannot delete the initial greeting message.", ...prev.slice(0, 19)]);
+        return;
+    }
+    
+    // Safeguard to ensure this handler is only for bot messages.
+    if (session.messages[messageIndex].role === 'user') {
+        console.warn("handleDeleteSingleMessage called on a user message. This shouldn't happen.");
+        return;
+    }
+
+    const updatedMessages = session.messages.filter((_, index) => index !== messageIndex);
+    const updatedSession = { ...session, messages: updatedMessages };
+
+    try {
+        await googleDriveService.saveSession(updatedSession);
+        setChatSessions(prev => prev.map(s => s.id === activeChatId ? updatedSession : s));
+    } catch (error) {
+        console.error("Failed to delete message:", error);
+        const errorMessage = error instanceof Error ? error.message : "Could not delete message.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+    }
+  }, [activeChatId, isLoggedIn]);
+
   const recentMedia = useMemo(() => {
     return chatSessions
         .flatMap(session => 
@@ -662,6 +693,7 @@ const App: React.FC = () => {
           sendMessage={sendMessage}
           handleEditMessage={handleEditMessage}
           handleRefreshResponse={handleRefreshResponse}
+          handleDeleteSingleMessage={handleDeleteSingleMessage}
           isLoading={isLoading || !isAuthReady}
           thinkingStatus={thinkingStatus}
           attachments={attachments}
