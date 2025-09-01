@@ -183,23 +183,16 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // When the default model changes via settings, update the active chat to use it.
+  // When the default model changes via settings, update the active chat to use it silently.
   useEffect(() => {
     if (!activeChatId || !isLoggedIn) return;
 
     const currentActiveChat = sessionsRef.current.find(s => s.id === activeChatId);
 
     if (currentActiveChat && currentActiveChat.model !== model) {
-      const modelChangeMessage: Message = {
-        role: 'model',
-        text: `Model switched to **${model}**.`,
-        timestamp: Date.now(),
-      };
-      
       const updatedChat = {
         ...currentActiveChat,
         model: model,
-        messages: [...currentActiveChat.messages, modelChangeMessage],
       };
 
       googleDriveService.saveSession(updatedChat).then(savedChat => {
