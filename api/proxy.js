@@ -389,17 +389,22 @@ export default async function handler(req, res) {
             case 'editImage': {
                 await logAction(userEmail, 'edited an image');
                 if (!ai) throw new Error("Gemini API key not configured.");
-                const { prompt, image } = payload;
+                const { prompt, images } = payload;
+                const imageParts = images.map(img => ({
+                    inlineData: { data: img.data, mimeType: img.mimeType }
+                }));
+                const textPart = { text: prompt };
+
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash-image-preview',
-                    contents: { parts: [ { inlineData: { data: image.data, mimeType: image.mimeType } }, { text: prompt } ] },
+                    contents: { parts: [...imageParts, textPart] },
                     config: { responseModalities: ['IMAGE', 'TEXT'] },
                 });
                 const parts = response.candidates?.[0]?.content?.parts || [];
-                const textPart = parts.find(p => p.text)?.text || '';
-                const imagePart = parts.find(p => p.inlineData);
-                const attachments = imagePart ? [{ data: imagePart.inlineData.data, mimeType: imagePart.inlineData.mimeType || 'image/png', fileName: 'edited-image.png' }] : [];
-                result = { text: textPart, attachments: attachments };
+                const textPartResponse = parts.find(p => p.text)?.text || '';
+                const imagePartResponse = parts.find(p => p.inlineData);
+                const attachments = imagePartResponse ? [{ data: imagePartResponse.inlineData.data, mimeType: imagePartResponse.inlineData.mimeType || 'image/png', fileName: 'edited-image.png' }] : [];
+                result = { text: textPartResponse, attachments: attachments };
                 break;
             }
 
