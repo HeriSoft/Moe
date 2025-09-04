@@ -41,6 +41,7 @@ export interface UserProfile {
     name: string;
     email: string;
     imageUrl: string;
+    isPro?: boolean; // To track membership status
 }
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
@@ -60,4 +61,27 @@ export interface Movie {
   thumbnail_drive_id: string;
   episodes: MovieEpisode[];
   created_at?: string;
+}
+
+// --- NEW TYPES FOR FILES LIBRARY ---
+
+export interface FilePart {
+  id?: string;
+  part_number: number;
+  part_name?: string;
+  download_url: string;
+}
+
+export interface FileItem {
+  id: string;
+  name: string;
+  version?: string;
+  icon_drive_id?: string;
+  tags: string[];
+  is_vip: boolean;
+  download_count: number;
+  vip_unlock_info?: string;
+  created_at?: string;
+  updated_at?: string;
+  parts: FilePart[];
 }
