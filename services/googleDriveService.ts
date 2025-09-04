@@ -61,11 +61,9 @@ const handleGapiError = (error: any, context: string): never => {
  * Initializes the Google API client.
  * This function now assumes gapi and google scripts are loaded from index.html
  * @param onAuthChange Callback function to update authentication status in the app.
- * @param onAuthError Callback function to report initialization errors to the app.
  */
 export async function initClient(
-    onAuthChange: (isLoggedIn: boolean, userProfile?: UserProfile) => void,
-    onAuthError: (errorMessage: string) => void
+    onAuthChange: (isLoggedIn: boolean, userProfile?: UserProfile) => void
 ) {
     console.log("Starting Google Drive service initialization...");
     try {
@@ -166,7 +164,8 @@ export async function initClient(
                         callback: (tokenResponse: any) => {
                             if (tokenResponse.error) {
                                 console.error('Token client error:', tokenResponse);
-                                onAuthError(`Google Sign-In Error: ${tokenResponse.error_description || tokenResponse.error}`);
+                                // On error, report as logged out.
+                                onAuthChange(false);
                                 return;
                             }
                             console.log("Access token received from sign-in flow.");
@@ -197,8 +196,7 @@ export async function initClient(
 
     } catch (error) {
         console.error("Fatal error during Google service initialization:", error);
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during authentication setup.";
-        onAuthError(`Initialization Failed: ${errorMessage}`);
+        onAuthChange(false);
     }
 }
 
@@ -226,17 +224,17 @@ export function signIn() {
 /**
  * Signs the user out.
  */
-export function signOut(onSignOutComplete: (isLoggedIn: boolean) => void) {
+export function signOut(onSignOutComplete: () => void) {
     const token = gapi.client.getToken();
     if (token !== null) {
         google.accounts.oauth2.revoke(token.access_token, () => {
             gapi.client.setToken('');
             appFolderId = null; // Clear cached folder ID
-            onSignOutComplete(false);
+            onSignOutComplete();
             console.log("User signed out and token revoked.");
         });
     } else {
-        onSignOutComplete(false);
+        onSignOutComplete();
         console.log("No user was signed in.");
     }
 }
