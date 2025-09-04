@@ -35,7 +35,7 @@ let appFolderId: string | null = null;
  * @param error The raw error object from a GAPI client promise rejection.
  * @param context A string describing the action that failed (e.g., "saving session").
  */
-const handleGapiError = (error: any, context: string): never => {
+const handleGapiError = (error: any, context: string): never => { // <--- SỬA 1: Thêm kiểu `any` cho `error`
     console.error(`GAPI Error during ${context}:`, error);
     const errorDetails = error?.result?.error || error?.data?.error;
 
@@ -179,7 +179,7 @@ export async function initClient(
                     await updateUserStatus();
                     
                     resolve();
-                } catch (error) {
+                } catch (error: any) { // <--- SỬA PHỤ: Thêm kiểu `any` ở đây cho an toàn
                     if (error && typeof error === 'object' && 'result' in error) {
                         const errorResult = (error as any).result?.error;
                         if (errorResult && errorResult.message && errorResult.message.includes('API not found')) {
@@ -285,7 +285,7 @@ function refreshToken(): Promise<void> {
 async function gapiWithAuthRefresh<T>(apiCall: () => Promise<T>): Promise<T> {
     try {
         return await apiCall();
-    } catch (error: any) {
+    } catch (error: any) { // <--- SỬA 2: Thay `error` thành `error: any`
         // Check if the error is an authentication error (401)
         if (error?.result?.error?.code === 401 || error?.status === 401) {
             console.warn("API request failed with 401. Refreshing token and retrying.");
@@ -515,7 +515,7 @@ export async function downloadDriveFile(fileId: string): Promise<string> {
             const response = await performFetch(token.access_token);
             const buffer = await response.arrayBuffer();
             return arrayBufferToBase64(buffer);
-        } catch (error: any) {
+        } catch (error: any) { // <--- SỬA 3: Thêm `any` cho `error`
             if (error.status === 401) {
                 console.warn("Download fetch failed with 401. Refreshing token and retrying.");
                 await refreshToken();
