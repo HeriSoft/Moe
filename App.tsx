@@ -145,12 +145,10 @@ const App: React.FC = () => {
     if (savedModel) setModel(savedModel);
 
     // Initialize Google Drive Service
-    const handleAuthError = (errorMsg: string) => {
+    googleDriveService.initClient(handleAuthChange, (errorMsg) => {
         setAuthError(errorMsg);
-        setIsAuthReady(true); // It's "ready" in the sense that initialization has completed (with an error)
-    };
-
-    googleDriveService.initClient(handleAuthChange, handleAuthError);
+        setIsAuthReady(true);
+    });
   }, [handleAuthChange]);
   
   // Save active chat ID to localStorage whenever it changes
