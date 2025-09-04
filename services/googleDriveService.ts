@@ -107,13 +107,10 @@ export async function initClient(
         await Promise.all([gapiLoadPromise, gisLoadPromise]);
 
         await new Promise<void>((resolve, reject) => {
-            // THE FIX: Load both 'client' and 'auth2' libraries. 'auth2' is required for userinfo.get().
-            gapi.load('client:auth2', async () => {
+            // FIX: Load only the 'client' library. The deprecated 'auth2' library can cause conflicts with the newer GIS library, leading to authentication errors.
+            gapi.load('client', async () => {
                 try {
                     console.log("Initializing gapi client...");
-                    // THE CRUCIAL FIX: Remove OAuth details from GAPI init.
-                    // This prevents a conflict with the newer GIS library. GAPI's only job
-                    // here is to load the API discovery document using the API key.
                     await gapi.client.init({
                         apiKey: GOOGLE_API_KEY,
                         discoveryDocs: DISCOVERY_DOCS,
@@ -130,8 +127,6 @@ export async function initClient(
 
                         console.log("User has a token. Fetching profile via direct fetch...");
                         try {
-                             // THE ULTIMATE FIX: Instead of a faulty gapi call, use a direct fetch
-                             // to the standard userinfo endpoint. This is more robust.
                             const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                                 headers: {
                                     'Authorization': `Bearer ${token.access_token}`
@@ -144,7 +139,7 @@ export async function initClient(
 
                             const profile = await profileResponse.json();
 
-                            if (!profile || !profile.sub) { // 'sub' is the standard field for user ID
+                            if (!profile || !profile.sub) {
                                 console.warn("Token exists but userinfo is empty. Signing out.");
                                 signOut(() => onAuthChange(false));
                                 return;
@@ -175,9 +170,7 @@ export async function initClient(
                                 return;
                             }
                             console.log("Access token received from sign-in flow.");
-                            // THE CRUCIAL FIX: Explicitly set the token for the gapi client.
                             gapi.client.setToken(tokenResponse);
-                            // After a successful manual sign-in, update the user status
                             updateUserStatus();
                         },
                     });
@@ -188,7 +181,6 @@ export async function initClient(
                     
                     resolve();
                 } catch (error) {
-                    // Check for the specific error related to discovery docs
                     if (error && typeof error === 'object' && 'result' in error) {
                         const errorResult = (error as any).result?.error;
                         if (errorResult && errorResult.message && errorResult.message.includes('API not found')) {
@@ -297,8 +289,6 @@ export async function listSessions(): Promise<ChatSession[]> {
         const folderId = await getAppFolderId();
         const response = await gapi.client.drive.files.list({
             q: `'${folderId}' in parents and trashed=false`,
-            // FIX: Explicitly specify the appDataFolder space to match the granted scope.
-            // Without this, the API defaults to the 'drive' space, causing a 403 error.
             spaces: 'appDataFolder',
             fields: 'files(id, name)',
             pageSize: 1000 // Max 1000 files
