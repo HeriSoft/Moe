@@ -14,6 +14,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/files.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
@@ -33,6 +37,10 @@
     {
       "source": "/api/movies",
       "destination": "/api/movies.js"
+    },
+    {
+      "source": "/api/files",
+      "destination": "/api/files.js"
     },
     {
       "source": "/(.*)",
