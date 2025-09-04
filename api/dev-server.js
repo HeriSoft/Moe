@@ -6,7 +6,8 @@ import http from 'http';
 // Import handlers from the respective files
 import proxyHandler from './proxy.js';
 import adminHandler from './admin.js';
-import moviesHandler from './movies.js'; // Import the new movies handler
+import moviesHandler from './movies.js';
+import filesHandler from './files.js'; // Import the new files handler
 
 const PORT = 3000;
 
@@ -93,8 +94,10 @@ const server = http.createServer(async (req, res) => {
         await callVercelHandler(proxyHandler, req, res);
     } else if (url.pathname.startsWith('/api/admin')) {
         await callVercelHandler(adminHandler, req, res);
-    } else if (url.pathname.startsWith('/api/movies')) { // Add route for movies
+    } else if (url.pathname.startsWith('/api/movies')) {
         await callVercelHandler(moviesHandler, req, res);
+    } else if (url.pathname.startsWith('/api/files')) { // Add route for files
+        await callVercelHandler(filesHandler, req, res);
     } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not Found', details: `API route ${url.pathname} not handled by local dev server.` }));
@@ -109,6 +112,7 @@ server.listen(PORT, () => {
     console.log(`[API] Local Node.js dev server listening on http://localhost:${PORT}`);
     console.log(`[API] Routing /api/proxy -> proxy.js`);
     console.log(`[API] Routing /api/admin -> admin.js`);
-    console.log(`[API] Routing /api/movies -> movies.js`); // Log new route
+    console.log(`[API] Routing /api/movies -> movies.js`);
+    console.log(`[API] Routing /api/files -> files.js`); // Log new route
     console.log(`[Vite] Frontend should be proxying /api requests to this server.`);
 });
