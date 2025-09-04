@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
-import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon } from './icons';
+import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -11,7 +11,8 @@ interface SidebarProps {
   toggleFavorite: (id: string) => void;
   onSettingsClick: () => void;
   onAdminPanelClick: () => void;
-  onAdminMovieModalClick: () => void; // New prop for movie admin
+  onAdminMovieModalClick: () => void;
+  onAdminFilesLibraryClick: () => void; // New prop for files library admin
   isAdmin: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -27,9 +28,10 @@ const UserProfileSection: React.FC<{
   onSignOut: () => void;
   onProfileClick: () => void;
   onAdminPanelClick: () => void;
-  onAdminMovieModalClick: () => void; // New prop for movie admin
+  onAdminMovieModalClick: () => void;
+  onAdminFilesLibraryClick: () => void; // New prop for files library admin
   isAdmin: boolean;
-}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, isAdmin }) => {
+}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
     return (
         <div className="flex flex-col items-center w-full">
@@ -55,6 +57,13 @@ const UserProfileSection: React.FC<{
                 >
                   <TicketIcon className="w-5 h-5" />
                   Movie Management
+                </button>
+                 <button
+                  onClick={onAdminFilesLibraryClick}
+                  className="w-full px-3 py-1.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <DownloadIcon className="w-5 h-5" />
+                  Files Management
                 </button>
               </div>
             )}
@@ -82,7 +91,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -184,6 +193,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
               onProfileClick={onSettingsClick}
               onAdminPanelClick={onAdminPanelClick}
               onAdminMovieModalClick={onAdminMovieModalClick}
+              onAdminFilesLibraryClick={onAdminFilesLibraryClick}
               isAdmin={isAdmin}
           />
       </div>
