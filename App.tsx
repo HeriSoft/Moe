@@ -6,9 +6,11 @@ import { LoginModal } from './components/LoginModal';
 import { GenerationModal } from './components/GenerationModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
-import { AdminMovieModal } from './components/AdminMovieModal'; // New
-import { VideoCinemaModal } from './components/VideoCinemaModal'; // New
-import { MembershipModal } from './components/MembershipModal'; // Import the new modal
+import { AdminMovieModal } from './components/AdminMovieModal';
+import { VideoCinemaModal } from './components/VideoCinemaModal';
+import { MembershipModal } from './components/MembershipModal';
+import { FilesLibraryModal } from './components/FilesLibraryModal'; // New
+import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; // New
 import {
   streamModelResponse,
   logUserLogin,
@@ -74,9 +76,11 @@ const App: React.FC = () => {
 
   // --- New Admin & Membership State ---
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [isAdminMovieModalOpen, setIsAdminMovieModalOpen] = useState(false); // New
-  const [isVideoCinemaModalOpen, setIsVideoCinemaModalOpen] = useState(false); // New
+  const [isAdminMovieModalOpen, setIsAdminMovieModalOpen] = useState(false);
+  const [isVideoCinemaModalOpen, setIsVideoCinemaModalOpen] = useState(false);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
+  const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); // New
+  const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); // New
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -668,6 +672,7 @@ const App: React.FC = () => {
         onSettingsClick={() => setIsSettingsOpen(true)}
         onAdminPanelClick={() => setIsAdminPanelOpen(true)}
         onAdminMovieModalClick={() => setIsAdminMovieModalOpen(true)}
+        onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)} // New
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
@@ -706,6 +711,7 @@ const App: React.FC = () => {
           startNewChat={startNewChat}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
           onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
+          onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)} // New
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
         />
@@ -756,6 +762,18 @@ const App: React.FC = () => {
         isOpen={isVideoCinemaModalOpen}
         onClose={() => setIsVideoCinemaModalOpen(false)}
         userProfile={userProfile}
+      />
+      <FilesLibraryModal
+        isOpen={isFilesLibraryOpen}
+        onClose={() => setIsFilesLibraryOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
+      />
+      <AdminFilesLibraryModal
+        isOpen={isAdminFilesLibraryOpen}
+        onClose={() => setIsAdminFilesLibraryOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
       />
       <MembershipModal
         isOpen={isMembershipModalOpen}
