@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, DownloadIcon, PuzzlePieceIcon, WrenchScrewdriverIcon, CubeIcon, DocumentIcon, ClockIcon } from './icons';
+import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, DownloadIcon, PuzzlePieceIcon, WrenchScrewdriverIcon, ArchiveBoxIcon, DocumentIcon, ClockIcon } from './icons';
 import type { UserProfile, FileItem, FilePart } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
@@ -13,7 +13,7 @@ const FilterButton: React.FC<{ active: boolean; onClick: () => void; children: R
         className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${
             active 
             ? 'bg-indigo-600 text-white' 
-            : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'
+            : 'bg-slate-200 text-slate-700 dark:text-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'
         }`}
     >
         {children}
@@ -106,7 +106,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
     const getFileIcon = (tags: string[]) => {
         if (tags.includes('games')) return <PuzzlePieceIcon className="w-full h-full text-slate-500" />;
         if (tags.includes('softwares')) return <WrenchScrewdriverIcon className="w-full h-full text-slate-500" />;
-        if (tags.includes('others')) return <CubeIcon className="w-full h-full text-slate-500" />;
+        if (tags.includes('others')) return <ArchiveBoxIcon className="w-full h-full text-slate-500" />;
         return <DocumentIcon className="w-full h-full text-slate-500" />;
     };
 
@@ -119,22 +119,22 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
-      <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-[95vw] h-[95vh] max-w-6xl flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-[#171725] text-slate-800 dark:text-slate-200 rounded-xl shadow-2xl w-[95vw] h-[95vh] max-w-6xl flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
-          <h2 className="text-2xl font-bold">Files Library</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Files Library</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><CloseIcon className="w-7 h-7" /></button>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-4 mb-4 flex-shrink-0">
              <form onSubmit={handleSearch} className="relative flex-grow">
-                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search files by name..." className="w-full bg-slate-100 dark:bg-[#2d2d40] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search files by name..." className="w-full bg-slate-100 dark:bg-[#2d2d40] border border-slate-300 dark:border-slate-600 rounded-lg py-2 pl-4 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm dark:text-white dark:placeholder-slate-400" />
                 <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-indigo-500">
                     <MagnifyingGlassIcon className="w-5 h-5"/>
                 </button>
             </form>
             <div className="flex items-center gap-2">
                 <input type="checkbox" id="vip-toggle" checked={showVip} onChange={e => setShowVip(e.target.checked)} className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500" />
-                <label htmlFor="vip-toggle" className="text-sm font-medium">Show VIP Files</label>
+                <label htmlFor="vip-toggle" className="text-sm font-medium text-slate-700 dark:text-slate-300">Show VIP Files</label>
             </div>
         </div>
 
@@ -149,7 +149,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
         <div className="flex-grow overflow-y-auto -mr-2 pr-2">
             {isLoading && files.length === 0 && <div className="flex justify-center items-center h-full"><RefreshIcon className="w-8 h-8 animate-spin" /></div>}
             {error && <div className="text-center text-red-500">{error}</div>}
-            {!isLoading && files.length === 0 && <div className="text-center text-slate-500">No files found.</div>}
+            {!isLoading && files.length === 0 && <div className="text-center text-slate-500 dark:text-slate-400">No files found.</div>}
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {files.map(file => (
@@ -160,8 +160,8 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                             </div>
                             <div className="flex-grow min-w-0">
                                 <h3 className="font-bold truncate text-slate-800 dark:text-white">{file.name}</h3>
-                                {file.version && <p className="text-xs text-slate-500">Version: {file.version}</p>}
-                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-1"><ClockIcon className="w-3 h-3"/> {new Date(file.created_at!).toLocaleDateString()}</p>
+                                {file.version && <p className="text-xs text-slate-500 dark:text-slate-400">Version: {file.version}</p>}
+                                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1"><ClockIcon className="w-3 h-3"/> {new Date(file.created_at!).toLocaleDateString()}</p>
                             </div>
                         </div>
                         <div className="mt-4 flex justify-between items-center">
@@ -171,7 +171,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                         {expandedFileId === file.id && (
                             <div className="mt-3 pt-3 border-t border-slate-300 dark:border-slate-600 space-y-2">
                                 {file.parts.map(part => (
-                                    <a href={part.download_url} target="_blank" rel="noopener noreferrer" key={part.id} className="flex justify-between items-center p-2 bg-slate-200 dark:bg-slate-800 rounded-md hover:bg-slate-300 dark:hover:bg-slate-700">
+                                    <a href={part.download_url} target="_blank" rel="noopener noreferrer" key={part.id} className="flex justify-between items-center p-2 bg-slate-200 dark:bg-slate-800 rounded-md hover:bg-slate-300 dark:hover:bg-slate-700 dark:text-slate-200">
                                         <span>{part.part_name || `Part ${part.part_number}`}</span>
                                         <DownloadIcon className="w-5 h-5"/>
                                     </a>
