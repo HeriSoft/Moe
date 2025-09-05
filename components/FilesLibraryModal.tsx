@@ -61,7 +61,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                 throw new Error(errData.details || 'Failed to fetch files');
             }
             const data = await response.json();
-            setFiles(page === 1 ? data.files : prev => [...prev, ...data.files]);
+            setFiles(data.files || []);
             setTotalPages(data.totalPages || 1);
             setCurrentPage(data.currentPage || 1);
         } catch (e) {
@@ -104,7 +104,6 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                 return;
             }
 
-            // Check if info is already shown (i.e., user is clicking "Download")
             if (shownVipInfoFileIds.has(file.id)) {
                 try {
                     const response = await fetch(FILES_API_ENDPOINT, {
@@ -116,30 +115,16 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.details || 'Could not get download links.');
 
-                    const realUrls = result.urls || [];
-                    if (realUrls.length === 0) throw new Error('No valid download links found.');
+                    result.urls?.forEach((url: string) => window.open(url, '_blank'));
 
-                    if (realUrls.length === 1) {
-                        window.open(realUrls[0], '_blank');
-                    } else {
-                        const partsWithRealUrls = file.parts.map((part, index) => ({
-                            ...part,
-                            download_url: realUrls[index] || ''
-                        }));
-                        const updatedFile = { ...file, parts: partsWithRealUrls };
-                        setFiles(prev => prev.map(f => f.id === file.id ? updatedFile : f));
-                        setExpandedFileId(expandedFileId === file.id ? null : file.id);
-                    }
                 } catch (e) {
                     const errorMessage = e instanceof Error ? e.message : 'An error occurred while fetching links.';
                     setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
                 }
             } else {
-                // First click: "Show". Reveal the info and change button state.
                 setShownVipInfoFileIds(prev => new Set(prev).add(file.id));
             }
         } else {
-            // Non-VIP files logic
             if (file.parts.length > 1) {
                 setExpandedFileId(expandedFileId === file.id ? null : file.id);
             } else if (file.parts.length === 1) {
@@ -153,6 +138,79 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
         if (tags.includes('softwares')) return <WrenchScrewdriverIcon className="w-full h-full text-slate-500" />;
         if (tags.includes('others')) return <ArchiveBoxIcon className="w-full h-full text-slate-500" />;
         return <DocumentIcon className="w-full h-full text-slate-500" />;
+    };
+    
+    const renderPagination = () => {
+        if (totalPages <= 1) return null;
+
+        const pageNumbers = [];
+        const maxPagesToShow = 5; 
+        const pageBuffer = 2;
+
+        if (totalPages <= maxPagesToShow + 2) {
+            for (let i = 1; i <= totalPages; i++) {
+                pageNumbers.push(i);
+            }
+        } else {
+            pageNumbers.push(1);
+            if (currentPage > pageBuffer + 2) {
+                pageNumbers.push('...');
+            }
+
+            let start = Math.max(2, currentPage - pageBuffer);
+            let end = Math.min(totalPages - 1, currentPage + pageBuffer);
+            
+            for (let i = start; i <= end; i++) {
+                pageNumbers.push(i);
+            }
+            
+            if (currentPage < totalPages - pageBuffer - 1) {
+                pageNumbers.push('...');
+            }
+            pageNumbers.push(totalPages);
+        }
+
+        return (
+            <div className="flex justify-center items-center gap-2 mt-4 flex-shrink-0">
+                <button
+                    onClick={() => fetchFiles(currentPage - 1, searchTerm, filter, showVip)}
+                    disabled={currentPage <= 1 || isLoading}
+                    className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded disabled:opacity-50 text-sm"
+                    aria-label="Go to previous page"
+                >
+                    Back
+                </button>
+                {pageNumbers.map((page, index) =>
+                    typeof page === 'number' ? (
+                        <button
+                            key={`${page}-${index}`}
+                            onClick={() => fetchFiles(page, searchTerm, filter, showVip)}
+                            className={`px-3 py-1 rounded text-sm font-semibold ${
+                                currentPage === page
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'
+                            }`}
+                            aria-current={currentPage === page ? 'page' : undefined}
+                            aria-label={`Go to page ${page}`}
+                        >
+                            {page}
+                        </button>
+                    ) : (
+                        <span key={`ellipsis-${index}`} className="px-3 py-1 text-slate-500" aria-hidden="true">
+                            ...
+                        </span>
+                    )
+                )}
+                <button
+                    onClick={() => fetchFiles(currentPage + 1, searchTerm, filter, showVip)}
+                    disabled={currentPage >= totalPages || isLoading}
+                    className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded disabled:opacity-50 text-sm"
+                    aria-label="Go to next page"
+                >
+                    Next
+                </button>
+            </div>
+        );
     };
 
     useEffect(() => {
@@ -238,6 +296,8 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                 ))}
             </div>
         </div>
+
+        {renderPagination()}
 
       </div>
     </div>
