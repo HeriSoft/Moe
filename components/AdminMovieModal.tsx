@@ -104,7 +104,7 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
           setDescription(editingMovie.description);
           setActors(editingMovie.actors);
           setThumbnail({ id: editingMovie.thumbnail_drive_id, name: 'Existing Thumbnail' });
-          setEpisodes(editingMovie.episodes.length > 0 ? editingMovie.episodes : [{ episode_number: 1, video_drive_id: '' }]);
+          setEpisodes(editingMovie.episodes && editingMovie.episodes.length > 0 ? editingMovie.episodes : [{ episode_number: 1, video_drive_id: '' }]);
       } else {
           resetAddForm();
       }
