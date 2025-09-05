@@ -61,10 +61,17 @@ async function createTables() {
                 is_vip BOOLEAN DEFAULT false,
                 download_count INTEGER DEFAULT 0,
                 vip_unlock_info TEXT,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // This acts as a simple migration to ensure the column exists for old schemas.
+        try {
+            await pool.query('ALTER TABLE files ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;');
+        } catch (e) {
+            if (e.code !== '42P07') { // 42P07 is duplicate_column in PostgreSQL
+                throw e;
+            }
+        }
         await pool.query(`
             CREATE TABLE IF NOT EXISTS file_parts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
