@@ -38,6 +38,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
     const [totalPages, setTotalPages] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [shownVipInfoFileIds, setShownVipInfoFileIds] = useState<Set<string>>(new Set());
 
     const fetchFiles = useCallback(async (page: number, search: string, currentFilter: FileFilter, vip: boolean) => {
         if (!userProfile) return;
@@ -73,6 +74,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
     useEffect(() => {
         if (isOpen) {
             fetchFiles(1, searchTerm, filter, showVip);
+            setShownVipInfoFileIds(new Set()); // Reset shown info on open
         }
     }, [isOpen, searchTerm, filter, showVip, fetchFiles]);
 
@@ -102,41 +104,39 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                 return;
             }
 
-            // User is authorized, fetch the real URLs from the backend
-            try {
-                const response = await fetch(FILES_API_ENDPOINT, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-User-Email': userProfile.email
-                    },
-                    body: JSON.stringify({ action: 'get_vip_file_urls', fileId: file.id }),
-                });
+            // Check if info is already shown (i.e., user is clicking "Download")
+            if (shownVipInfoFileIds.has(file.id)) {
+                try {
+                    const response = await fetch(FILES_API_ENDPOINT, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                        body: JSON.stringify({ action: 'get_vip_file_urls', fileId: file.id }),
+                    });
 
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.details || 'Could not get download links.');
-                }
-                
-                const partsWithRealUrls = file.parts.map((part, index) => ({
-                    ...part,
-                    download_url: result.urls[index] || ''
-                }));
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.details || 'Could not get download links.');
 
-                const updatedFile = { ...file, parts: partsWithRealUrls };
-                // Update the file in the local state so the new URLs are available
-                setFiles(prevFiles => prevFiles.map(f => f.id === file.id ? updatedFile : f));
-                
-                if (updatedFile.parts.length === 1 && updatedFile.parts[0].download_url) {
-                    window.open(updatedFile.parts[0].download_url, '_blank');
-                } else if (updatedFile.parts.length > 1) {
-                    setExpandedFileId(expandedFileId === file.id ? null : file.id);
-                } else {
-                    throw new Error('No valid download links found for this file.');
+                    const realUrls = result.urls || [];
+                    if (realUrls.length === 0) throw new Error('No valid download links found.');
+
+                    if (realUrls.length === 1) {
+                        window.open(realUrls[0], '_blank');
+                    } else {
+                        const partsWithRealUrls = file.parts.map((part, index) => ({
+                            ...part,
+                            download_url: realUrls[index] || ''
+                        }));
+                        const updatedFile = { ...file, parts: partsWithRealUrls };
+                        setFiles(prev => prev.map(f => f.id === file.id ? updatedFile : f));
+                        setExpandedFileId(expandedFileId === file.id ? null : file.id);
+                    }
+                } catch (e) {
+                    const errorMessage = e instanceof Error ? e.message : 'An error occurred while fetching links.';
+                    setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
                 }
-            } catch (e) {
-                const errorMessage = e instanceof Error ? e.message : 'An error occurred while fetching download links.';
-                setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+            } else {
+                // First click: "Show". Reveal the info and change button state.
+                setShownVipInfoFileIds(prev => new Set(prev).add(file.id));
             }
         } else {
             // Non-VIP files logic
@@ -209,9 +209,20 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                                 <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1"><ClockIcon className="w-3 h-3"/> {new Date(file.created_at!).toLocaleDateString()}</p>
                             </div>
                         </div>
-                        <div className="mt-4 flex justify-between items-center">
-                            {file.is_vip && <span className="text-xs font-bold text-yellow-500">VIP</span>}
-                            <button onClick={() => handleDownload(file)} className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-semibold hover:bg-indigo-700">Download</button>
+                        <div className="mt-4 flex justify-between items-center min-h-[36px]">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {file.is_vip && <span className="text-xs font-bold text-yellow-500">VIP</span>}
+                                {file.is_vip && shownVipInfoFileIds.has(file.id) && file.vip_unlock_info && (
+                                    <span className="text-xs text-green-400 font-mono bg-green-500/10 p-1 rounded break-all">{file.vip_unlock_info}</span>
+                                )}
+                            </div>
+                             {file.is_vip ? (
+                                <button onClick={() => handleDownload(file)} className="ml-auto px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold hover:bg-red-700">
+                                    {shownVipInfoFileIds.has(file.id) ? 'Download' : 'Show'}
+                                </button>
+                             ) : (
+                                <button onClick={() => handleDownload(file)} className="ml-auto px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-semibold hover:bg-indigo-700">Download</button>
+                             )}
                         </div>
                         {expandedFileId === file.id && (
                             <div className="mt-3 pt-3 border-t border-slate-300 dark:border-slate-600 space-y-2">
