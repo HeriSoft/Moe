@@ -198,6 +198,44 @@ export default async function handler(req, res) {
                 }
             }
 
+            case 'update_file': {
+                if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
+                const { fileId, name, version, icon_drive_id, tags, is_vip, vip_unlock_info, parts } = payload;
+                if (!fileId || !name || !parts || parts.length === 0) {
+                    return res.status(400).json({ error: 'File ID, name, and at least one part are required.' });
+                }
+
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+                    
+                    await client.query(
+                        `UPDATE files SET 
+                            name = $1, version = $2, icon_drive_id = $3, tags = $4, 
+                            is_vip = $5, vip_unlock_info = $6, updated_at = CURRENT_TIMESTAMP
+                         WHERE id = $7;`,
+                        [name, version, icon_drive_id, tags, is_vip, vip_unlock_info, fileId]
+                    );
+                    
+                    await client.query('DELETE FROM file_parts WHERE file_id = $1;', [fileId]);
+
+                    for (const part of parts) {
+                        await client.query(
+                            `INSERT INTO file_parts (file_id, part_number, part_name, download_url) VALUES ($1, $2, $3, $4);`,
+                            [fileId, part.part_number, part.part_name, part.download_url]
+                        );
+                    }
+
+                    await client.query('COMMIT');
+                    return res.status(200).json({ success: true, fileId });
+                } catch (e) {
+                    await client.query('ROLLBACK');
+                    throw e;
+                } finally {
+                    client.release();
+                }
+            }
+
             case 'delete_file': {
                 if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
                 const { fileId } = payload;
