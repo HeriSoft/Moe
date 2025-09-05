@@ -32,6 +32,28 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
+// --- DB TABLE INITIALIZATION ---
+async function createTables() {
+    try {
+        await sql`
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                image_url TEXT,
+                subscription_status VARCHAR(50) DEFAULT 'inactive',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+        console.log("Table 'users' is ready.");
+    } catch (error) {
+        console.error("Error creating users table:", error);
+        throw new Error("Failed to initialize database tables.");
+    }
+}
+let isDbInitialized = false;
+
+
 // --- Pro Feature Check ---
 async function isUserPro(email) {
     if (!email) return false;
@@ -171,6 +193,19 @@ async function handleOpenAIStream(res, apiUrl, apiKey, payload, isWebSearchEnabl
 
 // --- Main Handler ---
 export default async function handler(req, res) {
+    // --- DB INITIALIZATION ---
+    if (!isDbInitialized) {
+        try {
+            await createTables();
+            isDbInitialized = true;
+        } catch (initError) {
+            console.error("Database initialization failed inside handler:", initError);
+            return res.status(503).json({
+                error: 'Service Unavailable',
+                details: 'The database could not be initialized. Please try again later.'
+            });
+        }
+    }
     // --- IP Blocking Middleware ---
     if (isRedisConfigured) {
         const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress;
@@ -217,10 +252,29 @@ export default async function handler(req, res) {
 
         switch (action) {
             case 'logLogin': {
-                if (userEmail && isRedisConfigured) {
-                    await logAction(userEmail, 'logged in');
-                    const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress;
-                    await redis.hset('user_ips', userEmail, userIp);
+                const { user } = payload;
+                const userEmail = user?.email;
+                if (userEmail) {
+                    // Log to Redis
+                    if (isRedisConfigured) {
+                        await logAction(userEmail, 'logged in');
+                        const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress;
+                        await redis.hset('user_ips', userEmail, userIp);
+                    }
+                    
+                    // Upsert user into PostgreSQL database
+                    try {
+                        await sql`
+                            INSERT INTO users (email, name, image_url)
+                            VALUES (${user.email}, ${user.name}, ${user.imageUrl})
+                            ON CONFLICT (email) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                image_url = EXCLUDED.image_url;
+                        `;
+                    } catch (dbError) {
+                        console.error("Database error during user login upsert:", dbError);
+                        // Don't fail the whole login for this, just log it.
+                    }
                 }
                 return res.status(200).json({ success: true });
             }
