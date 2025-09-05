@@ -156,8 +156,16 @@ export default async function handler(req, res) {
                 const limitNum = parseInt(limit, 10);
                 const offset = (pageNum - 1) * limitNum;
                 
+                const baseSelect = `
+                    SELECT m.*, COALESCE(e.episodes, '[]'::json) as episodes FROM movies m
+                    LEFT JOIN (
+                        SELECT movie_id, json_agg(json_build_object('id', id, 'episode_number', episode_number, 'title', title, 'video_drive_id', video_drive_id) ORDER BY episode_number) as episodes
+                        FROM episodes GROUP BY movie_id
+                    ) e ON m.id = e.movie_id
+                `;
+                
                 const moviesQuery = {
-                    text: `SELECT * FROM movies ORDER BY created_at DESC LIMIT $1 OFFSET $2;`,
+                    text: `${baseSelect} ORDER BY m.created_at DESC LIMIT $1 OFFSET $2;`,
                     values: [limitNum, offset]
                 };
                 const countQuery = { text: `SELECT COUNT(*) FROM movies;` };
