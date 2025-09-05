@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, TrashIcon, PlusIcon, TicketIcon, PhotoIcon, EditIcon } from './icons';
+import { CloseIcon, TrashIcon, PlusIcon, DownloadIcon, PhotoIcon, EditIcon } from './icons';
 import type { UserProfile, FileItem, FilePart } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -32,6 +32,8 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
 
   // State for List
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [editingFile, setEditingFile] = useState<FileItem | null>(null);
 
 
@@ -44,16 +46,18 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
   const [vipUnlockInfo, setVipUnlockInfo] = useState('');
   const [parts, setParts] = useState<Partial<FilePart>[]>([{ part_number: 1, download_url: '' }]);
 
-  const fetchFiles = useCallback(async () => {
+  const fetchFiles = useCallback(async (page: number = 1) => {
     if (!userProfile) return;
     setIsLoading(true);
     setError(null);
     try {
-        const params = new URLSearchParams({ action: 'get_public_files', filter: 'all', showVip: 'true', limit: '1000' });
+        const params = new URLSearchParams({ action: 'get_public_files', filter: 'all', showVip: 'true', limit: '20', page: String(page) });
         const response = await fetch(`${FILES_API_ENDPOINT}?${params.toString()}`, { headers: { 'X-User-Email': userProfile.email } });
         if (!response.ok) throw new Error('Failed to fetch files');
         const data = await response.json();
         setFiles(data.files);
+        setTotalPages(data.totalPages);
+        setCurrentPage(data.currentPage);
     } catch (e) {
         setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -81,11 +85,11 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
 
   useEffect(() => {
     if (isOpen && activeTab === 'list') {
-      fetchFiles();
+      fetchFiles(currentPage);
       setEditingFile(null); // Ensure editing state is cleared
       resetForm();
     }
-  }, [isOpen, activeTab, fetchFiles, resetForm]);
+  }, [isOpen, activeTab, currentPage, fetchFiles, resetForm]);
 
   useEffect(() => {
     if (editingFile && activeTab === 'add') {
@@ -159,12 +163,23 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
           const result = await response.json();
           if (!response.ok) throw new Error(result.details || 'Failed to delete file');
           setNotifications(prev => [`Successfully deleted: ${fileName}`, ...prev]);
-          fetchFiles();
+          fetchFiles(currentPage); // Refresh list on current page
       } catch (e) {
           setError(e instanceof Error ? e.message : 'Unknown error');
       } finally {
           setIsLoading(false);
       }
+  };
+  
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+    return (
+        <div className="flex justify-center items-center gap-2 mt-4 flex-shrink-0">
+            <button onClick={() => fetchFiles(currentPage - 1)} disabled={currentPage <= 1 || isLoading} className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded disabled:opacity-50 text-sm">Back</button>
+            <span className="text-sm text-slate-600 dark:text-slate-400">Page {currentPage} of {totalPages}</span>
+            <button onClick={() => fetchFiles(currentPage + 1)} disabled={currentPage >= totalPages || isLoading} className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded disabled:opacity-50 text-sm">Next</button>
+        </div>
+    );
   };
 
   useEffect(() => {
@@ -178,7 +193,7 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose}>
       <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
-          <h2 className="text-2xl font-bold flex items-center gap-2"><TicketIcon className="w-7 h-7"/>Files Management</h2>
+          <h2 className="text-2xl font-bold flex items-center gap-2"><DownloadIcon className="w-7 h-7"/>Files Management</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><CloseIcon className="w-7 h-7" /></button>
         </div>
         
@@ -191,22 +206,25 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
 
         <div className="flex-grow overflow-y-auto mt-4 pr-2 -mr-4">
           {activeTab === 'list' && (
-            <div className="space-y-2">
-              {isLoading && <p>Loading...</p>}
-              {files.map((file: FileItem) => (
-                  <div key={file.id} className="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
-                      <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 flex-shrink-0">{file.icon_drive_id ? <img src={googleDriveService.getDriveFilePublicUrl(file.icon_drive_id)} alt=""/> : <PhotoIcon/>}</div>
-                          <span className="truncate">{file.name}</span>
-                          {file.is_vip && <span className="text-xs font-bold text-yellow-500 flex-shrink-0">VIP</span>}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => handleEditClick(file)} className="p-2 text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full"><EditIcon className="w-5 h-5"/></button>
-                        <button onClick={() => handleDeleteFile(file.id, file.name)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full"><TrashIcon className="w-5 h-5"/></button>
-                      </div>
-                  </div>
-              ))}
-            </div>
+            <>
+              <div className="space-y-2">
+                {isLoading && files.length === 0 && <p>Loading...</p>}
+                {files.map((file: FileItem) => (
+                    <div key={file.id} className="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 flex-shrink-0">{file.icon_drive_id ? <img src={googleDriveService.getDriveFilePublicUrl(file.icon_drive_id)} alt=""/> : <PhotoIcon/>}</div>
+                            <span className="truncate">{file.name}</span>
+                            {file.is_vip && <span className="text-xs font-bold text-yellow-500 flex-shrink-0">VIP</span>}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button onClick={() => handleEditClick(file)} className="p-2 text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full"><EditIcon className="w-5 h-5"/></button>
+                          <button onClick={() => handleDeleteFile(file.id, file.name)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full"><TrashIcon className="w-5 h-5"/></button>
+                        </div>
+                    </div>
+                ))}
+              </div>
+              {renderPagination()}
+            </>
           )}
           {activeTab === 'add' && (
             <form onSubmit={handleSubmitFile} className="space-y-4 max-w-3xl mx-auto">
