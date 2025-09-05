@@ -214,7 +214,7 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="w-8 h-8 flex-shrink-0">{file.icon_drive_id ? <img src={googleDriveService.getDriveFilePublicUrl(file.icon_drive_id)} alt=""/> : <PhotoIcon/>}</div>
                             <span className="truncate">{file.name}</span>
-                            {file.is_vip && <span className="text-xs font-bold text-yellow-500 flex-shrink-0">VIP</span>}
+                            {file.is_vip && <span className="vip-tag-shine">VIP</span>}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <button onClick={() => handleEditClick(file)} className="p-2 text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full"><EditIcon className="w-5 h-5"/></button>
@@ -259,7 +259,36 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
           )}
         </div>
       </div>
-       <style>{`.input-style { color: inherit; background-color: transparent; border: 1px solid #4a5568; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .input-style:focus { outline: none; border-color: #6366f1; } .label-style { display: block; font-size: 0.875rem; font-weight: 500; }`}</style>
+       <style>{`
+        .input-style { color: inherit; background-color: transparent; border: 1px solid #4a5568; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .input-style:focus { outline: none; border-color: #6366f1; } .label-style { display: block; font-size: 0.875rem; font-weight: 500; }
+        @keyframes shine-vip {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .vip-tag-shine {
+            position: relative;
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 0.75rem; /* 12px */
+            font-weight: 700;
+            color: #1e293b; /* slate-800 */
+            background: linear-gradient(110deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
+            border-radius: 0.375rem; /* rounded-md */
+            overflow: hidden;
+            -webkit-mask-image: -webkit-radial-gradient(white, black);
+        }
+        .vip-tag-shine::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
+            animation: shine-vip 3s ease-in-out infinite;
+            animation-delay: 1s;
+        }
+        `}</style>
     </div>
   );
 };
