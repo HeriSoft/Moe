@@ -45,10 +45,18 @@ async function createTables() {
                 description TEXT,
                 actors TEXT,
                 thumbnail_drive_id VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // This acts as a simple migration to ensure the column exists for old schemas.
+        try {
+            await pool.query('ALTER TABLE movies ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;');
+        } catch (e) {
+            if (e.code !== '42P07') { // 42P07 is duplicate_column in PostgreSQL
+                throw e;
+            }
+        }
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS episodes (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
