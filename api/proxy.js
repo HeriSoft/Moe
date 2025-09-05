@@ -3,7 +3,7 @@
 // It uses ioredis for logging and IP management.
 
 import { GoogleGenAI } from "@google/genai";
-import { sql } from '@vercel/postgres';
+import pg from 'pg';
 import { extractRawText } from "mammoth";
 import JSZip from "jszip";
 import { createRequire } from "module";
@@ -32,10 +32,21 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
+// --- Database Connection Setup (with SSL fix) ---
+const { Pool } = pg;
+let connectionString = process.env.POSTGRES_URL;
+if (connectionString) {
+    connectionString = connectionString.includes('sslmode=')
+        ? connectionString.replace(/sslmode=[^&]*/, 'sslmode=no-verify')
+        : `${connectionString}${connectionString.includes('?') ? '&' : '?'}sslmode=no-verify`;
+}
+const pool = new Pool({ connectionString });
+
+
 // --- DB TABLE INITIALIZATION ---
 async function createTables() {
     try {
-        await sql`
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -44,7 +55,7 @@ async function createTables() {
                 subscription_status VARCHAR(50) DEFAULT 'inactive',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
-        `;
+        `);
         console.log("Table 'users' is ready.");
     } catch (error) {
         console.error("Error creating users table:", error);
@@ -73,16 +84,14 @@ async function isUserPro(email) {
     // 2. If not in cache, check database
     let isPro = false;
     try {
-        // This requires VERCEL_POSTGRES_URL (and other related vars) to be set in your environment
-        const { rows } = await sql`
-            SELECT subscription_status FROM users 
-            WHERE email = ${email} AND subscription_status = 'active';
-        `;
+        const { rows } = await pool.query(
+            `SELECT subscription_status FROM users WHERE email = $1 AND subscription_status = 'active';`,
+            [email]
+        );
         isPro = rows.length > 0;
     } catch (e) {
         console.error("Database check error:", e.message);
         // If DB check fails, deny pro access to be safe and prevent unexpected costs.
-        // This could happen if the DB isn't configured yet.
         return false;
     }
 
@@ -264,13 +273,13 @@ export default async function handler(req, res) {
                     
                     // Upsert user into PostgreSQL database
                     try {
-                        await sql`
+                        await pool.query(`
                             INSERT INTO users (email, name, image_url)
-                            VALUES (${user.email}, ${user.name}, ${user.imageUrl})
+                            VALUES ($1, $2, $3)
                             ON CONFLICT (email) DO UPDATE SET
                                 name = EXCLUDED.name,
                                 image_url = EXCLUDED.image_url;
-                        `;
+                        `, [user.email, user.name, user.imageUrl]);
                     } catch (dbError) {
                         console.error("Database error during user login upsert:", dbError);
                         // Don't fail the whole login for this, just log it.
