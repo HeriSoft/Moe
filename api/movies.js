@@ -45,7 +45,8 @@ async function createTables() {
                 description TEXT,
                 actors TEXT,
                 thumbnail_drive_id VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
         await pool.query(`
@@ -204,6 +205,50 @@ export default async function handler(req, res) {
                 }
             }
             
+            case 'update_movie': {
+                if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
+                const { movieId, title, description, actors, thumbnail_drive_id, episodes } = payload;
+                if (!movieId || !title || !thumbnail_drive_id || !episodes || episodes.length === 0) {
+                    return res.status(400).json({ error: 'Movie ID, title, thumbnail, and at least one episode are required for an update.' });
+                }
+
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+
+                    // Update the movie details
+                    await client.query(
+                        `UPDATE movies SET
+                            title = $1,
+                            description = $2,
+                            actors = $3,
+                            thumbnail_drive_id = $4,
+                            updated_at = CURRENT_TIMESTAMP
+                         WHERE id = $5;`,
+                        [title, description, actors, thumbnail_drive_id, movieId]
+                    );
+                    
+                    // Delete old episodes and insert new ones
+                    await client.query('DELETE FROM episodes WHERE movie_id = $1;', [movieId]);
+
+                    for (const ep of episodes) {
+                        await client.query(
+                            `INSERT INTO episodes (movie_id, episode_number, title, video_drive_id) VALUES ($1, $2, $3, $4);`,
+                            [movieId, ep.episode_number, ep.title || null, ep.video_drive_id]
+                        );
+                    }
+                    
+                    await client.query('COMMIT');
+                    if (redis) await redis.flushdb(); // Clear cache on data change
+                    return res.status(200).json({ success: true, movieId });
+                } catch (e) {
+                    await client.query('ROLLBACK');
+                    throw e;
+                } finally {
+                    client.release();
+                }
+            }
+
             case 'delete_movie': {
                 if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
                 const { movieId } = payload;
