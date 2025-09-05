@@ -4,6 +4,7 @@ import type { UserProfile, FileItem, FilePart } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const FILES_API_ENDPOINT = '/api/files';
+const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
 type FileFilter = 'recent' | 'most_downloaded' | 'games' | 'softwares' | 'others';
 
@@ -88,18 +89,62 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
     };
     
     const handleDownload = async (file: FileItem) => {
-        if (file.is_vip && !userProfile?.isPro) {
-            setNotifications(prev => ["Password/URL unlock only for VIP.", ...prev]);
-            return;
-        }
+        const isAdmin = userProfile?.email === ADMIN_EMAIL;
+        const isAuthorized = userProfile?.isPro || isAdmin;
 
-        if (file.parts.length > 1) {
-            setExpandedFileId(expandedFileId === file.id ? null : file.id);
-            return;
-        }
+        if (file.is_vip) {
+            if (!userProfile) {
+                setNotifications(prev => ["Please sign in to download VIP files.", ...prev.slice(0, 19)]);
+                return;
+            }
+            if (!isAuthorized) {
+                setNotifications(prev => ["This is a VIP file. A Pro account is required to download.", ...prev.slice(0, 19)]);
+                return;
+            }
 
-        if (file.parts.length === 1) {
-            window.open(file.parts[0].download_url, '_blank');
+            // User is authorized, fetch the real URLs from the backend
+            try {
+                const response = await fetch(FILES_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Email': userProfile.email
+                    },
+                    body: JSON.stringify({ action: 'get_vip_file_urls', fileId: file.id }),
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.details || 'Could not get download links.');
+                }
+                
+                const partsWithRealUrls = file.parts.map((part, index) => ({
+                    ...part,
+                    download_url: result.urls[index] || ''
+                }));
+
+                const updatedFile = { ...file, parts: partsWithRealUrls };
+                // Update the file in the local state so the new URLs are available
+                setFiles(prevFiles => prevFiles.map(f => f.id === file.id ? updatedFile : f));
+                
+                if (updatedFile.parts.length === 1 && updatedFile.parts[0].download_url) {
+                    window.open(updatedFile.parts[0].download_url, '_blank');
+                } else if (updatedFile.parts.length > 1) {
+                    setExpandedFileId(expandedFileId === file.id ? null : file.id);
+                } else {
+                    throw new Error('No valid download links found for this file.');
+                }
+            } catch (e) {
+                const errorMessage = e instanceof Error ? e.message : 'An error occurred while fetching download links.';
+                setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+            }
+        } else {
+            // Non-VIP files logic
+            if (file.parts.length > 1) {
+                setExpandedFileId(expandedFileId === file.id ? null : file.id);
+            } else if (file.parts.length === 1) {
+                window.open(file.parts[0].download_url, '_blank');
+            }
         }
     };
     
