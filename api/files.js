@@ -42,6 +42,16 @@ async function isUserPro(email) {
 async function createTables() {
     try {
         await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                image_url TEXT,
+                subscription_status VARCHAR(50) DEFAULT 'inactive',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS files (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name VARCHAR(255) NOT NULL,
@@ -65,7 +75,7 @@ async function createTables() {
                 UNIQUE(file_id, part_number)
             );
         `);
-        console.log("Tables 'files' and 'file_parts' are ready.");
+        console.log("Tables 'users', 'files', and 'file_parts' are ready.");
     } catch (error) {
         console.error("Error creating tables:", error);
         throw new Error("Failed to initialize database tables.");
