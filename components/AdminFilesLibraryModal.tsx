@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, TrashIcon, PlusIcon, TicketIcon, PhotoIcon } from './icons';
+import { CloseIcon, TrashIcon, PlusIcon, TicketIcon, PhotoIcon, EditIcon } from './icons';
 import type { UserProfile, FileItem, FilePart } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -32,8 +32,10 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
 
   // State for List
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [editingFile, setEditingFile] = useState<FileItem | null>(null);
 
-  // State for Add
+
+  // State for Add/Edit
   const [name, setName] = useState('');
   const [version, setVersion] = useState('');
   const [icon, setIcon] = useState<{ id: string; name: string } | null>(null);
@@ -59,19 +61,45 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
     }
   }, [userProfile]);
   
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
       setName(''); setVersion(''); setIcon(null); setSelectedTags([]);
       setIsVip(false); setVipUnlockInfo(''); setParts([{ part_number: 1, download_url: '' }]);
+  }, []);
+
+  const handleTabChange = (tab: 'list' | 'add') => {
+      if (activeTab === 'add' && editingFile) {
+          setEditingFile(null);
+          resetForm();
+      }
+      setActiveTab(tab);
+  };
+  
+  const handleEditClick = (file: FileItem) => {
+      setEditingFile(file);
+      setActiveTab('add');
   };
 
   useEffect(() => {
     if (isOpen && activeTab === 'list') {
       fetchFiles();
-    }
-    if (isOpen && activeTab === 'add') {
+      setEditingFile(null); // Ensure editing state is cleared
       resetForm();
     }
-  }, [isOpen, activeTab, fetchFiles]);
+  }, [isOpen, activeTab, fetchFiles, resetForm]);
+
+  useEffect(() => {
+    if (editingFile && activeTab === 'add') {
+        setName(editingFile.name);
+        setVersion(editingFile.version || '');
+        setIcon(editingFile.icon_drive_id ? { id: editingFile.icon_drive_id, name: 'Existing Icon' } : null);
+        setSelectedTags(editingFile.tags || []);
+        setIsVip(editingFile.is_vip);
+        setVipUnlockInfo(editingFile.vip_unlock_info || '');
+        setParts(editingFile.parts.length > 0 ? editingFile.parts : [{ part_number: 1, download_url: '' }]);
+    } else {
+        resetForm();
+    }
+  }, [editingFile, activeTab, resetForm]);
   
   const handleSelectIcon = () => {
     googleDriveService.showPicker((files) => {
@@ -88,12 +116,14 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
   const addPartField = () => setParts([...parts, { part_number: parts.length + 1, download_url: '' }]);
   const removePartField = (index: number) => setParts(parts.filter((_, i) => i !== index));
   
-  const handleAddFile = async (e: React.FormEvent) => {
+  const handleSubmitFile = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!userProfile) return;
       setIsLoading(true); setError(null);
       
+      const action = editingFile ? 'update_file' : 'add_file';
       const fileData = {
+          fileId: editingFile?.id,
           name, version, icon_drive_id: icon?.id, tags: selectedTags,
           is_vip: isVip, vip_unlock_info: isVip ? vipUnlockInfo : undefined,
           parts: parts.filter(p => p.download_url)
@@ -103,12 +133,13 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
           const response = await fetch(FILES_API_ENDPOINT, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
-              body: JSON.stringify({ action: 'add_file', ...fileData }),
+              body: JSON.stringify({ action, ...fileData }),
           });
           const result = await response.json();
-          if (!response.ok) throw new Error(result.details || 'Failed to add file');
-          setNotifications(prev => [`Successfully added file: ${name}`, ...prev]);
+          if (!response.ok) throw new Error(result.details || `Failed to ${action.replace('_', ' ')} file`);
+          setNotifications(prev => [`Successfully ${editingFile ? 'updated' : 'added'} file: ${name}`, ...prev]);
           setActiveTab('list');
+          setEditingFile(null);
       } catch (e) {
           setError(e instanceof Error ? e.message : 'Unknown error');
       } finally {
@@ -154,8 +185,8 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
         {error && <div className="p-3 mb-4 bg-red-500/10 text-red-500 rounded-lg text-sm">{error}</div>}
 
         <div className="border-b border-slate-200 dark:border-slate-700 flex flex-shrink-0">
-            <TabButton active={activeTab === 'list'} onClick={() => setActiveTab('list')}>File List</TabButton>
-            <TabButton active={activeTab === 'add'} onClick={() => setActiveTab('add')}>Add New File</TabButton>
+            <TabButton active={activeTab === 'list'} onClick={() => handleTabChange('list')}>File List</TabButton>
+            <TabButton active={activeTab === 'add'} onClick={() => handleTabChange('add')}>{editingFile ? 'Edit File' : 'Add New File'}</TabButton>
         </div>
 
         <div className="flex-grow overflow-y-auto mt-4 pr-2 -mr-4">
@@ -164,18 +195,21 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
               {isLoading && <p>Loading...</p>}
               {files.map((file: FileItem) => (
                   <div key={file.id} className="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                           <div className="w-8 h-8 flex-shrink-0">{file.icon_drive_id ? <img src={googleDriveService.getDriveFilePublicUrl(file.icon_drive_id)} alt=""/> : <PhotoIcon/>}</div>
-                          <span>{file.name}</span>
-                          {file.is_vip && <span className="text-xs font-bold text-yellow-500">VIP</span>}
+                          <span className="truncate">{file.name}</span>
+                          {file.is_vip && <span className="text-xs font-bold text-yellow-500 flex-shrink-0">VIP</span>}
                       </div>
-                      <button onClick={() => handleDeleteFile(file.id, file.name)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full"><TrashIcon className="w-5 h-5"/></button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button onClick={() => handleEditClick(file)} className="p-2 text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full"><EditIcon className="w-5 h-5"/></button>
+                        <button onClick={() => handleDeleteFile(file.id, file.name)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full"><TrashIcon className="w-5 h-5"/></button>
+                      </div>
                   </div>
               ))}
             </div>
           )}
           {activeTab === 'add' && (
-            <form onSubmit={handleAddFile} className="space-y-4 max-w-3xl mx-auto">
+            <form onSubmit={handleSubmitFile} className="space-y-4 max-w-3xl mx-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><label htmlFor="name" className="label-style">File Name</label><input type="text" id="name" value={name} onChange={e => setName(e.target.value)} required className="input-style" /></div>
                 <div><label htmlFor="version" className="label-style">Version</label><input type="text" id="version" value={version} onChange={e => setVersion(e.target.value)} className="input-style" /></div>
@@ -202,7 +236,7 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
                   <button type="button" onClick={addPartField} className="flex items-center gap-1 text-sm text-indigo-400 hover:underline"><PlusIcon className="w-4 h-4"/> Add Part</button>
               </div>
 
-              <div className="flex justify-end pt-4"><button type="submit" disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">{isLoading ? 'Submitting...' : 'Add File'}</button></div>
+              <div className="flex justify-end pt-4"><button type="submit" disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">{isLoading ? (editingFile ? 'Updating...' : 'Submitting...') : (editingFile ? 'Update File' : 'Add File')}</button></div>
             </form>
           )}
         </div>
