@@ -52,7 +52,9 @@ async function createTables() {
         try {
             await pool.query('ALTER TABLE movies ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;');
         } catch (e) {
-            if (e.code !== '42P07') { // 42P07 is duplicate_column in PostgreSQL
+            // Vercel Postgres (and others) may return '42701' for duplicate_column,
+            // while some versions return '42P07'. We check for both to ensure compatibility.
+            if (e.code !== '42701' && e.code !== '42P07') {
                 throw e;
             }
         }
