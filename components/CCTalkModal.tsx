@@ -1,35 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { UserIcon, PlusIcon, SendIcon, MicrophoneIcon, StarIcon, CloseIcon, RefreshIcon } from './icons';
+import { UserIcon, PlusIcon, SendIcon, MicrophoneIcon, StarIcon, CloseIcon } from './icons';
 import type { UserProfile } from '../types';
 
 interface CCTalkModalProps {
   isOpen: boolean;
   onClose: () => void;
   userProfile?: UserProfile;
-  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-interface LobbyState {
-    moderatorEmails: string[];
-    premiumUserEmails: string[];
-    bannedUserEmails: string[];
-    pinnedMessage: string | null;
-}
+const mockUser: UserProfile = {
+  id: 'current_user_123',
+  name: 'Bạn',
+  email: 'gamer@example.com',
+  imageUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+};
 
-const initialOtherUsers = Array.from({ length: 15 }, (_, i) => ({
+const initialOtherUsers = Array.from({ length: 5 }, (_, i) => ({
     id: `mockuser${i}`,
-    name: `User ${i + 1}`,
+    name: `User${i + 1}`,
     email: `user${i+1}@example.com`,
-    imageUrl: `https://i.pravatar.cc/150?u=user${i + 1}`,
-    isPro: i === 1, // Make User 2 premium by default for demo
+    imageUrl: `https://i.pravatar.cc/150?u=user${i + 1}`
 }));
 
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
-const CCTALK_API_ENDPOINT = '/api/cctalk';
 
 const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
 
-export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile, setNotifications }) => {
+
+export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [view, setView] = useState<'welcome' | 'selection' | 'game_room'>('welcome');
   const [queue, setQueue] = useState<UserProfile[]>(initialOtherUsers);
   const [teamSlots, setTeamSlots] = useState<(UserProfile | null)[]>(Array(5).fill(null));
@@ -39,55 +37,33 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   const [countdown, setCountdown] = useState(60);
   const [currentUserSlotIndex, setCurrentUserSlotIndex] = useState(0);
   
+  // --- New State ---
   const [hoveredRoomId, setHoveredRoomId] = useState<number | null>(null);
   const [roomOccupancy, setRoomOccupancy] = useState<Record<number, { current: number, max: number }>>({});
+  const [pinnedMessage, setPinnedMessage] = useState<string | null>(null);
   const [adminPinInput, setAdminPinInput] = useState('');
   const [isCountdownFrozen, setIsCountdownFrozen] = useState(false);
+  const [moderators, setModerators] = useState<Set<string>>(new Set());
+  const [premiumUsers, setPremiumUsers] = useState<Set<string>>(new Set(['mockuser1'])); // Mock a premium user
+  const [bannedUsers, setBannedUsers] = useState<Set<string>>(new Set());
   const [mockMessages, setMockMessages] = useState([
-        { userId: 'admin', user: 'Admin', text: `Chào mừng và mọi người đến với sảnh chờ!`, email: ADMIN_EMAIL },
-        { userId: 'teammate1', user: 'Đồng đội 1', text: 'Vào game thôi nào!', email: 'teammate1@example.com' },
-        { userId: 'teammate3', user: 'Let\'s goooo!', email: 'teammate3@example.com' },
+        { userId: 'admin', user: 'Admin', text: `Chào mừng và mọi người đến với sảnh chờ!` },
+        { userId: 'teammate1', user: 'Đồng đội 1', text: 'Vào game thôi nào!' },
+        { userId: 'teammate3', user: 'Let\'s goooo!' },
+        { userId: 'current_user_123', user: 'Bạn', text: 'Ok, mời mình nhé.' },
     ]);
-
-  // --- Real Data State ---
-  const [lobbyData, setLobbyData] = useState<LobbyState | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
+  
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const countdownRef = useRef<number | null>(null);
   
-  const currentUser = userProfile;
-  const isAdmin = currentUser?.email === ADMIN_EMAIL;
+  const currentUser = userProfile || mockUser;
+  const isAdmin = currentUser.email === ADMIN_EMAIL;
   
-  const isMod = (user: UserProfile) => lobbyData?.moderatorEmails.includes(user.email) ?? false;
-  const isPremium = (user: UserProfile) => lobbyData?.premiumUserEmails.includes(user.email) ?? user.isPro;
-  const isBanned = (user: UserProfile) => lobbyData?.bannedUserEmails.includes(user.email) ?? false;
-  const canModerate = isAdmin || (currentUser && isMod(currentUser));
+  const isMod = (user: UserProfile) => moderators.has(user.id);
+  const isPremium = (user: UserProfile) => premiumUsers.has(user.id);
+  const canModerate = isAdmin || isMod(currentUser);
 
-  const fetchLobbyState = useCallback(async () => {
-    if (!currentUser) return;
-    setIsLoading(true);
-    try {
-        const response = await fetch(`${CCTALK_API_ENDPOINT}?action=get_lobby_state`, {
-            headers: { 'X-User-Email': currentUser.email }
-        });
-        if (!response.ok) throw new Error('Failed to fetch lobby data.');
-        const data = await response.json();
-        setLobbyData(data);
-    } catch (e) {
-        setNotifications(prev => [(e instanceof Error ? e.message : 'Unknown error'), ...prev.slice(0, 19)]);
-    } finally {
-        setIsLoading(false);
-    }
-  }, [currentUser, setNotifications]);
-
-  useEffect(() => {
-      if (isOpen) {
-          fetchLobbyState();
-      }
-  }, [isOpen, fetchLobbyState]);
-  
-  // Mock room occupancy data
+  // --- MOCK DATA ---
   useEffect(() => {
     const newOccupancy: Record<number, { current: number, max: number }> = {};
     for (let i = 1; i <= 100; i++) {
@@ -97,12 +73,11 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   }, [isOpen]);
   
   const handleLeaveQueue = useCallback(() => {
-    if (!currentUser) return;
     setQueue(prev => prev.filter(u => u.id !== currentUser.id));
-  }, [currentUser]);
+  }, [currentUser.id]);
 
   useEffect(() => {
-    if (isOpen && currentUser && !currentRoom) {
+    if (isOpen && !currentRoom) {
       const userInQueue = queue.some(u => u.id === currentUser.id);
       if (!userInQueue) {
          setQueue(prevQueue => [currentUser, ...prevQueue.filter(u => u.id !== currentUser.id)]);
@@ -111,7 +86,6 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   }, [isOpen, currentUser, currentRoom]);
   
   useEffect(() => {
-    if (!currentUser) return;
     const newTeamSlots = Array(5).fill(null);
     const userAtHead = queue[0];
     if (userAtHead?.id === currentUser.id) {
@@ -123,7 +97,6 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   }, [queue, currentUser.id, currentUserSlotIndex]);
 
   useEffect(() => {
-    if (!currentUser) return;
     const isUserAtHead = queue[0]?.id === currentUser.id;
     
     if (isUserAtHead) {
@@ -149,7 +122,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
             countdownRef.current = null;
         }
     }
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+
+    return () => {
+        if (countdownRef.current) clearInterval(countdownRef.current);
+    };
   }, [queue, currentUser.id, handleLeaveQueue, isCountdownFrozen]);
 
   useEffect(() => {
@@ -175,12 +151,13 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   }, []);
 
   const handleEnterRoom = () => {
-    if (!currentUser) return;
     const randomRoomId = String(Math.floor(Math.random() * 100) + 1).padStart(2, '0');
     const teamMembers = [
       currentUser,
       ...Array.from({ length: 4 }, (_, i) => ({
-        id: `teammate${i}`, name: `Đồng đội ${i + 1}`, email: `teammate${i}@example.com`,
+        id: `teammate${i}`,
+        name: `Đồng đội ${i + 1}`,
+        email: `teammate${i}@example.com`,
         imageUrl: `https://i.pravatar.cc/150?u=teammate${i}`
       }))
     ];
@@ -189,44 +166,24 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   };
   
   const handleExitRoom = () => {
-    if (!currentUser) return;
     setCurrentRoom(null);
     setContextMenu(null);
     setQueue(prev => [currentUser, ...prev.filter(u => u.id !== currentUser.id)]);
   };
 
   const handleOpenAdminMenu = (event: React.MouseEvent, targetUser: UserProfile) => {
-    if (!canModerate || targetUser.email === ADMIN_EMAIL) return;
+    if (!canModerate) return;
     event.preventDefault();
     setContextMenu({ x: event.clientX, y: event.clientY, targetUser });
   };
   
   const handleSlotClick = (newIndex: number) => {
-    if (!currentUser) return;
     if (queue[0]?.id === currentUser.id && teamSlots[newIndex] === null) {
         setCurrentUserSlotIndex(newIndex);
     }
   };
 
-  // --- API Call Handlers ---
-  async function performAdminAction(action: string, payload: object) {
-      if (!currentUser) return;
-      try {
-          const response = await fetch(CCTALK_API_ENDPOINT, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-User-Email': currentUser.email },
-              body: JSON.stringify({ action, ...payload }),
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.details || 'Action failed');
-          fetchLobbyState(); // Refresh state on success
-      } catch (e) {
-          setNotifications(prev => [(e instanceof Error ? e.message : 'Unknown error'), ...prev.slice(0, 19)]);
-      } finally {
-          setContextMenu(null);
-      }
-  }
-  
+  // --- Admin/Mod Handlers ---
   const handleKick = (userId: string) => setQueue(prev => prev.filter(u => u.id !== userId));
   const handlePromote = (userId: string) => {
       setQueue(prev => {
@@ -237,20 +194,39 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
       });
   };
   const handleToggleFreeze = () => setIsCountdownFrozen(prev => !prev);
-  const handleToggleMod = (targetUser: UserProfile) => {
-      performAdminAction('set_role', { targetEmail: targetUser.email, role: isMod(targetUser) ? 'user' : 'moderator' });
+  const handleToggleMod = (userId: string) => {
+      setModerators(prev => {
+          const newMods = new Set(prev);
+          if (newMods.has(userId)) newMods.delete(userId);
+          else newMods.add(userId);
+          return newMods;
+      });
+  };
+  const handleTogglePremium = (userId: string) => { // For demo
+      setPremiumUsers(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(userId)) newSet.delete(userId);
+          else newSet.add(userId);
+          return newSet;
+      });
   };
   const handleSetPin = () => {
-      if (adminPinInput.trim()) performAdminAction('set_pinned_message', { message: adminPinInput.trim() });
+      if (adminPinInput.trim()) setPinnedMessage(adminPinInput.trim());
       setAdminPinInput('');
   };
-  const handleClearPin = () => performAdminAction('set_pinned_message', { message: null });
-  const handleToggleBan = (targetUser: UserProfile) => {
-      performAdminAction('set_ban_status', { targetEmail: targetUser.email, isBanned: !isBanned(targetUser) });
+  const handleClearPin = () => setPinnedMessage(null);
+  const handleToggleBan = (userId: string) => {
+      setBannedUsers(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(userId)) newSet.delete(userId);
+          else newSet.add(userId);
+          return newSet;
+      });
   };
-  const handleClearUserChat = (userEmail: string) => {
-      setMockMessages(prev => prev.filter(msg => msg.email !== userEmail));
+  const handleClearUserChat = (userId: string) => {
+      setMockMessages(prev => prev.filter(msg => msg.userId !== userId));
   };
+
 
   const renderUserName = (user: UserProfile) => {
     const userIsAdmin = user.email === ADMIN_EMAIL;
@@ -265,14 +241,11 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         <span className="flex items-center gap-1.5 text-sm truncate">
             <span className={nameClass}>{user.name}</span>
             {(userIsAdmin || userIsMod) && <VipTag />}
-            {userIsPremium && !userIsAdmin && !userIsMod && <StarIcon className="w-4 h-4 text-yellow-400" solid />}
+            {userIsPremium && <StarIcon className="w-4 h-4 text-yellow-400" solid />}
         </span>
     );
   };
   
-  if (!isOpen) return null;
-  if (!currentUser) return null; // Modal should not be open if not logged in
-
   const renderWelcome = () => (
     <div className="flex flex-col items-center justify-center h-full text-center p-4">
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 dark:text-white">ccTalk - Kết nối giao lưu</h1>
@@ -311,7 +284,7 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
                 </div>
             )}
             <div className="flex-grow space-y-1 overflow-y-auto pr-2 min-h-0">
-                {queue.slice(1, 15).map((user, index) => (
+                {queue.slice(1, 5).map((user, index) => (
                     <div key={user.id} onClick={(e) => handleOpenAdminMenu(e, user)} className={`flex items-center bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-md ${canModerate ? 'cursor-pointer' : ''}`}>
                         <span className="font-mono text-sm mr-2">{index + 2}.</span>
                         <img src={user.imageUrl} alt={user.name} className="w-6 h-6 rounded-full mr-2" />
@@ -369,13 +342,13 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         <div className="w-2/3 pl-2 flex flex-col">
             <h2 className="text-lg font-bold mb-2 text-center flex-shrink-0">Chat</h2>
             <div className="flex-grow bg-slate-100 dark:bg-slate-800/50 rounded-t-md p-2 overflow-y-auto text-sm space-y-2">
-                 {lobbyData?.pinnedMessage && (
+                 {pinnedMessage && (
                     <div className="bg-red-500/20 border border-red-500/50 text-red-400 p-2 rounded-md flex justify-between items-start">
-                        <p className="font-bold break-words">{lobbyData.pinnedMessage}</p>
+                        <p className="font-bold break-words">{pinnedMessage}</p>
                         {canModerate && <button onClick={handleClearPin}><CloseIcon className="w-4 h-4"/></button>}
                     </div>
                 )}
-                {mockMessages.map((msg, index) => !lobbyData?.bannedUserEmails.includes(msg.email) && <p key={index}><strong className="text-blue-400 cursor-pointer">{msg.user}:</strong> {msg.text}</p>)}
+                {mockMessages.map((msg, index) => <p key={index}><strong className="text-blue-400 cursor-pointer">{msg.user}:</strong> {msg.text}</p>)}
             </div>
             {canModerate && 
                 <form onSubmit={(e) => { e.preventDefault(); handleSetPin(); }} className="flex-shrink-0 flex">
@@ -413,10 +386,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
             
             <main className="flex-grow flex flex-col bg-slate-100 dark:bg-slate-800/50 rounded-md min-h-0">
                 <div className="flex-grow p-4 overflow-y-auto space-y-4">
-                    {mockMessages.map((msg, index) => !isBanned({email: msg.email} as UserProfile) && (
+                    {mockMessages.map((msg, index) => !bannedUsers.has(msg.userId) && (
                         <div key={index} className={`flex items-start gap-3 ${msg.userId === currentUser.id ? 'flex-row-reverse' : ''}`}>
                             <div className={`rounded-lg p-3 max-w-[75%] ${msg.userId === currentUser.id ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700'}`}>
-                                <p onClick={(e) => handleOpenAdminMenu(e, {id: msg.userId, name: msg.user, email: msg.email, imageUrl: ''})} className={`font-bold text-sm mb-1 ${canModerate ? 'cursor-pointer' : ''}`}>{msg.user}</p>
+                                <p onClick={(e) => handleOpenAdminMenu(e, {id: msg.userId, name: msg.user, email: '', imageUrl: ''})} className={`font-bold text-sm mb-1 ${canModerate ? 'cursor-pointer' : ''}`}>{msg.user}</p>
                                 <p className="text-sm">{msg.text}</p>
                             </div>
                         </div>
@@ -436,27 +409,18 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         </div>
     );
   };
-  
-  const renderContent = () => {
-      if (isLoading && !lobbyData) {
-          return <div className="flex items-center justify-center h-full"><RefreshIcon className="w-10 h-10 animate-spin"/></div>
-      }
-      switch(view) {
-          case 'welcome': return renderWelcome();
-          case 'selection': return renderSelection();
-          case 'game_room': return currentRoom ? renderInRoom() : renderGameRoom();
-          default: return null;
-      }
-  }
 
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center p-4">
       <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] max-h-[800px] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        {renderContent()}
+        {(view === 'welcome') && renderWelcome()}
+        {(view === 'selection') && renderSelection()}
+        {(view === 'game_room') && (currentRoom ? renderInRoom() : renderGameRoom())}
 
         {contextMenu && (
-            <div ref={contextMenuRef} style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed bg-white dark:bg-slate-800 rounded-md shadow-lg py-1 z-[60] text-sm">
+            <div ref={contextMenuRef} style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed bg-white dark:bg-slate-800 rounded-md shadow-lg py-1 z-50 text-sm">
                 {queue.some(u => u.id === contextMenu.targetUser.id) && (
                     <>
                     <button onClick={() => { handleKick(contextMenu.targetUser.id); setContextMenu(null); }} className="admin-menu-item">Xoá khỏi hàng đợi</button>
@@ -464,11 +428,12 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
                     </>
                 )}
                 {queue[0]?.id === contextMenu.targetUser.id && <button onClick={() => { handleToggleFreeze(); setContextMenu(null); }} className="admin-menu-item">{isCountdownFrozen ? 'Bỏ đóng băng' : 'Đóng băng'} giờ</button>}
-                {isAdmin && <button onClick={() => { handleToggleMod(contextMenu.targetUser); }} className="admin-menu-item">{isMod(contextMenu.targetUser) ? 'Xoá MOD' : 'Set MOD'}</button>}
-                {mockMessages.some(m => m.email === contextMenu.targetUser.email) && (
+                {isAdmin && <button onClick={() => { handleToggleMod(contextMenu.targetUser.id); setContextMenu(null); }} className="admin-menu-item">{isMod(contextMenu.targetUser) ? 'Xoá MOD' : 'Set MOD'}</button>}
+                {isAdmin && <button onClick={() => { handleTogglePremium(contextMenu.targetUser.id); setContextMenu(null); }} className="admin-menu-item">{isPremium(contextMenu.targetUser) ? 'Xoá Premium' : 'Set Premium'}</button>}
+                 {mockMessages.some(m => m.userId === contextMenu.targetUser.id) && (
                     <>
-                    <button onClick={() => { handleToggleBan(contextMenu.targetUser); }} className="admin-menu-item">{isBanned(contextMenu.targetUser) ? 'Bỏ cấm chat' : 'Cấm chat'}</button>
-                    <button onClick={() => { handleClearUserChat(contextMenu.targetUser.email); setContextMenu(null); }} className="admin-menu-item">Xoá chat</button>
+                    <button onClick={() => { handleToggleBan(contextMenu.targetUser.id); setContextMenu(null); }} className="admin-menu-item">{bannedUsers.has(contextMenu.targetUser.id) ? 'Bỏ cấm chat' : 'Cấm chat'}</button>
+                    <button onClick={() => { handleClearUserChat(contextMenu.targetUser.id); setContextMenu(null); }} className="admin-menu-item">Xoá chat</button>
                     </>
                  )}
             </div>
