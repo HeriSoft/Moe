@@ -437,9 +437,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
               <button title="Media Gallery" aria-label="Open Media Gallery" onClick={onOpenMediaGallery} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
                   <FolderOpenIcon className="w-5 h-5" />
               </button>
-              <button title="ccTalk" aria-label="Open ccTalk" onClick={onOpenCCTalk} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
-                  <ChatBubbleIcon className="w-5 h-5" />
-              </button>
               <PersonaSelector
                 personas={personas}
                 activePersonaKey={activeChat.persona || 'default'}
@@ -503,6 +500,19 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         >
           {activeChat ? (
             <div>
+              <div className="px-4 pt-4 pb-1 sticky top-0 z-10 bg-white/80 dark:bg-[#171725]/80 backdrop-blur-sm">
+                  <button
+                      onClick={onOpenCCTalk}
+                      className="w-full flex items-center p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+                      aria-label="Open ccTalk"
+                  >
+                      <ChatBubbleIcon className="w-6 h-6 text-indigo-500 mr-3 flex-shrink-0" />
+                      <div className="text-left">
+                          <p className="font-semibold text-indigo-800 dark:text-indigo-200">Ghim: ccTalk</p>
+                          <p className="text-sm text-indigo-600 dark:text-indigo-400">Tham gia kênh thoại và tìm đồng đội chơi game.</p>
+                      </div>
+                  </button>
+              </div>
               {activeChat.messages.map((msg, index) => {
                 const messageId = `${activeChat.id}-${index}`;
                 return (
