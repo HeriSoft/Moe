@@ -8,6 +8,14 @@ interface CCTalkModalProps {
   userProfile?: UserProfile;
 }
 
+// NEW: Define a Room interface
+interface Room {
+  id: string;
+  name: string;
+  currentMembers: number;
+  maxMembers: number;
+}
+
 const mockUser: UserProfile = {
   id: 'current_user_123',
   name: 'Bạn',
@@ -15,77 +23,30 @@ const mockUser: UserProfile = {
   imageUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
 };
 
-const initialOtherUsers = Array.from({ length: 5 }, (_, i) => ({
-    id: `mockuser${i}`,
-    name: `User${i + 1}`,
-    email: `user${i+1}@example.com`,
-    imageUrl: `https://i.pravatar.cc/150?u=user${i + 1}`
+// NEW: Initial list of rooms with mock data
+const initialRooms: Room[] = Array.from({ length: 20 }, (_, i) => ({
+    id: `room${i + 1}`,
+    name: `Phòng ${String(i + 1).padStart(2, '0')}`,
+    currentMembers: Math.floor(Math.random() * 6), // 0 to 5 members
+    maxMembers: 5,
 }));
+
 
 export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [view, setView] = useState<'welcome' | 'selection' | 'game_room'>('welcome');
-  const [queue, setQueue] = useState<UserProfile[]>(initialOtherUsers);
-  const [teamSlots, setTeamSlots] = useState<(UserProfile | null)[]>(Array(5).fill(null));
+  // NEW: State for rooms and hover effect
+  const [rooms, setRooms] = useState<Room[]>(initialRooms);
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+
   const [currentRoom, setCurrentRoom] = useState<{ id: string; members: UserProfile[] } | null>(null);
   const [talkingMemberId, setTalkingMemberId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
-  const [countdown, setCountdown] = useState(60);
-  const [currentUserSlotIndex, setCurrentUserSlotIndex] = useState(0);
 
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  // FIX: Changed NodeJS.Timeout to `number` which is the correct return type for setInterval in a browser environment.
-  const countdownRef = useRef<number | null>(null);
   
   const currentUser = userProfile || mockUser;
 
-  const handleLeaveQueue = useCallback(() => {
-    setQueue(prev => prev.filter(u => u.id !== currentUser.id));
-  }, [currentUser.id]);
-
-  useEffect(() => {
-    if (isOpen && !currentRoom) {
-      const userInQueue = queue.some(u => u.id === currentUser.id);
-      if (!userInQueue) {
-         setQueue(prevQueue => [currentUser, ...prevQueue.filter(u => u.id !== currentUser.id)]);
-      }
-    }
-  }, [isOpen, currentUser, currentRoom]);
-  
-  useEffect(() => {
-    const newTeamSlots = Array(5).fill(null);
-    const userAtHead = queue[0];
-    if (userAtHead?.id === currentUser.id) {
-        newTeamSlots[currentUserSlotIndex] = userAtHead;
-    } else if (userAtHead) {
-        newTeamSlots[0] = userAtHead; 
-    }
-    setTeamSlots(newTeamSlots);
-  }, [queue, currentUser.id, currentUserSlotIndex]);
-
-  useEffect(() => {
-    const isUserAtHead = queue[0]?.id === currentUser.id;
-    
-    if (isUserAtHead) {
-        setCountdown(60);
-        countdownRef.current = window.setInterval(() => {
-            setCountdown(prev => {
-                if (prev <= 1) {
-                    clearInterval(countdownRef.current!);
-                    handleLeaveQueue();
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-    } else {
-        if (countdownRef.current) clearInterval(countdownRef.current);
-    }
-
-    return () => {
-        if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, [queue, currentUser.id, handleLeaveQueue]);
-
+  // Effect for simulating talking members in a room
   useEffect(() => {
     if (currentRoom) {
       const interval = setInterval(() => {
@@ -98,6 +59,7 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     }
   }, [currentRoom]);
 
+  // Effect for handling clicks outside the context menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
@@ -108,8 +70,12 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleEnterRoom = () => {
-    const randomRoomId = String(Math.floor(Math.random() * 100) + 1).padStart(2, '0');
+  // NEW: Handle joining a room
+  const handleJoinRoom = (room: Room) => {
+    if (room.currentMembers >= room.maxMembers) {
+      alert("Phòng đã đầy!");
+      return;
+    }
     const teamMembers = [
       currentUser,
       ...Array.from({ length: 4 }, (_, i) => ({
@@ -119,26 +85,18 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         imageUrl: `https://i.pravatar.cc/150?u=teammate${i}`
       }))
     ];
-    setCurrentRoom({ id: randomRoomId, members: teamMembers });
-    setQueue(prev => prev.filter(u => u.id !== currentUser.id)); 
+    setCurrentRoom({ id: room.id, members: teamMembers });
   };
   
   const handleExitRoom = () => {
     setCurrentRoom(null);
     setContextMenu(null);
-    setQueue(prev => [currentUser, ...prev.filter(u => u.id !== currentUser.id)]);
   };
 
   const handleRightClick = (event: React.MouseEvent, user: UserProfile) => {
     if (user.id === currentUser.id) {
         event.preventDefault();
         setContextMenu({ x: event.clientX, y: event.clientY });
-    }
-  };
-
-  const handleSlotClick = (newIndex: number) => {
-    if (queue[0]?.id === currentUser.id && teamSlots[newIndex] === null) {
-        setCurrentUserSlotIndex(newIndex);
     }
   };
 
@@ -161,83 +119,44 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     </div>
   );
   
+  // NEW: Reworked game room lobby to show a list of rooms
   const renderGameRoom = () => (
     <div className="flex flex-col h-full w-full p-2 sm:p-4 text-slate-800 dark:text-slate-200">
-      <header className="flex-shrink-0 flex h-48">
-        <div className="w-1/3 pr-2 flex flex-col border-r border-slate-200 dark:border-slate-700">
-            <h2 className="text-lg font-bold mb-2 text-center flex-shrink-0">Hàng đợi</h2>
-            {queue[0] && (
-                <div className={`flex items-center p-1.5 rounded-md mb-2 ${queue[0].id === currentUser.id ? 'bg-indigo-500/20 ring-1 ring-indigo-400' : 'bg-slate-100 dark:bg-slate-800/50'}`}>
-                    <span className="font-mono text-sm mr-2">1.</span>
-                    <img src={queue[0].imageUrl} alt={queue[0].name} className="w-6 h-6 rounded-full mr-2" />
-                    <span className="text-sm truncate flex-grow">{queue[0].name}</span>
-                    {queue[0].id === currentUser.id ? (
-                        <>
-                            <MicrophoneIcon className="w-4 h-4 text-green-400 animate-pulse mr-2" />
-                            <span className="font-mono text-xs text-amber-400">{countdown}s</span>
-                        </>
-                    ) : <MicrophoneIcon className="w-4 h-4 text-slate-500" />}
-                </div>
-            )}
-            <div className="flex-grow space-y-1 overflow-y-auto pr-2 min-h-0">
-                {queue.slice(1, 5).map((user, index) => (
-                    <div key={user.id} className="flex items-center bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-md">
-                        <span className="font-mono text-sm mr-2">{index + 2}.</span>
-                        <img src={user.imageUrl} alt={user.name} className="w-6 h-6 rounded-full mr-2" />
-                        <span className="text-sm truncate flex-grow">{user.name}</span>
-                    </div>
-                ))}
-            </div>
-            <div className="mt-2 flex-shrink-0">
-                 {queue[0]?.id === currentUser.id ? (
-                    <div className="flex gap-2">
-                        <button onClick={handleEnterRoom} className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-1.5 rounded">Vào phòng</button>
-                        <button onClick={handleLeaveQueue} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-1.5 rounded">Xuống</button>
-                    </div>
-                 ) : (
-                    <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-1.5 rounded" onClick={() => setQueue(prev => [currentUser, ...prev.filter(u => u.id !== currentUser.id)])}>Tham gia</button>
-                 )}
-            </div>
-        </div>
-        <div className="w-2/3 pl-2 flex flex-col">
-            <h2 className="text-lg font-bold mb-2 text-center">Tuyển team</h2>
-            <div className="flex-grow grid grid-cols-5 gap-2 sm:gap-4 items-center">
-              {teamSlots.map((user, index) => (
-                <div key={index} className="flex flex-col items-center gap-2">
-                    <button 
-                        onClick={() => handleSlotClick(index)}
-                        disabled={!!user || queue[0]?.id !== currentUser.id}
-                        className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center border-2 border-transparent disabled:cursor-not-allowed hover:enabled:border-indigo-400 transition-colors"
-                    >
-                        {user ? (
-                           <img src={user.imageUrl} alt={user.name} className="w-full h-full object-cover rounded-full" />
-                        ) : (
-                           <PlusIcon className="w-8 h-8 text-slate-500" />
-                        )}
-                    </button>
-                    {user && <span className="text-xs text-center font-semibold truncate w-full">{user.name}</span>}
-                </div>
-              ))}
-            </div>
-        </div>
+      <header className="flex-shrink-0 text-center mb-4">
+        <h2 className="text-xl font-bold">Danh sách phòng</h2>
       </header>
-      <main className="flex-grow flex mt-4 border-t border-slate-200 dark:border-slate-700 pt-4 min-h-0">
-        <div className="w-1/3 pr-2 border-r border-slate-200 dark:border-slate-700 flex flex-col">
-            <h2 className="text-lg font-bold mb-2 text-center flex-shrink-0">Danh sách phòng</h2>
-            <div className="flex-grow overflow-y-auto pr-2 space-y-1">
-                {Array.from({ length: 100 }).map((_, i) => (
-                    <button key={i} className="w-full text-left p-2 rounded-md hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 transition-colors font-medium">
-                        Phòng {String(i + 1).padStart(2, '0')}
+      <main className="flex-grow overflow-y-auto pr-2 -mr-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {rooms.map((room) => {
+            const isFull = room.currentMembers >= room.maxMembers;
+            return (
+              <div
+                key={room.id}
+                onMouseEnter={() => setHoveredRoomId(room.id)}
+                onMouseLeave={() => setHoveredRoomId(null)}
+                className="relative aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg flex flex-col items-center justify-center p-2 text-center group"
+              >
+                <p className="font-bold text-lg">{room.name}</p>
+                <p className={`font-mono text-sm ${isFull ? 'text-red-500' : 'text-green-500'}`}>
+                  ({room.currentMembers}/{room.maxMembers})
+                </p>
+                {hoveredRoomId === room.id && (
+                  <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                    <button
+                      onClick={() => handleJoinRoom(room)}
+                      className={`px-4 py-2 rounded-md font-semibold text-white transition-colors ${
+                        isFull
+                          ? 'bg-red-600 cursor-not-allowed'
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                    >
+                      {isFull ? 'Phòng đầy' : 'Tham gia'}
                     </button>
-                ))}
-            </div>
-        </div>
-        <div className="w-2/3 pl-2 flex flex-col">
-            <h2 className="text-lg font-bold mb-2 text-center flex-shrink-0">Chat</h2>
-            <div className="flex-grow bg-slate-100 dark:bg-slate-800/50 rounded-t-md p-2 overflow-y-auto text-sm space-y-2">
-                <p><strong className="text-blue-400">Admin:</strong> Chào mừng đến với sảnh chờ!</p>
-            </div>
-            <form className="flex-shrink-0 flex"><input type="text" placeholder="Nhập chat..." className="flex-grow bg-white dark:bg-slate-700 p-2 rounded-bl-md focus:outline-none text-sm"/><button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-br-md"><SendIcon className="w-5 h-5"/></button></form>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </main>
       <footer className="flex-shrink-0 mt-4 border-t border-slate-200 dark:border-slate-700 pt-4 flex justify-center">
