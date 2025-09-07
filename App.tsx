@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { WelcomeModal } from './components/WelcomeModal'; // New
+import { CCTalkModal } from './components/CCTalkModal'; // New
 import { GenerationModal } from './components/GenerationModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
@@ -59,7 +59,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false); // New
+  const [isCCTalkModalOpen, setIsCCTalkModalOpen] = useState(true); // New
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [model, setModel] = useState('gemini-2.5-flash');
@@ -152,21 +152,6 @@ const App: React.FC = () => {
     googleDriveService.initClient(handleAuthChange);
   }, [handleAuthChange]);
   
-  // --- Welcome Modal Logic ---
-  useEffect(() => {
-    if (isAuthReady && !isLoggedIn) {
-      const hasSeenWelcome = localStorage.getItem('hasSeenWelcomeModal');
-      if (!hasSeenWelcome) {
-        setIsWelcomeModalOpen(true);
-      }
-    }
-  }, [isAuthReady, isLoggedIn]);
-
-  const handleCloseWelcomeModal = () => {
-    setIsWelcomeModalOpen(false);
-    localStorage.setItem('hasSeenWelcomeModal', 'true');
-  };
-
   // Save active chat ID to localStorage whenever it changes
   useEffect(() => {
     if (activeChatId) {
@@ -751,9 +736,10 @@ const App: React.FC = () => {
             setIsLoginModalOpen(false);
         }}
       />
-      <WelcomeModal
-        isOpen={isWelcomeModalOpen}
-        onClose={handleCloseWelcomeModal}
+      <CCTalkModal
+        isOpen={isCCTalkModalOpen}
+        onClose={() => setIsCCTalkModalOpen(false)}
+        userProfile={userProfile}
       />
       <GenerationModal
         isOpen={isGenerationModalOpen}
