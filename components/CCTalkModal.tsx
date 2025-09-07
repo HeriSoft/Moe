@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { UserIcon, PlusIcon, SendIcon } from './icons';
+import React, { useState, useMemo, useEffect } from 'react';
+import { UserIcon, PlusIcon, SendIcon, MicrophoneIcon } from './icons';
 import type { UserProfile } from '../types';
 
 interface CCTalkModalProps {
@@ -15,15 +15,92 @@ const mockUser: UserProfile = {
   imageUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
 };
 
+// Generate more mock users for the queue to demonstrate features
+const mockQueueUsers = Array.from({ length: 5 }, (_, i) => ({
+    id: `mockuser${i}`,
+    name: `User${i + 1}`,
+    email: `user${i+1}@example.com`,
+    imageUrl: `https://i.pravatar.cc/150?u=user${i + 1}`
+}));
+
+
 export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [view, setView] = useState<'welcome' | 'selection' | 'game_room'>('welcome');
   const [team, setTeam] = useState<(UserProfile | null)[]>([null, null, null, null, null]);
-  const [queue, setQueue] = useState<UserProfile[]>([]);
+  const [queue, setQueue] = useState<UserProfile[]>(mockQueueUsers);
+  
+  // New states for interactivity
+  const [countdown, setCountdown] = useState(60);
+  const [isMicActive, setIsMicActive] = useState(false);
 
   const currentUser = userProfile || mockUser;
 
+  const isTeamFull = useMemo(() => !team.some(s => s === null), [team]);
+
+  // Effect 1: Auto-placement of user from queue to team
+  useEffect(() => {
+    const firstInQueue = queue[0];
+    if (!firstInQueue) return;
+
+    const emptyTeamSlots = team.reduce((acc, slot, index) => {
+      if (slot === null) acc.push(index);
+      return acc;
+    }, [] as number[]);
+
+    if (emptyTeamSlots.length > 0) {
+      const randomIndex = emptyTeamSlots[Math.floor(Math.random() * emptyTeamSlots.length)];
+      
+      const timer = setTimeout(() => {
+          setTeam(prevTeam => {
+            const newTeam = [...prevTeam];
+            newTeam[randomIndex] = firstInQueue;
+            return newTeam;
+          });
+          setQueue(prevQueue => prevQueue.slice(1));
+      }, 800); // Small delay for UX
+      
+      return () => clearTimeout(timer);
+    }
+  }, [queue, team]);
+
+  // Effect 2: Countdown timer and mic flashing for the #1 user in queue
+  useEffect(() => {
+    const firstInQueue = queue[0];
+
+    // This logic only runs if the team is full and there's someone waiting
+    if (firstInQueue && isTeamFull) {
+      const countdownInterval = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            // Kick user from queue when timer ends
+            setQueue(currentQueue => currentQueue.slice(1)); 
+            return 60; // Reset for the next person
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      const micInterval = setInterval(() => {
+        setIsMicActive(prev => !prev);
+      }, 600);
+
+      // Cleanup function
+      return () => {
+        clearInterval(countdownInterval);
+        clearInterval(micInterval);
+        setCountdown(60);
+        setIsMicActive(false);
+      };
+    } else {
+      // If queue is empty or team is not full, ensure everything is reset
+      setCountdown(60);
+      setIsMicActive(false);
+    }
+    // Dependency array ensures this effect re-runs ONLY when the top user changes or when the team's fullness status changes.
+  }, [queue[0]?.id, isTeamFull]); 
+
+
   const handleJoinTeam = (index: number) => {
-    // Prevent joining if already in the team
     if (team.some(member => member?.id === currentUser.id)) return;
     
     setTeam(prevTeam => {
@@ -36,7 +113,6 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   };
 
   const handleJoinQueue = () => {
-    // Prevent joining if already in the queue or queue is full
     if (queue.length >= 10 || queue.some(member => member.id === currentUser.id)) return;
     setQueue(prev => [...prev, currentUser]);
   };
@@ -90,7 +166,13 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
                     <div key={user.id} className="flex items-center bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-md">
                         <span className="font-mono text-sm mr-2">{index + 1}.</span>
                         <img src={user.imageUrl} alt={user.name} className="w-6 h-6 rounded-full mr-2" />
-                        <span className="text-sm truncate">{user.name}</span>
+                        <span className="text-sm truncate flex-grow">{user.name}</span>
+                        {index === 0 && isTeamFull && (
+                            <div className="flex items-center gap-2 text-xs font-semibold flex-shrink-0">
+                                <span className="text-amber-400">{countdown}s</span>
+                                <MicrophoneIcon className={`w-4 h-4 transition-colors ${isMicActive ? 'text-green-400' : 'text-slate-600'}`} />
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
