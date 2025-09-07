@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UserIcon, PlusIcon, SendIcon, MicrophoneIcon } from './icons';
 import type { UserProfile } from '../types';
 
@@ -29,11 +29,19 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   const [currentRoom, setCurrentRoom] = useState<{ id: string; members: UserProfile[] } | null>(null);
   const [talkingMemberId, setTalkingMemberId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
+  const [countdown, setCountdown] = useState(60);
+  const [currentUserSlotIndex, setCurrentUserSlotIndex] = useState(0);
+
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  // FIX: Changed NodeJS.Timeout to `number` which is the correct return type for setInterval in a browser environment.
+  const countdownRef = useRef<number | null>(null);
   
   const currentUser = userProfile || mockUser;
 
-  // Add current user to queue on open if not already there or in a room
+  const handleLeaveQueue = useCallback(() => {
+    setQueue(prev => prev.filter(u => u.id !== currentUser.id));
+  }, [currentUser.id]);
+
   useEffect(() => {
     if (isOpen && !currentRoom) {
       const userInQueue = queue.some(u => u.id === currentUser.id);
@@ -43,17 +51,41 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     }
   }, [isOpen, currentUser, currentRoom]);
   
-  // Update team slots based on queue
   useEffect(() => {
     const newTeamSlots = Array(5).fill(null);
-    if (queue.length > 0) {
-      newTeamSlots[0] = queue[0];
+    const userAtHead = queue[0];
+    if (userAtHead?.id === currentUser.id) {
+        newTeamSlots[currentUserSlotIndex] = userAtHead;
+    } else if (userAtHead) {
+        newTeamSlots[0] = userAtHead; 
     }
     setTeamSlots(newTeamSlots);
-  }, [queue]);
+  }, [queue, currentUser.id, currentUserSlotIndex]);
 
+  useEffect(() => {
+    const isUserAtHead = queue[0]?.id === currentUser.id;
+    
+    if (isUserAtHead) {
+        setCountdown(60);
+        countdownRef.current = window.setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(countdownRef.current!);
+                    handleLeaveQueue();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    } else {
+        if (countdownRef.current) clearInterval(countdownRef.current);
+    }
 
-  // Effect to simulate members talking in a room
+    return () => {
+        if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, [queue, currentUser.id, handleLeaveQueue]);
+
   useEffect(() => {
     if (currentRoom) {
       const interval = setInterval(() => {
@@ -62,12 +94,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         setTalkingMemberId(talkingCandidate.id);
         setTimeout(() => setTalkingMemberId(null), 1000);
       }, 2500);
-
       return () => clearInterval(interval);
     }
   }, [currentRoom]);
 
-  // Effect to handle closing context menu on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
@@ -89,15 +119,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         imageUrl: `https://i.pravatar.cc/150?u=teammate${i}`
       }))
     ];
-    
     setCurrentRoom({ id: randomRoomId, members: teamMembers });
     setQueue(prev => prev.filter(u => u.id !== currentUser.id)); 
   };
   
-  const handleLeaveQueue = () => {
-    setQueue(prev => prev.filter(u => u.id !== currentUser.id));
-  };
-
   const handleExitRoom = () => {
     setCurrentRoom(null);
     setContextMenu(null);
@@ -108,6 +133,12 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     if (user.id === currentUser.id) {
         event.preventDefault();
         setContextMenu({ x: event.clientX, y: event.clientY });
+    }
+  };
+
+  const handleSlotClick = (newIndex: number) => {
+    if (queue[0]?.id === currentUser.id && teamSlots[newIndex] === null) {
+        setCurrentUserSlotIndex(newIndex);
     }
   };
 
@@ -135,6 +166,19 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
       <header className="flex-shrink-0 flex h-48">
         <div className="w-1/3 pr-2 flex flex-col border-r border-slate-200 dark:border-slate-700">
             <h2 className="text-lg font-bold mb-2 text-center flex-shrink-0">Hàng đợi</h2>
+            {queue[0] && (
+                <div className={`flex items-center p-1.5 rounded-md mb-2 ${queue[0].id === currentUser.id ? 'bg-indigo-500/20 ring-1 ring-indigo-400' : 'bg-slate-100 dark:bg-slate-800/50'}`}>
+                    <span className="font-mono text-sm mr-2">1.</span>
+                    <img src={queue[0].imageUrl} alt={queue[0].name} className="w-6 h-6 rounded-full mr-2" />
+                    <span className="text-sm truncate flex-grow">{queue[0].name}</span>
+                    {queue[0].id === currentUser.id ? (
+                        <>
+                            <MicrophoneIcon className="w-4 h-4 text-green-400 animate-pulse mr-2" />
+                            <span className="font-mono text-xs text-amber-400">{countdown}s</span>
+                        </>
+                    ) : <MicrophoneIcon className="w-4 h-4 text-slate-500" />}
+                </div>
+            )}
             <div className="flex-grow space-y-1 overflow-y-auto pr-2 min-h-0">
                 {queue.slice(1, 5).map((user, index) => (
                     <div key={user.id} className="flex items-center bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-md">
@@ -151,7 +195,7 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
                         <button onClick={handleLeaveQueue} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-1.5 rounded">Xuống</button>
                     </div>
                  ) : (
-                    <button className="w-full bg-gray-500 text-white text-sm font-semibold py-1.5 rounded cursor-not-allowed">Chờ...</button>
+                    <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-1.5 rounded" onClick={() => setQueue(prev => [currentUser, ...prev.filter(u => u.id !== currentUser.id)])}>Tham gia</button>
                  )}
             </div>
         </div>
@@ -160,13 +204,17 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
             <div className="flex-grow grid grid-cols-5 gap-2 sm:gap-4 items-center">
               {teamSlots.map((user, index) => (
                 <div key={index} className="flex flex-col items-center gap-2">
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center border-2 border-transparent">
+                    <button 
+                        onClick={() => handleSlotClick(index)}
+                        disabled={!!user || queue[0]?.id !== currentUser.id}
+                        className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center border-2 border-transparent disabled:cursor-not-allowed hover:enabled:border-indigo-400 transition-colors"
+                    >
                         {user ? (
                            <img src={user.imageUrl} alt={user.name} className="w-full h-full object-cover rounded-full" />
                         ) : (
                            <PlusIcon className="w-8 h-8 text-slate-500" />
                         )}
-                    </div>
+                    </button>
                     {user && <span className="text-xs text-center font-semibold truncate w-full">{user.name}</span>}
                 </div>
               ))}
@@ -200,27 +248,46 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   
   const renderInRoom = () => {
     if (!currentRoom) return null;
+    const mockMessages = [
+        { user: 'Admin', text: `Chào mừng ${currentUser.name} và mọi người đến với phòng ${currentRoom.id}!` },
+        { user: 'Đồng đội 1', text: 'Vào game thôi nào!' },
+        { user: 'Đồng đội 3', text: 'Let\'s goooo!' },
+        { user: 'Bạn', text: 'Ok, mời mình nhé.' },
+    ];
     return (
         <div className="flex flex-col h-full w-full p-2 sm:p-4 text-slate-800 dark:text-slate-200">
-            <header className="flex-shrink-0 text-center mb-4">
-                <h2 className="text-2xl font-bold">Phòng {currentRoom.id}</h2>
-            </header>
-            
-            <main className="flex-grow grid grid-cols-5 gap-4 items-start content-start">
+            <header className="flex-shrink-0 flex justify-center flex-wrap gap-4 sm:gap-6 mb-4 pb-4 border-b border-slate-700">
                 {currentRoom.members.map(member => (
                     <div key={member.id} className="flex flex-col items-center gap-2" onContextMenu={(e) => handleRightClick(e, member)}>
-                        <div className="relative w-20 h-20 sm:w-24 sm:h-24">
+                         <div className="relative w-16 h-16 sm:w-20 sm:h-20">
                             <img src={member.imageUrl} alt={member.name} className="w-full h-full rounded-full object-cover border-4 border-slate-400 dark:border-slate-600"/>
-                             <div className={`absolute -bottom-1 -right-1 p-1 bg-slate-200 dark:bg-slate-900 rounded-full transition-colors ${talkingMemberId === member.id ? 'animate-pulse' : ''}`}>
+                            <div className={`absolute -bottom-1 -right-1 p-1 bg-slate-200 dark:bg-slate-900 rounded-full transition-colors ${talkingMemberId === member.id ? 'animate-pulse' : ''}`}>
                                 <MicrophoneIcon className={`w-5 h-5 transition-colors ${talkingMemberId === member.id ? 'text-green-400' : 'text-slate-500'}`} />
                             </div>
                         </div>
                         <span className="text-sm font-semibold truncate max-w-full text-center">{member.name}</span>
                     </div>
                 ))}
+            </header>
+            
+            <main className="flex-grow flex flex-col bg-slate-100 dark:bg-slate-800/50 rounded-md min-h-0">
+                <div className="flex-grow p-4 overflow-y-auto space-y-4">
+                    {mockMessages.map((msg, index) => (
+                        <div key={index} className={`flex items-start gap-3 ${msg.user === currentUser.name ? 'flex-row-reverse' : ''}`}>
+                            <div className={`rounded-lg p-3 max-w-[75%] ${msg.user === currentUser.name ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700'}`}>
+                                <p className="font-bold text-sm mb-1">{msg.user}</p>
+                                <p className="text-sm">{msg.text}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <form className="flex-shrink-0 flex m-2">
+                    <input type="text" placeholder="Nhập chat..." className="flex-grow bg-white dark:bg-slate-700 p-2 rounded-l-md focus:outline-none text-sm"/>
+                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-r-md"><SendIcon className="w-5 h-5"/></button>
+                </form>
             </main>
 
-            <footer className="flex-shrink-0 mt-auto border-t border-slate-200 dark:border-slate-700 pt-4 flex justify-center">
+            <footer className="flex-shrink-0 mt-4 flex justify-center">
                  <button onClick={handleExitRoom} className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-8 rounded-lg transition-colors">
                     Thoát phòng
                 </button>
