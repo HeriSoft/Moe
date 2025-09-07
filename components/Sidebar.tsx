@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
-import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon } from './icons';
+import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, PuzzlePieceIcon } from './icons';
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -12,7 +12,8 @@ interface SidebarProps {
   onSettingsClick: () => void;
   onAdminPanelClick: () => void;
   onAdminMovieModalClick: () => void;
-  onAdminFilesLibraryClick: () => void; // New prop for files library admin
+  onAdminFilesLibraryClick: () => void;
+  onCCTalkClick: () => void; // New prop
   isAdmin: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -29,7 +30,7 @@ const UserProfileSection: React.FC<{
   onProfileClick: () => void;
   onAdminPanelClick: () => void;
   onAdminMovieModalClick: () => void;
-  onAdminFilesLibraryClick: () => void; // New prop for files library admin
+  onAdminFilesLibraryClick: () => void;
   isAdmin: boolean;
 }> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
@@ -91,7 +92,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onCCTalkClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -115,13 +116,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
         <h1 className="text-2xl font-bold">Moe Chat</h1>
       </div>
       
-      <button 
-        onClick={startNewChat}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors mb-4"
-      >
-        <PlusIcon className="w-5 h-5 mr-2" />
-        New Chat
-      </button>
+      <div className="flex gap-2 mb-4">
+        <button 
+          onClick={startNewChat}
+          className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+        >
+          <PlusIcon className="w-5 h-5 mr-2" />
+          New Chat
+        </button>
+        <button
+          onClick={onCCTalkClick}
+          title="ccTalk"
+          className="flex-shrink-0 bg-sky-500 hover:bg-sky-600 text-white font-semibold p-3 rounded-lg flex items-center justify-center transition-colors"
+        >
+            <PuzzlePieceIcon className="w-5 h-5" />
+        </button>
+      </div>
 
        <div className="relative mb-4">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
