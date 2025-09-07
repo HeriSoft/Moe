@@ -15,7 +15,7 @@ const mockUser: UserProfile = {
   imageUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
 };
 
-const otherQueueUsers = Array.from({ length: 5 }, (_, i) => ({
+const initialOtherUsers = Array.from({ length: 5 }, (_, i) => ({
     id: `mockuser${i}`,
     name: `User${i + 1}`,
     email: `user${i+1}@example.com`,
@@ -24,7 +24,8 @@ const otherQueueUsers = Array.from({ length: 5 }, (_, i) => ({
 
 export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [view, setView] = useState<'welcome' | 'selection' | 'game_room'>('welcome');
-  const [queue, setQueue] = useState<UserProfile[]>([]);
+  const [queue, setQueue] = useState<UserProfile[]>(initialOtherUsers);
+  const [teamSlots, setTeamSlots] = useState<(UserProfile | null)[]>(Array(5).fill(null));
   const [currentRoom, setCurrentRoom] = useState<{ id: string; members: UserProfile[] } | null>(null);
   const [talkingMemberId, setTalkingMemberId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
@@ -32,16 +33,24 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   
   const currentUser = userProfile || mockUser;
 
-  // Effect to initialize queue with current user at the front
+  // Add current user to queue on open if not already there or in a room
   useEffect(() => {
     if (isOpen && !currentRoom) {
-      // If user isn't in a room, ensure they are at the front of the queue
       const userInQueue = queue.some(u => u.id === currentUser.id);
       if (!userInQueue) {
-         setQueue([currentUser, ...otherQueueUsers]);
+         setQueue(prevQueue => [currentUser, ...prevQueue.filter(u => u.id !== currentUser.id)]);
       }
     }
   }, [isOpen, currentUser, currentRoom]);
+  
+  // Update team slots based on queue
+  useEffect(() => {
+    const newTeamSlots = Array(5).fill(null);
+    if (queue.length > 0) {
+      newTeamSlots[0] = queue[0];
+    }
+    setTeamSlots(newTeamSlots);
+  }, [queue]);
 
 
   // Effect to simulate members talking in a room
@@ -49,10 +58,8 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     if (currentRoom) {
       const interval = setInterval(() => {
         const members = currentRoom.members;
-        // Make it more likely for others to talk than the current user
         const talkingCandidate = members[Math.floor(Math.random() * members.length)];
         setTalkingMemberId(talkingCandidate.id);
-        // Turn off mic after a short duration
         setTimeout(() => setTalkingMemberId(null), 1000);
       }, 2500);
 
@@ -84,13 +91,16 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     ];
     
     setCurrentRoom({ id: randomRoomId, members: teamMembers });
-    setQueue(prev => prev.filter(u => u.id !== currentUser.id)); // Remove user from lobby queue
+    setQueue(prev => prev.filter(u => u.id !== currentUser.id)); 
+  };
+  
+  const handleLeaveQueue = () => {
+    setQueue(prev => prev.filter(u => u.id !== currentUser.id));
   };
 
   const handleExitRoom = () => {
     setCurrentRoom(null);
     setContextMenu(null);
-    // Add user back to the front of the queue
     setQueue(prev => [currentUser, ...prev.filter(u => u.id !== currentUser.id)]);
   };
 
@@ -126,9 +136,9 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         <div className="w-1/3 pr-2 flex flex-col border-r border-slate-200 dark:border-slate-700">
             <h2 className="text-lg font-bold mb-2 text-center flex-shrink-0">Hàng đợi</h2>
             <div className="flex-grow space-y-1 overflow-y-auto pr-2 min-h-0">
-                {queue.slice(0, 4).map((user, index) => (
+                {queue.slice(1, 5).map((user, index) => (
                     <div key={user.id} className="flex items-center bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-md">
-                        <span className="font-mono text-sm mr-2">{index + 1}.</span>
+                        <span className="font-mono text-sm mr-2">{index + 2}.</span>
                         <img src={user.imageUrl} alt={user.name} className="w-6 h-6 rounded-full mr-2" />
                         <span className="text-sm truncate flex-grow">{user.name}</span>
                     </div>
@@ -136,7 +146,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
             </div>
             <div className="mt-2 flex-shrink-0">
                  {queue[0]?.id === currentUser.id ? (
-                    <button onClick={handleEnterRoom} className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-1.5 rounded">Vào phòng</button>
+                    <div className="flex gap-2">
+                        <button onClick={handleEnterRoom} className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-1.5 rounded">Vào phòng</button>
+                        <button onClick={handleLeaveQueue} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-1.5 rounded">Xuống</button>
+                    </div>
                  ) : (
                     <button className="w-full bg-gray-500 text-white text-sm font-semibold py-1.5 rounded cursor-not-allowed">Chờ...</button>
                  )}
@@ -145,11 +158,16 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         <div className="w-2/3 pl-2 flex flex-col">
             <h2 className="text-lg font-bold mb-2 text-center">Tuyển team</h2>
             <div className="flex-grow grid grid-cols-5 gap-2 sm:gap-4 items-center">
-              {Array.from({ length: 5 }).map((_, index) => (
+              {teamSlots.map((user, index) => (
                 <div key={index} className="flex flex-col items-center gap-2">
                     <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center border-2 border-transparent">
-                        <PlusIcon className="w-8 h-8 text-slate-500" />
+                        {user ? (
+                           <img src={user.imageUrl} alt={user.name} className="w-full h-full object-cover rounded-full" />
+                        ) : (
+                           <PlusIcon className="w-8 h-8 text-slate-500" />
+                        )}
                     </div>
+                    {user && <span className="text-xs text-center font-semibold truncate w-full">{user.name}</span>}
                 </div>
               ))}
             </div>
@@ -202,17 +220,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
                 ))}
             </main>
 
-            <footer className="flex-shrink-0 mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
-                <div className="flex flex-col">
-                    <div className="flex-grow bg-slate-100 dark:bg-slate-800/50 rounded-t-md p-2 overflow-y-auto text-sm space-y-2 h-24">
-                        <p><strong className="text-green-400">{currentUser.name}:</strong> Ai gánh em với!</p>
-                        <p><strong className="text-purple-400">Đồng đội 1:</strong> ok em</p>
-                    </div>
-                    <form className="flex-shrink-0 flex">
-                        <input type="text" placeholder="Nhập chat..." className="flex-grow bg-white dark:bg-slate-700 p-2 rounded-bl-md focus:outline-none text-sm"/>
-                        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-br-md"><SendIcon className="w-5 h-5"/></button>
-                    </form>
-                </div>
+            <footer className="flex-shrink-0 mt-auto border-t border-slate-200 dark:border-slate-700 pt-4 flex justify-center">
+                 <button onClick={handleExitRoom} className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-8 rounded-lg transition-colors">
+                    Thoát phòng
+                </button>
             </footer>
             
             {contextMenu && (
