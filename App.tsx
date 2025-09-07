@@ -59,7 +59,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isCCTalkModalOpen, setIsCCTalkModalOpen] = useState(false); // Changed default to false
+  const [isCCTalkModalOpen, setIsCCTalkModalOpen] = useState(true); // New
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [model, setModel] = useState('gemini-2.5-flash');
@@ -119,20 +119,10 @@ const App: React.FC = () => {
   }, []);
 
   // Define the authentication handler using useCallback to prevent stale closures
-  const handleAuthChange = useCallback(async (loggedIn: boolean, profile?: UserProfile) => {
+  const handleAuthChange = useCallback((loggedIn: boolean, profile?: UserProfile) => {
       setIsLoggedIn(loggedIn);
       if (loggedIn && profile) {
-          // Fetch user's pro status from our backend
-          try {
-              const response = await fetch(`/api/cctalk?action=get_user_status&email=${profile.email}`);
-              const data = await response.json();
-              const fullProfile = { ...profile, isPro: data.isPro };
-              setUserProfile(fullProfile);
-          } catch (e) {
-              console.error("Failed to fetch user pro status", e);
-              setUserProfile(profile); // Fallback to basic profile
-          }
-
+          setUserProfile(profile);
           loadChatsFromDrive();
           logUserLogin(profile); // Log the login event
       } else {
@@ -662,15 +652,6 @@ const App: React.FC = () => {
         setNotifications(prev => ["Please sign in to use Creative Tools.", ...prev.slice(0, 19)]);
     }
   };
-  
-  const handleOpenCCTalk = () => {
-    if (isLoggedIn) {
-      setIsCCTalkModalOpen(true);
-    } else {
-      setIsLoginModalOpen(true);
-      setNotifications(prev => ["Please sign in to use ccTalk.", ...prev.slice(0, 19)]);
-    }
-  };
 
 
   return (
@@ -693,8 +674,7 @@ const App: React.FC = () => {
         onSettingsClick={() => setIsSettingsOpen(true)}
         onAdminPanelClick={() => setIsAdminPanelOpen(true)}
         onAdminMovieModalClick={() => setIsAdminMovieModalOpen(true)}
-        onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)}
-        onCCTalkClick={handleOpenCCTalk} // New prop
+        onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)} // New
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
@@ -760,7 +740,6 @@ const App: React.FC = () => {
         isOpen={isCCTalkModalOpen}
         onClose={() => setIsCCTalkModalOpen(false)}
         userProfile={userProfile}
-        setNotifications={setNotifications}
       />
       <GenerationModal
         isOpen={isGenerationModalOpen}
