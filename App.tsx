@@ -59,7 +59,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isCCTalkModalOpen, setIsCCTalkModalOpen] = useState(true); // New
+  const [isCCTalkModalOpen, setIsCCTalkModalOpen] = useState(false); // Changed default to false
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [model, setModel] = useState('gemini-2.5-flash');
@@ -714,6 +714,7 @@ const App: React.FC = () => {
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
           onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
           onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)} // New
+          onOpenCCTalk={() => setIsCCTalkModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
         />
