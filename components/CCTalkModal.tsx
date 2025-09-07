@@ -34,9 +34,9 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   const [talkingMemberId, setTalkingMemberId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, targetUser: UserProfile } | null>(null);
   const [countdown, setCountdown] = useState(60);
-  const [currentUserSlotIndex, setCurrentUserSlotIndex] = useState(0);
   
   // --- New State ---
+  const [teamSlots, setTeamSlots] = useState<(UserProfile | null)[]>(Array(5).fill(null));
   const [hoveredRoomId, setHoveredRoomId] = useState<number | null>(null);
   const [roomOccupancy, setRoomOccupancy] = useState<Record<number, { current: number, max: number }>>({});
   const [pinnedMessage, setPinnedMessage] = useState<string | null>(null);
@@ -85,17 +85,38 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   }, [isOpen, currentUser, currentRoom]);
   
 
-  const teamSlots = useMemo(() => {
-    const newTeamSlots = Array(5).fill(null);
+  // --- NEW: Refactored team slot state management ---
+  useEffect(() => {
     const userAtHead = queue[0];
-    if (userAtHead?.id === currentUser.id) {
-        newTeamSlots[currentUserSlotIndex] = userAtHead;
-    } else if (userAtHead) {
-        newTeamSlots[0] = userAtHead;
-    }
-    return newTeamSlots;
-  }, [queue, currentUser.id, currentUserSlotIndex]);
 
+    // Case 1: The user at the head is someone else. They take slot 0.
+    if (userAtHead && userAtHead.id !== currentUser.id) {
+        if (teamSlots[0]?.id !== userAtHead.id || teamSlots.slice(1).some(s => s !== null)) {
+            const newSlots = Array(5).fill(null);
+            newSlots[0] = userAtHead;
+            setTeamSlots(newSlots);
+        }
+        return;
+    }
+
+    // Case 2: The current user is at the head. Manage their position.
+    if (userAtHead && userAtHead.id === currentUser.id) {
+        const isUserInSlots = teamSlots.some(u => u?.id === currentUser.id);
+        if (!isUserInSlots) {
+            const newSlots = Array(5).fill(null);
+            newSlots[0] = userAtHead;
+            setTeamSlots(newSlots);
+        }
+        return;
+    }
+    
+    // Case 3: The queue is empty. Clear the slots.
+    if (!userAtHead) {
+        if (teamSlots.some(s => s !== null)) {
+            setTeamSlots(Array(5).fill(null));
+        }
+    }
+  }, [queue, currentUser.id, teamSlots]);
 
   useEffect(() => {
     const isUserAtHead = queue[0]?.id === currentUser.id;
@@ -179,8 +200,10 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   };
   
   const handleSlotClick = (newIndex: number) => {
-    if (queue[0]?.id === currentUser.id && teamSlots[newIndex] === null) {
-        setCurrentUserSlotIndex(newIndex);
+    if (queue[0]?.id === currentUser.id && !teamSlots[newIndex]) {
+        const newSlots = Array(5).fill(null);
+        newSlots[newIndex] = queue[0];
+        setTeamSlots(newSlots);
     }
   };
 
@@ -240,7 +263,7 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     else if (userIsMod) nameClass = 'font-bold text-purple-400';
 
     return (
-        <span className="flex items-center gap-1.5 text-sm truncate">
+        <span className="flex items-center justify-center gap-1.5 text-sm truncate">
             <span className={nameClass}>{user.name}</span>
             {showIcons && (userIsAdmin || userIsMod) && <VipTag />}
             {showIcons && userIsPremium && <StarIcon className="w-4 h-4 text-yellow-400" solid />}
