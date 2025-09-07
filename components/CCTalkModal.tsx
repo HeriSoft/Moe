@@ -8,14 +8,6 @@ interface CCTalkModalProps {
   userProfile?: UserProfile;
 }
 
-// NEW: Define a Room interface
-interface Room {
-  id: string;
-  name: string;
-  currentMembers: number;
-  maxMembers: number;
-}
-
 const mockUser: UserProfile = {
   id: 'current_user_123',
   name: 'Bạn',
@@ -23,34 +15,101 @@ const mockUser: UserProfile = {
   imageUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
 };
 
-// NEW: Initial list of rooms with mock data
-const initialRooms: Room[] = Array.from({ length: 20 }, (_, i) => ({
-    id: `room${i + 1}`,
-    name: `Phòng ${String(i + 1).padStart(2, '0')}`,
-    currentMembers: Math.floor(Math.random() * 6), // 0 to 5 members
-    maxMembers: 5,
+const initialQueue: UserProfile[] = Array.from({ length: 5 }, (_, i) => ({
+  id: `queue_user_${i}`,
+  name: `Game thủ ${i + 1}`,
+  email: `gamer${i+1}@example.com`,
+  imageUrl: `https://i.pravatar.cc/150?u=queue${i}`,
 }));
 
+const initialTeam: (UserProfile | null)[] = [
+  { id: 'team_user_1', name: 'Đội trưởng', imageUrl: 'https://i.pravatar.cc/150?u=team1', email: 'c@c.com' },
+  null,
+  { id: 'team_user_3', name: 'Tay to', imageUrl: 'https://i.pravatar.cc/150?u=team3', email: 'c@c.com' },
+  null,
+  null,
+];
 
 export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [view, setView] = useState<'welcome' | 'selection' | 'game_room'>('welcome');
-  // NEW: State for rooms and hover effect
-  const [rooms, setRooms] = useState<Room[]>(initialRooms);
-  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+  const [isInQueue, setIsInQueue] = useState(false);
+  const [queue, setQueue] = useState<UserProfile[]>(initialQueue);
+  const [team, setTeam] = useState<(UserProfile | null)[]>(initialTeam);
+  const [countdown, setCountdown] = useState(60);
+  const countdownIntervalRef = useRef<number | null>(null);
 
   const [currentRoom, setCurrentRoom] = useState<{ id: string; members: UserProfile[] } | null>(null);
   const [talkingMemberId, setTalkingMemberId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
-
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  
-  const currentUser = userProfile || mockUser;
 
-  // Effect for simulating talking members in a room
+  const currentUser = userProfile || mockUser;
+  const isUserFirstInQueue = isInQueue && queue[0]?.id === currentUser.id;
+
+  useEffect(() => {
+    if (isUserFirstInQueue) {
+      setCountdown(60);
+      countdownIntervalRef.current = window.setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownIntervalRef.current!);
+            setIsInQueue(false);
+            setQueue(initialQueue); 
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    }
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+    };
+  }, [isUserFirstInQueue]);
+
+  const handleJoinQueue = () => {
+    if (!isInQueue) {
+      setQueue([currentUser, ...initialQueue.slice(0, 4)]);
+      setIsInQueue(true);
+    }
+  };
+
+  const handleMoveToTeam = (index: number) => {
+    if (isUserFirstInQueue && team[index] === null) {
+      const newTeam = [...team];
+      newTeam[index] = currentUser;
+      setTeam(newTeam);
+      setIsInQueue(false);
+      setQueue(q => q.filter(u => u.id !== currentUser.id));
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    }
+  };
+
+  const handleEnterRoom = () => {
+    if (team.some(member => member?.id === currentUser.id)) {
+        const finalTeamMembers = team.map(member => member || { id: `empty_${Math.random()}`, name: 'Trống', imageUrl: '', email:'' });
+        setCurrentRoom({ id: 'Phòng 1', members: finalTeamMembers as UserProfile[] });
+    }
+  };
+  
+  const handleExitRoom = () => {
+    setCurrentRoom(null);
+    setTeam(initialTeam);
+    setIsInQueue(false);
+    setQueue(initialQueue);
+    setContextMenu(null);
+  };
+
   useEffect(() => {
     if (currentRoom) {
       const interval = setInterval(() => {
-        const members = currentRoom.members;
+        const members = currentRoom.members.filter(m => m.name !== 'Trống');
+        if (members.length === 0) return;
         const talkingCandidate = members[Math.floor(Math.random() * members.length)];
         setTalkingMemberId(talkingCandidate.id);
         setTimeout(() => setTalkingMemberId(null), 1000);
@@ -59,7 +118,6 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     }
   }, [currentRoom]);
 
-  // Effect for handling clicks outside the context menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
@@ -69,29 +127,6 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // NEW: Handle joining a room
-  const handleJoinRoom = (room: Room) => {
-    if (room.currentMembers >= room.maxMembers) {
-      alert("Phòng đã đầy!");
-      return;
-    }
-    const teamMembers = [
-      currentUser,
-      ...Array.from({ length: 4 }, (_, i) => ({
-        id: `teammate${i}`,
-        name: `Đồng đội ${i + 1}`,
-        email: `teammate${i}@example.com`,
-        imageUrl: `https://i.pravatar.cc/150?u=teammate${i}`
-      }))
-    ];
-    setCurrentRoom({ id: room.id, members: teamMembers });
-  };
-  
-  const handleExitRoom = () => {
-    setCurrentRoom(null);
-    setContextMenu(null);
-  };
 
   const handleRightClick = (event: React.MouseEvent, user: UserProfile) => {
     if (user.id === currentUser.id) {
@@ -119,49 +154,55 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     </div>
   );
   
-  // NEW: Reworked game room lobby to show a list of rooms
   const renderGameRoom = () => (
-    <div className="flex flex-col h-full w-full p-2 sm:p-4 text-slate-800 dark:text-slate-200">
-      <header className="flex-shrink-0 text-center mb-4">
-        <h2 className="text-xl font-bold">Danh sách phòng</h2>
-      </header>
-      <main className="flex-grow overflow-y-auto pr-2 -mr-2">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {rooms.map((room) => {
-            const isFull = room.currentMembers >= room.maxMembers;
-            return (
-              <div
-                key={room.id}
-                onMouseEnter={() => setHoveredRoomId(room.id)}
-                onMouseLeave={() => setHoveredRoomId(null)}
-                className="relative aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg flex flex-col items-center justify-center p-2 text-center group"
-              >
-                <p className="font-bold text-lg">{room.name}</p>
-                <p className={`font-mono text-sm ${isFull ? 'text-red-500' : 'text-green-500'}`}>
-                  ({room.currentMembers}/{room.maxMembers})
-                </p>
-                {hoveredRoomId === room.id && (
-                  <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
-                    <button
-                      onClick={() => handleJoinRoom(room)}
-                      className={`px-4 py-2 rounded-md font-semibold text-white transition-colors ${
-                        isFull
-                          ? 'bg-red-600 cursor-not-allowed'
-                          : 'bg-green-600 hover:bg-green-700'
-                      }`}
-                    >
-                      {isFull ? 'Phòng đầy' : 'Tham gia'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+    <div className="flex flex-col md:flex-row h-full w-full p-2 sm:p-4 text-slate-800 dark:text-slate-200">
+        <div className="w-full md:w-1/3 border-b-2 md:border-b-0 md:border-r-2 border-slate-200 dark:border-slate-700 p-2 md:p-4 flex flex-col">
+            <h3 className="text-lg font-bold text-center mb-4">Hàng đợi</h3>
+            <div className="flex-grow space-y-3 overflow-y-auto">
+                {queue.map((user, index) => (
+                    <div key={user.id} className={`flex items-center gap-3 p-2 rounded-md ${isUserFirstInQueue && user.id === currentUser.id ? 'bg-indigo-500/20 ring-2 ring-indigo-500' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                        <span className="font-mono text-sm w-6 text-center">{index + 1}</span>
+                        <img src={user.imageUrl} alt={user.name} className="w-8 h-8 rounded-full" />
+                        <span className="font-semibold text-sm truncate flex-grow">{user.name}</span>
+                        {isUserFirstInQueue && user.id === currentUser.id && (
+                             <div className="flex items-center gap-2 text-sm text-indigo-400">
+                                <MicrophoneIcon className="w-4 h-4 animate-pulse" />
+                                <span>{countdown}s</span>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+             {!isInQueue && (
+                <button onClick={handleJoinQueue} className="mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">Xếp hàng</button>
+             )}
         </div>
-      </main>
-      <footer className="flex-shrink-0 mt-4 border-t border-slate-200 dark:border-slate-700 pt-4 flex justify-center">
-        <button onClick={() => setView('selection')} className="bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">Quay lại</button>
-      </footer>
+
+        <div className="w-full md:w-2/3 p-2 md:p-4 flex flex-col justify-between">
+            <div>
+                <h3 className="text-lg font-bold text-center mb-6">Tuyển team</h3>
+                <div className="grid grid-cols-5 gap-4">
+                    {team.map((member, index) => (
+                        <div key={index} className="flex flex-col items-center gap-2">
+                            {member ? (
+                                <div className="w-20 h-20 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center">
+                                    <img src={member.imageUrl} alt={member.name} className="w-full h-full rounded-full object-cover border-2 border-slate-400"/>
+                                </div>
+                            ) : (
+                                <button onClick={() => handleMoveToTeam(index)} disabled={!isUserFirstInQueue} className="w-20 h-20 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center hover:bg-slate-300 dark:hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
+                                    <PlusIcon className="w-8 h-8 text-slate-500" />
+                                </button>
+                            )}
+                            <span className="text-sm font-semibold truncate max-w-full text-center">{member ? member.name : 'Trống'}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="mt-8 flex justify-center gap-4">
+                <button onClick={() => setView('selection')} className="bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors">Quay lại</button>
+                 <button onClick={handleEnterRoom} disabled={!team.some(m => m?.id === currentUser.id)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:bg-indigo-400 disabled:cursor-not-allowed">Vào phòng</button>
+            </div>
+        </div>
     </div>
   );
   
@@ -177,15 +218,17 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
         <div className="flex flex-col h-full w-full p-2 sm:p-4 text-slate-800 dark:text-slate-200">
             <header className="flex-shrink-0 flex justify-center flex-wrap gap-4 sm:gap-6 mb-4 pb-4 border-b border-slate-700">
                 {currentRoom.members.map(member => (
-                    <div key={member.id} className="flex flex-col items-center gap-2" onContextMenu={(e) => handleRightClick(e, member)}>
-                         <div className="relative w-16 h-16 sm:w-20 sm:h-20">
-                            <img src={member.imageUrl} alt={member.name} className="w-full h-full rounded-full object-cover border-4 border-slate-400 dark:border-slate-600"/>
-                            <div className={`absolute -bottom-1 -right-1 p-1 bg-slate-200 dark:bg-slate-900 rounded-full transition-colors ${talkingMemberId === member.id ? 'animate-pulse' : ''}`}>
-                                <MicrophoneIcon className={`w-5 h-5 transition-colors ${talkingMemberId === member.id ? 'text-green-400' : 'text-slate-500'}`} />
+                    member.name !== 'Trống' && (
+                        <div key={member.id} className="flex flex-col items-center gap-2" onContextMenu={(e) => handleRightClick(e, member)}>
+                            <div className="relative w-16 h-16 sm:w-20 sm:h-20">
+                                <img src={member.imageUrl} alt={member.name} className="w-full h-full rounded-full object-cover border-4 border-slate-400 dark:border-slate-600"/>
+                                <div className={`absolute -bottom-1 -right-1 p-1 bg-slate-200 dark:bg-slate-900 rounded-full transition-colors ${talkingMemberId === member.id ? 'animate-pulse' : ''}`}>
+                                    <MicrophoneIcon className={`w-5 h-5 transition-colors ${talkingMemberId === member.id ? 'text-green-400' : 'text-slate-500'}`} />
+                                </div>
                             </div>
+                            <span className="text-sm font-semibold truncate max-w-full text-center">{member.name}</span>
                         </div>
-                        <span className="text-sm font-semibold truncate max-w-full text-center">{member.name}</span>
-                    </div>
+                    )
                 ))}
             </header>
             
