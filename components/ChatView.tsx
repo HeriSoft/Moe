@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, ChatBubbleIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
@@ -101,6 +101,7 @@ interface ChatViewProps {
   onOpenMediaGallery: () => void; // For media gallery
   onOpenVideoCinema: () => void; // For Video Cinema
   onOpenFilesLibrary: () => void; // For Files Library
+  onOpenCCTalk: () => void; // For CCTalk
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
 }
@@ -171,7 +172,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -436,6 +437,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
               <button title="Media Gallery" aria-label="Open Media Gallery" onClick={onOpenMediaGallery} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
                   <FolderOpenIcon className="w-5 h-5" />
               </button>
+              <button title="ccTalk" aria-label="Open ccTalk" onClick={onOpenCCTalk} className="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 p-1.5 rounded-md transition-colors">
+                  <ChatBubbleIcon className="w-5 h-5" />
+              </button>
               <PersonaSelector
                 personas={personas}
                 activePersonaKey={activeChat.persona || 'default'}
@@ -449,7 +453,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             <div className="relative" ref={notificationsRef}>
                 <button 
                     onClick={() => setIsNotificationsOpen(prev => !prev)} 
-                    className="relative text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
+                    className="relative text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:white"
                     aria-label="Toggle notifications"
                 >
                     <BellIcon className="w-6 h-6" />
