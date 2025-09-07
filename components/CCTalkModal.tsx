@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { UserIcon, PlusIcon, SendIcon, MicrophoneIcon, StarIcon, CloseIcon } from './icons';
 import type { UserProfile } from '../types';
 
@@ -30,7 +30,6 @@ const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
 export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [view, setView] = useState<'welcome' | 'selection' | 'game_room'>('welcome');
   const [queue, setQueue] = useState<UserProfile[]>(initialOtherUsers);
-  const [teamSlots, setTeamSlots] = useState<(UserProfile | null)[]>(Array(5).fill(null));
   const [currentRoom, setCurrentRoom] = useState<{ id: string; members: UserProfile[]; occupancy: { current: number; max: number } } | null>(null);
   const [talkingMemberId, setTalkingMemberId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, targetUser: UserProfile } | null>(null);
@@ -85,16 +84,18 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     }
   }, [isOpen, currentUser, currentRoom]);
   
-  useEffect(() => {
+
+  const teamSlots = useMemo(() => {
     const newTeamSlots = Array(5).fill(null);
     const userAtHead = queue[0];
     if (userAtHead?.id === currentUser.id) {
         newTeamSlots[currentUserSlotIndex] = userAtHead;
     } else if (userAtHead) {
-        newTeamSlots[0] = userAtHead; 
+        newTeamSlots[0] = userAtHead;
     }
-    setTeamSlots(newTeamSlots);
+    return newTeamSlots;
   }, [queue, currentUser.id, currentUserSlotIndex]);
+
 
   useEffect(() => {
     const isUserAtHead = queue[0]?.id === currentUser.id;
@@ -228,7 +229,8 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
   };
 
 
-  const renderUserName = (user: UserProfile) => {
+  const renderUserName = (user: UserProfile, options: { showIcons?: boolean } = {}) => {
+    const { showIcons = true } = options;
     const userIsAdmin = user.email === ADMIN_EMAIL;
     const userIsMod = isMod(user);
     const userIsPremium = isPremium(user);
@@ -240,28 +242,34 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
     return (
         <span className="flex items-center gap-1.5 text-sm truncate">
             <span className={nameClass}>{user.name}</span>
-            {(userIsAdmin || userIsMod) && <VipTag />}
-            {userIsPremium && <StarIcon className="w-4 h-4 text-yellow-400" solid />}
+            {showIcons && (userIsAdmin || userIsMod) && <VipTag />}
+            {showIcons && userIsPremium && <StarIcon className="w-4 h-4 text-yellow-400" solid />}
         </span>
     );
   };
   
   const renderWelcome = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4">
+    <div className="relative flex flex-col items-center justify-center h-full text-center p-4">
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 dark:text-white">ccTalk - Kết nối giao lưu</h1>
         <button onClick={() => setView('selection')} className="mt-8 w-full max-w-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105 text-lg">
             Tham gia ngay
         </button>
+        <footer className="absolute bottom-4">
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-semibold py-2 px-6 rounded-lg transition-colors text-sm">Thoát ccTalk</button>
+        </footer>
     </div>
   );
 
   const renderSelection = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center p-4">
+    <div className="relative flex flex-col items-center justify-center h-full text-center p-4">
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-800 dark:text-white mb-8">ccTalk - Kết nối giao lưu</h1>
         <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
             <button onClick={() => setView('game_room')} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-6 px-4 rounded-lg transition-colors text-xl">Phòng Game</button>
             <button onClick={() => alert('Chức năng này đang được phát triển!')} className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-6 px-4 rounded-lg transition-colors text-xl">Phòng Trò chuyện / Ca hát</button>
         </div>
+        <footer className="absolute bottom-4">
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-semibold py-2 px-6 rounded-lg transition-colors text-sm">Thoát ccTalk</button>
+        </footer>
     </div>
   );
   
@@ -319,7 +327,7 @@ export const CCTalkModal: React.FC<CCTalkModalProps> = ({ isOpen, onClose, userP
                            <PlusIcon className="w-8 h-8 text-slate-500" />
                         )}
                     </button>
-                    {user && <div className="text-xs text-center font-semibold truncate w-full">{renderUserName(user)}</div>}
+                    {user && <div className="text-xs text-center font-semibold truncate w-full">{renderUserName(user, { showIcons: false })}</div>}
                 </div>
               ))}
             </div>
