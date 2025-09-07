@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
+import { WelcomeModal } from './components/WelcomeModal'; // New
 import { GenerationModal } from './components/GenerationModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
@@ -58,6 +59,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false); // New
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [model, setModel] = useState('gemini-2.5-flash');
@@ -150,6 +152,21 @@ const App: React.FC = () => {
     googleDriveService.initClient(handleAuthChange);
   }, [handleAuthChange]);
   
+  // --- Welcome Modal Logic ---
+  useEffect(() => {
+    if (isAuthReady && !isLoggedIn) {
+      const hasSeenWelcome = localStorage.getItem('hasSeenWelcomeModal');
+      if (!hasSeenWelcome) {
+        setIsWelcomeModalOpen(true);
+      }
+    }
+  }, [isAuthReady, isLoggedIn]);
+
+  const handleCloseWelcomeModal = () => {
+    setIsWelcomeModalOpen(false);
+    localStorage.setItem('hasSeenWelcomeModal', 'true');
+  };
+
   // Save active chat ID to localStorage whenever it changes
   useEffect(() => {
     if (activeChatId) {
@@ -733,6 +750,10 @@ const App: React.FC = () => {
             googleDriveService.signIn();
             setIsLoginModalOpen(false);
         }}
+      />
+      <WelcomeModal
+        isOpen={isWelcomeModalOpen}
+        onClose={handleCloseWelcomeModal}
       />
       <GenerationModal
         isOpen={isGenerationModalOpen}
