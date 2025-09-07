@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CloseIcon, SpeakerWaveIcon, StopCircleIcon } from './icons';
 
@@ -71,10 +69,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
       audioContextRef.current = null;
     }
 
-    // Stop media stream tracks
-    micStream?.getTracks().forEach(track => track.stop());
-    setMicStream(null);
-  }, [micStream]);
+    // Stop media stream tracks using a functional update to avoid dependency cycle
+    setMicStream(currentStream => {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+      return null;
+    });
+  }, []);
   
   // --- Function to set up a new stream and the visualizer ---
   const setupStreamAndVisualizer = useCallback((stream: MediaStream) => {
@@ -119,14 +121,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
         }
         try {
           setMicError(null);
+          // Request a stream first to ensure permissions are granted
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           const devices = await navigator.mediaDevices.enumerateDevices();
           const audioDevices = devices.filter(device => device.kind === 'audioinput');
           setMicDevices(audioDevices);
+          
           if (audioDevices.length > 0) {
-            const defaultDeviceId = audioDevices[0].deviceId;
-            setSelectedMicId(defaultDeviceId);
-            setupStreamAndVisualizer(stream);
+            // Check if there's a default device, otherwise use the first
+            const defaultDevice = audioDevices.find(d => d.deviceId === 'default') || audioDevices[0];
+            setSelectedMicId(defaultDevice.deviceId);
+
+            // If the initial stream is not from the desired device, get a new one
+            const currentStreamDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+            if (currentStreamDeviceId && currentStreamDeviceId !== defaultDevice.deviceId && defaultDevice.deviceId !== 'default') {
+                stream.getTracks().forEach(track => track.stop()); // Stop the generic stream
+                const specificStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: defaultDevice.deviceId } } });
+                setupStreamAndVisualizer(specificStream);
+            } else {
+                setupStreamAndVisualizer(stream); // Use the already-acquired stream
+            }
           } else {
             setMicError("No microphone found.");
             stream.getTracks().forEach(track => track.stop());
@@ -151,6 +165,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     const newDeviceId = event.target.value;
     setSelectedMicId(newDeviceId);
     stopMic(); // Clean up the old stream before starting a new one
+    setMicError(null); // Clear previous errors
     try {
         const newStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: newDeviceId } } });
         setupStreamAndVisualizer(newStream);
@@ -180,19 +195,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     } else {
       setRecordedAudioUrl(null);
       recordedChunksRef.current = [];
-      const recorder = new MediaRecorder(micStream);
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        setRecordedAudioUrl(url);
-        setIsRecording(false);
-      };
-      recorder.start();
-      setIsRecording(true);
+      try {
+        const recorder = new MediaRecorder(micStream);
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+        };
+        recorder.onstop = () => {
+          const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          setRecordedAudioUrl(url);
+          setIsRecording(false);
+        };
+        recorder.start();
+        setIsRecording(true);
+      } catch (e) {
+        console.error("MediaRecorder error:", e);
+        setMicError("Could not start recording. The microphone might be in use by another application.");
+      }
     }
   };
 
