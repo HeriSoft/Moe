@@ -18,6 +18,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/cctalk.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
@@ -41,6 +45,10 @@
     {
       "source": "/api/files",
       "destination": "/api/files.js"
+    },
+    {
+      "source": "/api/cctalk",
+      "destination": "/api/cctalk.js"
     },
     {
       "source": "/(.*)",
