@@ -460,7 +460,7 @@ export default async function handler(req, res) {
 
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash-image-preview',
-                    contents: { parts: [textPart, ...imageParts] },
+                    contents: { parts: [...imageParts, textPart] },
                     config: { responseModalities: ['IMAGE', 'TEXT'] },
                 });
                 const parts = response.candidates?.[0]?.content?.parts || [];
