@@ -45,8 +45,9 @@ const pool = new Pool({ connectionString });
 
 // --- DB TABLE INITIALIZATION ---
 async function createTables() {
+    const client = await pool.connect();
     try {
-        await pool.query(`
+        await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -56,10 +57,18 @@ async function createTables() {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+
+        // Safely add new columns for membership and moderator features
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_moderator BOOLEAN NOT NULL DEFAULT false;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;');
+
         console.log("Table 'users' is ready.");
     } catch (error) {
-        console.error("Error creating users table:", error);
+        console.error("Error creating/altering users table:", error);
         throw new Error("Failed to initialize database tables.");
+    } finally {
+        client.release();
     }
 }
 let isDbInitialized = false;
@@ -81,11 +90,11 @@ async function isUserPro(email) {
         }
     }
 
-    // 2. If not in cache, check database
+    // 2. If not in cache, check database using both methods for compatibility
     let isPro = false;
     try {
         const { rows } = await pool.query(
-            `SELECT subscription_status FROM users WHERE email = $1 AND subscription_status = 'active';`,
+            `SELECT id FROM users WHERE email = $1 AND (subscription_status = 'active' OR (subscription_expires_at IS NOT NULL AND subscription_expires_at > NOW()));`,
             [email]
         );
         isPro = rows.length > 0;
@@ -278,7 +287,8 @@ export default async function handler(req, res) {
                             VALUES ($1, $2, $3)
                             ON CONFLICT (email) DO UPDATE SET
                                 name = EXCLUDED.name,
-                                image_url = EXCLUDED.image_url;
+                                image_url = EXCLUDED.image_url,
+                                updated_at = CURRENT_TIMESTAMP;
                         `, [user.email, user.name, user.imageUrl]);
                     } catch (dbError) {
                         console.error("Database error during user login upsert:", dbError);
