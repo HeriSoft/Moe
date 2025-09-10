@@ -96,3 +96,13 @@ export interface PaymentHistoryItem {
   memo: string;
   status: 'Completed' | 'Pending' | 'Failed';
 }
+
+// --- NEW TYPES for MUSIC BOX ---
+export interface Song {
+  id: string;
+  title: string;
+  artist: string;
+  genre: string;
+  url: string; // YouTube URL or other embeddable URL
+  created_at?: string;
+}
