@@ -227,14 +227,14 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                     </div>
                     {/* Right: Player */}
                     <div 
-                        className="w-full md:w-1/2 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-4 flex flex-col justify-center items-center text-center relative overflow-hidden bg-cover bg-center"
+                        className="w-full md:w-1/2 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-2 sm:p-4 flex flex-col justify-center items-center text-center relative overflow-hidden bg-cover bg-center"
                         style={{ backgroundImage: `url(${backgroundImageUrl})` }}
                     >
-                        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
 
                         <div className="z-10 flex flex-row items-center gap-4 w-full">
                             {/* Avatar (Left) */}
-                            <div className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
+                            <div className="flex-shrink-0 w-24 h-24 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
                                 <div className={`relative w-full h-full p-2 ${isPlaying ? 'animate-spin-slow' : ''}`}>
                                     {currentSong?.avatar_drive_id ? (
                                         <img src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} alt="avatar" className="w-full h-full object-cover rounded-full" />
@@ -245,25 +245,25 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             </div>
 
                             {/* Info & Controls (Right) */}
-                            <div className="flex flex-col items-start justify-center flex-grow min-w-0 py-2">
+                            <div className="flex flex-col items-start justify-center flex-grow min-w-0 py-1">
                                 {/* Info */}
                                 <div className="w-full text-left">
-                                    <div className="relative w-full overflow-hidden h-8 flex justify-start items-center">
+                                    <div className="relative w-full overflow-hidden h-7 flex justify-start items-center">
                                         <div className={`whitespace-nowrap ${isPlaying ? 'marquee' : ''}`}>
-                                            <h3 className="text-xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title || 'Select a song'}</h3>
-                                            {isPlaying && <h3 className="text-xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title}</h3>}
+                                            <h3 className="text-lg font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title || 'Select a song'}</h3>
+                                            {isPlaying && <h3 className="text-lg font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title}</h3>}
                                         </div>
                                     </div>
                                     <p className="text-sm text-slate-300" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.5)'}}>{currentSong?.artist || '...'}</p>
                                 </div>
                                 {/* Controls */}
-                                <div className="mt-2 flex items-center justify-start gap-2">
-                                    <button onClick={onPrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-6 h-6"/></button>
-                                    <button onClick={() => handlePlayPause()} className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
-                                        {isPlaying ? <PauseIcon className="w-6 h-6"/> : <PlayIcon className="w-6 h-6 ml-1"/>}
+                                <div className="mt-2 flex items-center justify-start gap-1">
+                                    <button onClick={onPrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-5 h-5"/></button>
+                                    <button onClick={() => handlePlayPause()} className="w-10 h-10 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
+                                        {isPlaying ? <PauseIcon className="w-5 h-5"/> : <PlayIcon className="w-5 h-5 ml-0.5"/>}
                                     </button>
-                                    <button onClick={onNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-6 h-6"/></button>
-                                    <button onClick={handleStop} className="p-2 text-slate-400 hover:text-red-400"><StopIcon className="w-5 h-5"/></button>
+                                    <button onClick={onNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-5 h-5"/></button>
+                                    <button onClick={handleStop} className="p-2 text-slate-400 hover:text-red-400"><StopIcon className="w-4 h-4"/></button>
                                 </div>
                             </div>
                         </div>
