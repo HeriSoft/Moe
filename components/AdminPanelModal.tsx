@@ -1,7 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon } from './icons';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
+
+// Extend UserProfile for admin-specific data
+type AdminUser = UserProfile & {
+    subscriptionExpiresAt?: string | null;
+    isModerator?: boolean;
+};
+
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -19,12 +26,17 @@ const ADMIN_API_ENDPOINT = '/api/admin';
 
 type AdminTab = 'logs' | 'ips' | 'users' | 'memberships' | 'payments';
 
-const PlaceholderComponent: React.FC<{ title: string; }> = ({ title }) => (
-    <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400">
-        <h3 className="text-xl font-semibold">{title}</h3>
-        <p className="mt-2">This feature is under development and will be available soon.</p>
+// --- STYLING CONSTANTS for MODERATORS ---
+const MOD_ICON = (props: any) => <StarIcon {...props} solid={true} />;
+const MOD_TEXT_COLOR = "text-purple-400"; // e.g., "text-purple-400"
+const VIP_ICON = (props: any) => <SparklesIcon {...props} className="text-cyan-400" />;
+
+const LoadingSpinner: React.FC = () => (
+    <div className="flex justify-center items-center h-full">
+        <RefreshIcon className="w-8 h-8 animate-spin text-slate-500" />
     </div>
 );
+
 
 const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ userProfile }) => {
     const [bankQrId, setBankQrId] = useState<string | null>(null);
@@ -125,34 +137,147 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
     );
 };
 
+const MembershipManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, onUpdate: () => void }> = ({ users, userProfile, onUpdate }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [days, setDays] = useState<Record<string, string>>({});
+    const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
+
+    const filteredUsers = useMemo(() => {
+        if (!searchTerm) return [];
+        return users.filter(u => 
+            u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            u.email.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [users, searchTerm]);
+
+    const handleAction = async (action: 'set_subscription' | 'extend_subscription' | 'remove_subscription', email: string, numDays?: number) => {
+        setIsSubmitting(email);
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action, email, days: numDays }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Action failed');
+            onUpdate(); // Refresh user data from parent
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(null);
+            setDays(prev => ({ ...prev, [email]: '' })); // Clear input
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <input type="text" placeholder="Search by name or email..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full p-2 bg-slate-100 dark:bg-[#2d2d40] rounded-md" />
+            <div className="space-y-2">
+                {filteredUsers.map(user => (
+                    <div key={user.email} className="bg-slate-100 dark:bg-[#2d2d40] p-3 rounded-lg">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <p className="font-semibold">{user.name}</p>
+                                <p className="text-sm text-slate-500">{user.email}</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Expires: {user.subscriptionExpiresAt ? new Date(user.subscriptionExpiresAt).toLocaleString() : 'N/A'}
+                                </p>
+                            </div>
+                            <button onClick={() => handleAction('remove_subscription', user.email)} disabled={isSubmitting === user.email} className="px-2 py-1 bg-red-500 text-white rounded-md text-xs font-semibold hover:bg-red-600 disabled:opacity-50">Remove</button>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                            <input type="number" placeholder="Days" value={days[user.email] || ''} onChange={e => setDays(d => ({...d, [user.email]: e.target.value}))} className="w-20 p-1 bg-white dark:bg-slate-800 rounded-md text-sm" />
+                            <button onClick={() => handleAction('set_subscription', user.email, parseInt(days[user.email]))} disabled={isSubmitting === user.email || !days[user.email]} className="px-2 py-1 bg-blue-500 text-white rounded-md text-xs font-semibold hover:bg-blue-600 disabled:opacity-50">Set</button>
+                            <button onClick={() => handleAction('extend_subscription', user.email, parseInt(days[user.email]))} disabled={isSubmitting === user.email || !days[user.email]} className="px-2 py-1 bg-green-500 text-white rounded-md text-xs font-semibold hover:bg-green-600 disabled:opacity-50">Extend</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, onUpdate: () => void }> = ({ users, userProfile, onUpdate }) => {
+     const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
+
+    const handleToggleMod = async (email: string, currentStatus: boolean) => {
+        setIsSubmitting(email);
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'set_moderator', email, isModerator: !currentStatus }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Action failed');
+            onUpdate();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
+
+    return (
+        <div className="space-y-2">
+            {users.map(user => (
+                <div key={user.email} className="bg-slate-100 dark:bg-[#2d2d40] p-3 rounded-lg flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <img src={user.imageUrl} alt={user.name} className="w-8 h-8 rounded-full" />
+                        <div>
+                            <p className={`font-semibold flex items-center gap-1.5 ${user.isModerator ? MOD_TEXT_COLOR : ''}`}>
+                                {user.isModerator && <MOD_ICON className="w-4 h-4" />}
+                                {user.name}
+                                {user.isPro && <VIP_ICON className="w-4 h-4" />}
+                            </p>
+                            <p className="text-sm text-slate-500">{user.email}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">MOD</span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={!!user.isModerator} onChange={() => handleToggleMod(user.email, !!user.isModerator)} disabled={isSubmitting === user.email} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile }) => {
-  const [activeTab, setActiveTab] = useState<AdminTab>('logs');
+  const [activeTab, setActiveTab] = useState<AdminTab>('users');
   const [logs, setLogs] = useState<string[]>([]);
-  const [userData, setUserData] = useState<UserIpData[]>([]);
+  const [ipData, setIpData] = useState<UserIpData[]>([]);
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (tab: AdminTab) => {
     if (!isOpen || !userProfile) return;
     setIsLoading(true);
     setError(null);
     try {
         const headers = { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email };
-        const [logsResponse, ipsResponse] = await Promise.all([
-            fetch(`${ADMIN_API_ENDPOINT}?action=get_logs`, { headers }),
-            fetch(`${ADMIN_API_ENDPOINT}?action=get_user_ip_data`, { headers })
-        ]);
-
-        if (!logsResponse.ok) throw new Error(`Failed to fetch logs: ${logsResponse.statusText}`);
-        if (!ipsResponse.ok) throw new Error(`Failed to fetch IP data: ${ipsResponse.statusText}`);
-
-        const logsData = await logsResponse.json();
-        const ipsData = await ipsResponse.json();
-
-        setLogs(logsData.logs || []);
-        setUserData(ipsData.userData || []);
-
+        let response;
+        if (tab === 'logs') {
+            response = await fetch(`${ADMIN_API_ENDPOINT}?action=get_logs`, { headers });
+            if (!response.ok) throw new Error(`Failed to fetch logs: ${response.statusText}`);
+            const data = await response.json();
+            setLogs(data.logs || []);
+        } else if (tab === 'ips') {
+            response = await fetch(`${ADMIN_API_ENDPOINT}?action=get_user_ip_data`, { headers });
+            if (!response.ok) throw new Error(`Failed to fetch IP data: ${response.statusText}`);
+            const data = await response.json();
+            setIpData(data.userData || []);
+        } else if (tab === 'users' || tab === 'memberships') {
+            response = await fetch(`${ADMIN_API_ENDPOINT}?action=get_all_users`, { headers });
+            if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
+            const data = await response.json();
+            setAllUsers(data.users || []);
+        }
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
         setError(errorMessage);
@@ -162,8 +287,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
   }, [isOpen, userProfile]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isOpen) {
+        fetchData(activeTab);
+    }
+  }, [isOpen, activeTab, fetchData]);
   
   const handleIpAction = async (ip: string, email: string, action: 'block_ip' | 'unblock_ip') => {
     if (!userProfile) return;
@@ -177,8 +304,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
             const errorData = await response.json();
             throw new Error(errorData.details || `Failed to ${action}.`);
         }
-        // Refresh data after action
-        fetchData();
+        fetchData('ips');
     } catch (e) {
          const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
          setError(errorMessage);
@@ -215,7 +341,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 id="admin-panel-title" className="text-2xl font-bold">Admin Panel</h2>
           <div className="flex items-center gap-4">
-            <button onClick={fetchData} disabled={isLoading} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50" aria-label="Refresh data">
+            <button onClick={() => fetchData(activeTab)} disabled={isLoading} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50" aria-label="Refresh data">
               <RefreshIcon className={`w-6 h-6 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close admin panel">
@@ -227,20 +353,24 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
         {error && <div className="p-3 mb-4 bg-red-500/10 text-red-500 rounded-lg text-sm">{error}</div>}
 
         <div className="border-b border-slate-200 dark:border-slate-700 flex flex-shrink-0 flex-wrap">
-          <TabButton tabId="logs" title="User Logs" icon={ClipboardDocumentListIcon} />
-          <TabButton tabId="ips" title="IP Management" icon={ShieldCheckIcon} />
           <TabButton tabId="users" title="Users" icon={UserGroupIcon} />
           <TabButton tabId="memberships" title="Memberships" icon={SparklesIcon} />
+          <TabButton tabId="ips" title="IP Management" icon={ShieldCheckIcon} />
           <TabButton tabId="payments" title="Payments" icon={CurrencyDollarIcon} />
+          <TabButton tabId="logs" title="User Logs" icon={ClipboardDocumentListIcon} />
         </div>
 
         <div className="flex-grow overflow-y-auto mt-4 pr-2 -mr-4">
-          {activeTab === 'logs' && (
+          {isLoading && <LoadingSpinner />}
+          {!isLoading && activeTab === 'users' && userProfile && <UserManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('users')} />}
+          {!isLoading && activeTab === 'memberships' && userProfile && <MembershipManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('memberships')} />}
+          {!isLoading && activeTab === 'payments' && <PaymentSettings userProfile={userProfile} />}
+          {!isLoading && activeTab === 'logs' && (
             <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg font-mono text-xs text-slate-600 dark:text-slate-300">
-                {isLoading ? <p>Loading logs...</p> : logs.length > 0 ? logs.map((log, index) => <p key={index}>{log}</p>) : <p>No logs found.</p>}
+                {logs.length > 0 ? logs.map((log, index) => <p key={index}>{log}</p>) : <p>No logs found.</p>}
             </div>
           )}
-          {activeTab === 'ips' && (
+          {!isLoading && activeTab === 'ips' && (
             <div className="flow-root">
               <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
                 <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
@@ -254,10 +384,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {isLoading ? (
-                        <tr><td colSpan={4} className="text-center p-4 text-slate-500">Loading user data...</td></tr>
-                      ) : userData.length > 0 ? (
-                        userData.map(({ email, ip, isBlocked }) => (
+                      {ipData.length > 0 ? (
+                        ipData.map(({ email, ip, isBlocked }) => (
                           <tr key={email}>
                             <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-slate-900 dark:text-white sm:pl-0">{email}</td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono">{ip}</td>
@@ -290,9 +418,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               </div>
             </div>
           )}
-          {activeTab === 'users' && <PlaceholderComponent title="User Management" />}
-          {activeTab === 'memberships' && <PlaceholderComponent title="Membership Plans" />}
-          {activeTab === 'payments' && <PaymentSettings userProfile={userProfile} />}
         </div>
       </div>
     </div>
