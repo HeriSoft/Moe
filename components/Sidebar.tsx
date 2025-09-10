@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
-import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon } from './icons';
+import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, MusicalNoteIcon } from './icons';
 
 // VIP Tag component
 const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
@@ -15,8 +15,9 @@ interface SidebarProps {
   onSettingsClick: () => void;
   onAdminPanelClick: () => void;
   onAdminMovieModalClick: () => void;
-  onAdminFilesLibraryClick: () => void; // New prop for files library admin
-  onMembershipClick: () => void; // New prop for membership modal
+  onAdminFilesLibraryClick: () => void;
+  onAdminMusicClick: () => void; // For Music Management
+  onMembershipClick: () => void;
   isAdmin: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -33,10 +34,11 @@ const UserProfileSection: React.FC<{
   onProfileClick: () => void;
   onAdminPanelClick: () => void;
   onAdminMovieModalClick: () => void;
-  onAdminFilesLibraryClick: () => void; // New prop for files library admin
-  onMembershipClick: () => void; // New prop for membership modal
+  onAdminFilesLibraryClick: () => void;
+  onAdminMusicClick: () => void; // For Music Management
+  onMembershipClick: () => void;
   isAdmin: boolean;
-}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onMembershipClick, isAdmin }) => {
+}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onAdminMusicClick, onMembershipClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
     return (
         <div className="flex flex-col items-center w-full">
@@ -82,6 +84,13 @@ const UserProfileSection: React.FC<{
                   <DownloadIcon className="w-5 h-5" />
                   Files Management
                 </button>
+                <button
+                  onClick={onAdminMusicClick}
+                  className="w-full px-3 py-1.5 text-sm font-semibold bg-pink-600 hover:bg-pink-700 rounded-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <MusicalNoteIcon className="w-5 h-5" />
+                  Music Management
+                </button>
               </div>
             )}
             <button
@@ -108,7 +117,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onMembershipClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onAdminMusicClick, onMembershipClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -212,6 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
                 onAdminPanelClick={onAdminPanelClick}
                 onAdminMovieModalClick={onAdminMovieModalClick}
                 onAdminFilesLibraryClick={onAdminFilesLibraryClick}
+                onAdminMusicClick={onAdminMusicClick}
                 onMembershipClick={onMembershipClick}
                 isAdmin={isAdmin}
             />
