@@ -87,3 +87,12 @@ export interface FileItem {
   updated_at?: string;
   parts: FilePart[];
 }
+
+// --- NEW TYPES for MEMBERSHIP ---
+
+export interface PaymentHistoryItem {
+  date: string;
+  amount: number;
+  memo: string;
+  status: 'Completed' | 'Pending' | 'Failed';
+}
