@@ -61,6 +61,12 @@ export default async function handler(req, res) {
             case 'GET': {
                 const actionQuery = req.query.action;
 
+                // NEW public endpoint for site settings
+                if (actionQuery === 'get_site_settings') {
+                    const settings = await redis.get('site_settings');
+                    return res.status(200).json(settings ? JSON.parse(settings) : {});
+                }
+
                 // Public endpoint to get payment settings for the membership modal
                 if (actionQuery === 'get_payment_settings') {
                     const settings = await redis.get('payment_settings');
@@ -130,7 +136,7 @@ export default async function handler(req, res) {
             }
 
             case 'POST': {
-                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360 } = req.body;
+                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360, logoDriveId } = req.body;
 
                 if (action === 'cancel_subscription_user') {
                      if (!userEmail) return res.status(403).json({ error: 'Forbidden' });
@@ -148,6 +154,18 @@ export default async function handler(req, res) {
                     return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
                 }
                 
+                if (action === 'save_site_settings') {
+                    if (logoDriveId) {
+                        await redis.set('site_settings', JSON.stringify({ logoDriveId }));
+                        await logAction(ADMIN_EMAIL, `updated the site logo.`);
+                        return res.status(200).json({ success: true, message: 'Site settings saved.' });
+                    } else {
+                        await redis.del('site_settings');
+                        await logAction(ADMIN_EMAIL, `removed the site logo.`);
+                        return res.status(200).json({ success: true, message: 'Site logo removed.' });
+                    }
+                }
+
                 if (action === 'block_ip') {
                     if (!ip) return res.status(400).json({ error: 'IP address is required' });
                     await redis.sadd('blocked_ips', ip);
