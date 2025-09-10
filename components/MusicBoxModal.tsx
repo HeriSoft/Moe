@@ -4,6 +4,7 @@ import type { UserProfile, Song } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const GENRES = ['Pop', 'Hip-Hop', 'Rap', 'Indie', 'Acoustic'];
+const SONGS_PER_PAGE = 10;
 
 interface MusicBoxModalProps {
   isOpen: boolean;
@@ -24,7 +25,13 @@ interface MusicBoxModalProps {
 export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev, onToggleFavorite }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeGenre, setActiveGenre] = useState('all');
-    const [error, setError] = useState<string | null>(null); // Kept for local errors if any
+    const [currentPage, setCurrentPage] = useState(1);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleGenreChange = (genre: string) => {
+        setActiveGenre(genre);
+        setCurrentPage(1); // Reset to first page when filter changes
+    };
 
     const filteredSongs = useMemo(() => {
         return songs.filter(song => {
@@ -43,20 +50,110 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
         });
     }, [songs, searchTerm, activeGenre]);
 
+    const totalPages = useMemo(() => {
+        if (activeGenre === 'all') {
+            return Math.ceil(filteredSongs.length / SONGS_PER_PAGE);
+        }
+        return 1;
+    }, [filteredSongs, activeGenre]);
+
+    const songsToDisplay = useMemo(() => {
+        if (activeGenre === 'all') {
+            const startIndex = (currentPage - 1) * SONGS_PER_PAGE;
+            return filteredSongs.slice(startIndex, startIndex + SONGS_PER_PAGE);
+        }
+        return filteredSongs;
+    }, [filteredSongs, currentPage, activeGenre]);
+
+
     const handlePlayPause = (index?: number) => {
         // If a specific (and different) song is clicked
-        if (index !== undefined && filteredSongs[index].id !== currentSong?.id) {
-            onSetCurrentSong(filteredSongs[index], true);
+        if (index !== undefined && songsToDisplay[index].id !== currentSong?.id) {
+            onSetCurrentSong(songsToDisplay[index], true);
         } else if (currentSong) { // If the main play/pause button or the same song is clicked
             onTogglePlay();
-        } else if (filteredSongs.length > 0) { // If no song is selected, play the first one
-            onSetCurrentSong(filteredSongs[0], true);
+        } else if (songsToDisplay.length > 0) { // If no song is selected, play the first one
+            onSetCurrentSong(songsToDisplay[0], true);
         }
     };
     
     const handleStop = () => {
         onSetCurrentSong(null, false);
     };
+
+    const getNumberColorClass = (songNumber: number) => {
+        // Only apply special colors if we are on page 1 of the 'all' genre view
+        if (activeGenre !== 'all' || currentPage > 1) {
+            return 'text-indigo-500';
+        }
+        switch (songNumber) {
+            case 1:
+                return 'text-red-500';
+            case 2:
+                return 'text-orange-500';
+            case 3:
+                return 'text-yellow-500';
+            default:
+                return 'text-indigo-500';
+        }
+    };
+
+    const renderPagination = () => {
+        if (totalPages <= 1) return null;
+
+        const pageButtons = [];
+        const maxPagesToShow = 5; 
+        const pageBuffer = 2;
+        
+        if (totalPages <= maxPagesToShow) {
+            for (let i = 1; i <= totalPages; i++) {
+                pageButtons.push(i);
+            }
+        } else {
+            pageButtons.push(1);
+            if (currentPage > pageBuffer + 1) pageButtons.push('...');
+            
+            let start = Math.max(2, currentPage - (pageBuffer - 1));
+            let end = Math.min(totalPages - 1, currentPage + (pageBuffer - 1));
+
+            for (let i = start; i <= end; i++) {
+                pageButtons.push(i);
+            }
+            
+            if (currentPage < totalPages - pageBuffer) pageButtons.push('...');
+            pageButtons.push(totalPages);
+        }
+        
+        return (
+            <div className="flex justify-center items-center gap-2 mt-2 flex-shrink-0">
+                <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-xs rounded-md font-semibold bg-slate-200 dark:bg-slate-700 disabled:opacity-50"
+                >
+                    Back
+                </button>
+                {pageButtons.map((page, index) =>
+                    typeof page === 'number' ? (
+                        <button key={index} onClick={() => setCurrentPage(page)}
+                            className={`px-3 py-1 text-xs rounded-md font-semibold ${currentPage === page ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                            {page}
+                        </button>
+                    ) : (
+                        <span key={index} className="px-2 text-slate-500">...</span>
+                    )
+                )}
+                 <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-xs rounded-md font-semibold bg-slate-200 dark:bg-slate-700 disabled:opacity-50"
+                >
+                    Next
+                </button>
+            </div>
+        );
+    };
+
 
     if (!isOpen) return null;
 
@@ -86,21 +183,25 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                         </div>
                         <div className="flex flex-wrap gap-2 mb-2">
                              <button 
-                                onClick={() => setActiveGenre('favorites')} 
+                                onClick={() => handleGenreChange('favorites')} 
                                 className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-colors ${activeGenre === 'favorites' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
                              >
                                 <StarIcon solid={activeGenre === 'favorites'} className="w-4 h-4" /> 
                                 Yêu thích
                             </button>
-                             <button onClick={() => setActiveGenre('all')} className={`px-3 py-1 text-xs rounded-full ${activeGenre === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>All</button>
-                             {GENRES.map(g => <button key={g} onClick={() => setActiveGenre(g)} className={`px-3 py-1 text-xs rounded-full ${activeGenre === g ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>{g}</button>)}
+                             <button onClick={() => handleGenreChange('all')} className={`px-3 py-1 text-xs rounded-full ${activeGenre === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>All</button>
+                             {GENRES.map(g => <button key={g} onClick={() => handleGenreChange(g)} className={`px-3 py-1 text-xs rounded-full ${activeGenre === g ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>{g}</button>)}
                         </div>
                          <div className="flex-grow overflow-y-auto pr-2 -mr-2 space-y-2">
                             {isLoading && <div className="flex justify-center items-center h-full"><RefreshIcon className="w-8 h-8 animate-spin"/></div>}
                             {error && <p className="text-red-500">{error}</p>}
-                            {filteredSongs.map((song, index) => (
+                            {songsToDisplay.map((song, index) => {
+                                const songNumber = index + 1 + (activeGenre === 'all' ? (currentPage - 1) * SONGS_PER_PAGE : 0);
+                                const numberColorClass = getNumberColorClass(songNumber);
+
+                                return (
                                 <button key={song.id} onClick={() => handlePlayPause(index)} className={`w-full text-left p-3 rounded-lg flex items-center gap-4 transition-colors ${currentSong?.id === song.id ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-                                    <div className="text-indigo-500 font-bold">{String(index + 1).padStart(2, '0')}</div>
+                                    <div className={`font-bold ${numberColorClass}`}>{String(songNumber).padStart(2, '0')}</div>
                                     <div>
                                         <p className={`font-semibold ${currentSong?.id === song.id ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>{song.title}</p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">{song.artist}</p>
@@ -119,8 +220,10 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                                         {currentSong?.id === song.id && isPlaying && <MusicalNoteIcon className="w-5 h-5 text-indigo-500 animate-pulse"/>}
                                     </div>
                                 </button>
-                            ))}
+                                );
+                            })}
                          </div>
+                         {renderPagination()}
                     </div>
                     {/* Right: Player */}
                     <div 
