@@ -155,7 +155,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
 
     return (
         <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
-            <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800 dark:text-white"><MusicalNoteIcon className="w-7 h-7"/> Music Box</h2>
                     <div className="flex items-center gap-2">
@@ -168,7 +168,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                     </div>
                 </div>
                 
-                <div className="flex flex-col md:flex-row gap-6 flex-grow min-h-0">
+                <div className="flex flex-col md:flex-row md:items-start gap-6 flex-grow min-h-0">
                     {/* Left: Song List */}
                     <div className="w-full md:w-1/2 flex flex-col min-h-0">
                         <div className="relative mb-2">
@@ -186,7 +186,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                              <button onClick={() => handleGenreChange('all')} className={`px-3 py-1 text-xs rounded-full ${activeGenre === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>All</button>
                              {GENRES.map(g => <button key={g} onClick={() => handleGenreChange(g)} className={`px-3 py-1 text-xs rounded-full ${activeGenre === g ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>{g}</button>)}
                         </div>
-                         <div className="flex-grow md:flex-grow-0 md:h-[340px] overflow-y-auto pr-2 -mr-2 space-y-2">
+                         <div className="flex-grow overflow-y-auto pr-2 -mr-2 space-y-2">
                             {isLoading && <div className="flex justify-center items-center h-full"><RefreshIcon className="w-8 h-8 animate-spin"/></div>}
                             {error && <p className="text-red-500">{error}</p>}
                             {songsToDisplay.map((song, index) => {
