@@ -1,76 +1,27 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, PlayIcon, PauseIcon, ForwardIcon, BackwardIcon, StopIcon, MusicalNoteIcon } from './icons';
+import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, PlayIcon, PauseIcon, ForwardIcon, BackwardIcon, StopIcon, MusicalNoteIcon, MinusIcon } from './icons';
 import type { UserProfile, Song } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
-
-const MUSIC_API_ENDPOINT = '/api/music';
 const GENRES = ['Pop', 'Hip-Hop', 'Rap', 'Indie', 'Acoustic'];
 
 interface MusicBoxModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onMinimize: () => void;
   userProfile: UserProfile | undefined;
+  songs: Song[];
+  currentSong: Song | null;
+  isPlaying: boolean;
+  isLoading: boolean;
+  onSetCurrentSong: (song: Song | null, shouldPlay: boolean) => void;
+  onTogglePlay: () => void;
 }
 
-const getYouTubeEmbedUrl = (url: string | undefined): string => {
-    if (!url) return '';
-    let videoId = '';
-    const patterns = [
-        /(?:https?:\/\/(?:www\.)?)?youtube\.com\/(?:watch\?v=|embed\/|v\/)([\w-]{11})/,
-        /(?:https?:\/\/)?youtu\.be\/([\w-]{11})/
-    ];
-    for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match && match[1]) {
-            videoId = match[1];
-            break;
-        }
-    }
-    if (videoId) {
-        return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}&enablejsapi=1`;
-    }
-    return url;
-};
-
-
-export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, userProfile }) => {
-    const [songs, setSongs] = useState<Song[]>([]);
-    const [currentSongIndex, setCurrentSongIndex] = useState<number | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
+export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeGenre, setActiveGenre] = useState('all');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [videoSrc, setVideoSrc] = useState('');
-
-    const fetchSongs = useCallback(async () => {
-        if (!userProfile) return;
-        setIsLoading(true);
-        setError(null);
-        try {
-            const params = new URLSearchParams({ action: 'get_public_songs' });
-            const response = await fetch(`${MUSIC_API_ENDPOINT}?${params.toString()}`, {
-                headers: { 'X-User-Email': userProfile.email }
-            });
-            if (!response.ok) throw new Error('Failed to fetch songs');
-            const data = await response.json();
-            setSongs(data.songs || []);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Unknown error');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [userProfile]);
-
-    useEffect(() => {
-        if (isOpen) {
-            fetchSongs();
-        } else {
-            setIsPlaying(false);
-            setVideoSrc('');
-        }
-    }, [isOpen, fetchSongs]);
+    const [error, setError] = useState<string | null>(null); // Kept for local errors if any
 
     const filteredSongs = useMemo(() => {
         return songs.filter(song => {
@@ -80,60 +31,45 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
         });
     }, [songs, searchTerm, activeGenre]);
     
-    const currentSong = currentSongIndex !== null ? filteredSongs[currentSongIndex] : null;
-    
-    useEffect(() => {
-        if (isPlaying && currentSong) {
-            const embedUrl = getYouTubeEmbedUrl(currentSong.url);
-            if (embedUrl !== videoSrc) {
-               setVideoSrc(embedUrl);
-            }
-        } else {
-            setVideoSrc('');
-        }
-    }, [isPlaying, currentSong, videoSrc]);
-
+    const currentSongInFilteredListIndex = useMemo(() => {
+        if (!currentSong) return -1;
+        return filteredSongs.findIndex(s => s.id === currentSong.id);
+    }, [currentSong, filteredSongs]);
 
     const handlePlayPause = (index?: number) => {
-        if (index !== undefined && index !== currentSongIndex) {
-            setCurrentSongIndex(index);
-            if (!isPlaying) setIsPlaying(true);
-        } else if (currentSongIndex !== null) {
-            setIsPlaying(!isPlaying);
-        } else if (filteredSongs.length > 0) {
-            setCurrentSongIndex(0);
-            setIsPlaying(true);
+        // If a specific (and different) song is clicked
+        if (index !== undefined && filteredSongs[index].id !== currentSong?.id) {
+            onSetCurrentSong(filteredSongs[index], true);
+        } else if (currentSong) { // If the main play/pause button or the same song is clicked
+            onTogglePlay();
+        } else if (filteredSongs.length > 0) { // If no song is selected, play the first one
+            onSetCurrentSong(filteredSongs[0], true);
         }
     };
 
     const handleNext = useCallback(() => {
-        if (currentSongIndex === null && filteredSongs.length > 0) {
-            setCurrentSongIndex(0);
-            setIsPlaying(true);
+        if (filteredSongs.length === 0) return;
+        // If not playing, or current song isn't in the filter, start with the first song
+        if (currentSongInFilteredListIndex === -1) {
+            onSetCurrentSong(filteredSongs[0], true);
             return;
         }
-        if (currentSongIndex !== null) {
-            const nextIndex = (currentSongIndex + 1) % filteredSongs.length;
-            setCurrentSongIndex(nextIndex);
-            if (!isPlaying) setIsPlaying(true);
-        }
-    }, [currentSongIndex, filteredSongs.length, isPlaying]);
+        const nextIndex = (currentSongInFilteredListIndex + 1) % filteredSongs.length;
+        onSetCurrentSong(filteredSongs[nextIndex], true);
+    }, [currentSongInFilteredListIndex, filteredSongs, onSetCurrentSong]);
 
     const handlePrev = () => {
-        if (currentSongIndex === null && filteredSongs.length > 0) {
-            setCurrentSongIndex(filteredSongs.length - 1);
-            setIsPlaying(true);
+        if (filteredSongs.length === 0) return;
+        if (currentSongInFilteredListIndex === -1) {
+            onSetCurrentSong(filteredSongs[filteredSongs.length - 1], true);
             return;
         }
-        if (currentSongIndex !== null) {
-            const prevIndex = (currentSongIndex - 1 + filteredSongs.length) % filteredSongs.length;
-            setCurrentSongIndex(prevIndex);
-            if (!isPlaying) setIsPlaying(true);
-        }
+        const prevIndex = (currentSongInFilteredListIndex - 1 + filteredSongs.length) % filteredSongs.length;
+        onSetCurrentSong(filteredSongs[prevIndex], true);
     };
     
     const handleStop = () => {
-        setIsPlaying(false);
+        onSetCurrentSong(null, false);
     };
 
     if (!isOpen) return null;
@@ -145,7 +81,14 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
             <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800 dark:text-white"><MusicalNoteIcon className="w-7 h-7"/> Music Box</h2>
-                    <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><CloseIcon className="w-7 h-7" /></button>
+                    <div className="flex items-center gap-2">
+                         <button onClick={onMinimize} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Minimize player">
+                            <MinusIcon className="w-7 h-7" />
+                        </button>
+                        <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close player">
+                            <CloseIcon className="w-7 h-7" />
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="flex flex-col md:flex-row gap-6 flex-grow min-h-0">
@@ -163,14 +106,14 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
                             {isLoading && <div className="flex justify-center items-center h-full"><RefreshIcon className="w-8 h-8 animate-spin"/></div>}
                             {error && <p className="text-red-500">{error}</p>}
                             {filteredSongs.map((song, index) => (
-                                <button key={song.id} onClick={() => handlePlayPause(index)} className={`w-full text-left p-3 rounded-lg flex items-center gap-4 transition-colors ${currentSongIndex === index ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                <button key={song.id} onClick={() => handlePlayPause(index)} className={`w-full text-left p-3 rounded-lg flex items-center gap-4 transition-colors ${currentSong?.id === song.id ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
                                     <div className="text-indigo-500 font-bold">{String(index + 1).padStart(2, '0')}</div>
                                     <div>
-                                        <p className={`font-semibold ${currentSongIndex === index ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>{song.title}</p>
+                                        <p className={`font-semibold ${currentSong?.id === song.id ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>{song.title}</p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">{song.artist}</p>
                                     </div>
                                     <div className="ml-auto">
-                                        {currentSongIndex === index && isPlaying && <MusicalNoteIcon className="w-5 h-5 text-indigo-500 animate-pulse"/>}
+                                        {currentSong?.id === song.id && isPlaying && <MusicalNoteIcon className="w-5 h-5 text-indigo-500 animate-pulse"/>}
                                     </div>
                                 </button>
                             ))}
@@ -212,13 +155,6 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
                         </button>
                     </div>
                 </div>
-                <iframe 
-                    src={videoSrc}
-                    title="Music Player Backend"
-                    style={{ display: 'none' }}
-                    allow="autoplay; encrypted-media"
-                    sandbox="allow-scripts allow-same-origin"
-                ></iframe>
             </div>
             <style>{`
                 @keyframes marquee {
