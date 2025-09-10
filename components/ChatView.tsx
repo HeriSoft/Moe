@@ -413,6 +413,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
   const currentModelName = activeChat?.model ?? defaultModel;
   const isDeepSeekModel = currentModelName === 'deepseek-v3.1';
+  const canSeeCCTalk = userProfile?.email === 'heripixiv@gmail.com' || userProfile?.isModerator;
   
   const languages = [
     { code: 'Vietnamese', name: 'Tiếng Việt' }, { code: 'English', name: 'English' },
@@ -507,19 +508,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         >
           {activeChat ? (
             <div>
-              <div className="px-4 pt-4 pb-1 sticky top-0 z-10 bg-white/80 dark:bg-[#171725]/80 backdrop-blur-sm">
-                  <button
-                      onClick={onOpenCCTalk}
-                      className="w-full flex items-center p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
-                      aria-label="Open ccTalk"
-                  >
-                      <ChatBubbleIcon className="w-6 h-6 text-indigo-500 mr-3 flex-shrink-0" />
-                      <div className="text-left">
-                          <p className="font-semibold text-indigo-800 dark:text-indigo-200">Ghim: ccTalk</p>
-                          <p className="text-sm text-indigo-600 dark:text-indigo-400">Tham gia kênh thoại và tìm đồng đội chơi game.</p>
-                      </div>
-                  </button>
-              </div>
               {activeChat.messages.map((msg, index) => {
                 const messageId = `${activeChat.id}-${index}`;
                 return (
@@ -546,6 +534,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         </main>
         
         <div className="absolute bottom-4 right-4 sm:right-6 z-20 flex flex-col items-center gap-2">
+            {canSeeCCTalk && (
+              <button
+                onClick={onOpenCCTalk}
+                aria-label="Open ccTalk"
+                className="p-2 rounded-full bg-sky-600 text-white shadow-lg transition-all duration-300 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-[#171725]"
+              >
+                <ChatBubbleIcon className="w-6 h-6" />
+              </button>
+            )}
             <button
               onClick={onOpenMusicBox}
               aria-label="Open Music Box"
