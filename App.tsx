@@ -14,6 +14,8 @@ import { MembershipModal } from './components/MembershipModal';
 import { MembershipManagementModal } from './components/MembershipManagementModal'; // New
 import { FilesLibraryModal } from './components/FilesLibraryModal'; // New
 import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; // New
+import { MusicBoxModal } from './components/MusicBoxModal'; // New
+import { AdminMusicModal } from './components/AdminMusicModal'; // New
 import {
   streamModelResponse,
   fetchUserProfileAndLogLogin,
@@ -86,6 +88,8 @@ const App: React.FC = () => {
   const [isMembershipManagementOpen, setIsMembershipManagementOpen] = useState(false); // New
   const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); // New
   const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); // New
+  const [isMusicBoxOpen, setIsMusicBoxOpen] = useState(false); // New
+  const [isAdminMusicOpen, setIsAdminMusicOpen] = useState(false); // New
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -697,8 +701,9 @@ const App: React.FC = () => {
         onSettingsClick={() => setIsSettingsOpen(true)}
         onAdminPanelClick={() => setIsAdminPanelOpen(true)}
         onAdminMovieModalClick={() => setIsAdminMovieModalOpen(true)}
-        onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)} // New
-        onMembershipClick={handleMembershipClick} // New
+        onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)}
+        onAdminMusicClick={() => setIsAdminMusicOpen(true)} // New
+        onMembershipClick={handleMembershipClick}
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
@@ -737,8 +742,9 @@ const App: React.FC = () => {
           startNewChat={startNewChat}
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
           onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
-          onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)} // New
+          onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)}
           onOpenCCTalk={() => setIsCCTalkModalOpen(true)}
+          onOpenMusicBox={() => setIsMusicBoxOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
         />
@@ -829,6 +835,17 @@ const App: React.FC = () => {
       <MembershipManagementModal
         isOpen={isMembershipManagementOpen}
         onClose={() => setIsMembershipManagementOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
+      />
+      <MusicBoxModal
+        isOpen={isMusicBoxOpen}
+        onClose={() => setIsMusicBoxOpen(false)}
+        userProfile={userProfile}
+      />
+      <AdminMusicModal
+        isOpen={isAdminMusicOpen}
+        onClose={() => setIsAdminMusicOpen(false)}
         userProfile={userProfile}
         setNotifications={setNotifications}
       />
