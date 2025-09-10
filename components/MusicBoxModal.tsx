@@ -51,19 +51,13 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
     }, [songs, searchTerm, activeGenre]);
 
     const totalPages = useMemo(() => {
-        if (activeGenre === 'all') {
-            return Math.ceil(filteredSongs.length / SONGS_PER_PAGE);
-        }
-        return 1;
-    }, [filteredSongs, activeGenre]);
+        return Math.ceil(filteredSongs.length / SONGS_PER_PAGE);
+    }, [filteredSongs]);
 
     const songsToDisplay = useMemo(() => {
-        if (activeGenre === 'all') {
-            const startIndex = (currentPage - 1) * SONGS_PER_PAGE;
-            return filteredSongs.slice(startIndex, startIndex + SONGS_PER_PAGE);
-        }
-        return filteredSongs;
-    }, [filteredSongs, currentPage, activeGenre]);
+        const startIndex = (currentPage - 1) * SONGS_PER_PAGE;
+        return filteredSongs.slice(startIndex, startIndex + SONGS_PER_PAGE);
+    }, [filteredSongs, currentPage]);
 
 
     const handlePlayPause = (index?: number) => {
@@ -196,7 +190,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             {isLoading && <div className="flex justify-center items-center h-full"><RefreshIcon className="w-8 h-8 animate-spin"/></div>}
                             {error && <p className="text-red-500">{error}</p>}
                             {songsToDisplay.map((song, index) => {
-                                const songNumber = index + 1 + (activeGenre === 'all' ? (currentPage - 1) * SONGS_PER_PAGE : 0);
+                                const songNumber = index + 1 + (currentPage - 1) * SONGS_PER_PAGE;
                                 const numberColorClass = getNumberColorClass(songNumber);
 
                                 return (
@@ -223,7 +217,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                                 );
                             })}
                          </div>
-                         {activeGenre === 'all' && renderPagination()}
+                         {renderPagination()}
                     </div>
                     {/* Right: Player */}
                     <div 
