@@ -4,7 +4,7 @@ import type { UserProfile, Song } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 const GENRES = ['Pop', 'Hip-Hop', 'Rap', 'Indie', 'Acoustic'];
-const SONGS_PER_PAGE = 10;
+const SONGS_PER_PAGE = 5;
 
 interface MusicBoxModalProps {
   isOpen: boolean;
