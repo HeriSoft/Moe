@@ -11,6 +11,32 @@ interface MusicBoxModalProps {
   userProfile: UserProfile | undefined;
 }
 
+const getYouTubeEmbedUrl = (url: string | undefined): string => {
+    if (!url) return '';
+    let videoId = '';
+    // Regex để tìm video ID từ các định dạng URL YouTube khác nhau
+    const patterns = [
+        /(?:https?:\/\/(?:www\.)?)?youtube\.com\/(?:watch\?v=|embed\/|v\/)([\w-]{11})/,
+        /(?:https?:\/\/)?youtu\.be\/([\w-]{11})/
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            videoId = match[1];
+            break;
+        }
+    }
+
+    if (videoId) {
+        // loop=1 yêu cầu tham số playlist phải được đặt thành cùng một video ID để lặp lại một video
+        return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}`;
+    }
+    // Fallback cho các URL stream audio/video trực tiếp khác có thể hoạt động trong iframe
+    return url;
+};
+
+
 export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, userProfile }) => {
     const [songs, setSongs] = useState<Song[]>([]);
     const [currentSongIndex, setCurrentSongIndex] = useState<number | null>(null);
@@ -19,8 +45,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
     const [activeGenre, setActiveGenre] = useState('all');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const audioRef = useRef<HTMLAudioElement>(null);
+    const [videoSrc, setVideoSrc] = useState('');
 
     const fetchSongs = useCallback(async () => {
         if (!userProfile) return;
@@ -45,11 +70,8 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
         if (isOpen) {
             fetchSongs();
         } else {
-            // Stop music when modal is closed
-            if (audioRef.current) {
-                audioRef.current.pause();
-                setIsPlaying(false);
-            }
+            setIsPlaying(false);
+            setVideoSrc('');
         }
     }, [isOpen, fetchSongs]);
 
@@ -64,51 +86,65 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
     const currentSong = currentSongIndex !== null ? filteredSongs[currentSongIndex] : null;
     
     useEffect(() => {
-        if (audioRef.current && currentSong) {
-            audioRef.current.src = currentSong.url;
-            if (isPlaying) {
-                audioRef.current.play().catch(e => console.error("Audio play failed:", e));
-            }
+        if (isPlaying && currentSong) {
+            setVideoSrc(getYouTubeEmbedUrl(currentSong.url));
+        } else {
+            setVideoSrc(''); // Điều này sẽ dừng video một cách hiệu quả
         }
-    }, [currentSong, isPlaying]);
+    }, [isPlaying, currentSong]);
+
 
     const handlePlayPause = (index?: number) => {
+        // Nếu một bài hát mới được nhấp vào
         if (index !== undefined && index !== currentSongIndex) {
             setCurrentSongIndex(index);
-            setIsPlaying(true);
-        } else if (currentSongIndex !== null) {
-            if (isPlaying) {
-                audioRef.current?.pause();
-            } else {
-                audioRef.current?.play().catch(e => console.error("Audio play failed:", e));
+            if (!isPlaying) {
+                setIsPlaying(true);
             }
+        } 
+        // Nếu bật/tắt bài hát hiện tại hoặc bắt đầu bài hát đầu tiên
+        else if (currentSongIndex !== null) {
             setIsPlaying(!isPlaying);
-        } else if (filteredSongs.length > 0) {
+        } 
+        // Nếu không có bài hát nào được chọn và nút play được nhấn
+        else if (filteredSongs.length > 0) {
             setCurrentSongIndex(0);
             setIsPlaying(true);
         }
     };
 
     const handleNext = useCallback(() => {
-        if (currentSongIndex === null) return;
-        const nextIndex = (currentSongIndex + 1) % filteredSongs.length;
-        setCurrentSongIndex(nextIndex);
-        setIsPlaying(true);
-    }, [currentSongIndex, filteredSongs.length]);
+        if (currentSongIndex === null && filteredSongs.length > 0) {
+            setCurrentSongIndex(0);
+            setIsPlaying(true);
+            return;
+        }
+        if (currentSongIndex !== null) {
+            const nextIndex = (currentSongIndex + 1) % filteredSongs.length;
+            setCurrentSongIndex(nextIndex);
+            if (!isPlaying) {
+                setIsPlaying(true);
+            }
+        }
+    }, [currentSongIndex, filteredSongs.length, isPlaying]);
 
     const handlePrev = () => {
-        if (currentSongIndex === null) return;
-        const prevIndex = (currentSongIndex - 1 + filteredSongs.length) % filteredSongs.length;
-        setCurrentSongIndex(prevIndex);
-        setIsPlaying(true);
+        if (currentSongIndex === null && filteredSongs.length > 0) {
+            setCurrentSongIndex(filteredSongs.length - 1);
+            setIsPlaying(true);
+            return;
+        }
+        if (currentSongIndex !== null) {
+            const prevIndex = (currentSongIndex - 1 + filteredSongs.length) % filteredSongs.length;
+            setCurrentSongIndex(prevIndex);
+            if (!isPlaying) {
+                setIsPlaying(true);
+            }
+        }
     };
     
     const handleStop = () => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            setIsPlaying(false);
-        }
+        setIsPlaying(false);
     };
 
     if (!isOpen) return null;
@@ -166,7 +202,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
                         <div className="mt-8 flex items-center justify-center gap-6">
                             <button onClick={handlePrev} className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white"><BackwardIcon className="w-7 h-7"/></button>
                             <button onClick={() => handlePlayPause()} className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
-                                {isPlaying ? <PauseIcon className="w-8 h-8"/> : <PlayIcon className="w-8 h-8"/>}
+                                {isPlaying ? <PauseIcon className="w-8 h-8"/> : <PlayIcon className="w-8 h-8 pl-1"/>}
                             </button>
                             <button onClick={handleNext} className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white"><ForwardIcon className="w-7 h-7"/></button>
                         </div>
@@ -175,7 +211,13 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
                         </button>
                     </div>
                 </div>
-                <audio ref={audioRef} onEnded={handleNext} onError={(e) => console.error("Audio error:", e.currentTarget.error)}></audio>
+                <iframe 
+                    src={videoSrc}
+                    title="Music Player Backend"
+                    style={{ display: 'none' }}
+                    allow="autoplay; encrypted-media"
+                    sandbox="allow-scripts allow-same-origin"
+                ></iframe>
             </div>
             <style>{`
                 @keyframes marquee {
