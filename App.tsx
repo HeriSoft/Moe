@@ -770,6 +770,12 @@ const App: React.FC = () => {
     handleSetCurrentSong(songs[prevIndex], true);
   }, [songs, currentSong, handleSetCurrentSong]);
 
+  // --- Ref for YouTube player callback to prevent re-initialization ---
+  const handleNextSongRef = useRef(handleNextSong);
+  useEffect(() => {
+    handleNextSongRef.current = handleNextSong;
+  }, [handleNextSong]);
+
   // --- YouTube Player API Integration ---
   useEffect(() => {
     const onPlayerStateChange = (event: any) => {
@@ -781,11 +787,14 @@ const App: React.FC = () => {
       } else if (event.data === YT.PlayerState.PAUSED) {
         setIsPlaying(false);
       } else if (event.data === YT.PlayerState.ENDED) {
-        handleNextSong();
+        handleNextSongRef.current(); // Use the ref to call the latest callback
       }
     };
 
     const initializePlayer = () => {
+      // Only initialize if the player ref is null.
+      // The empty dependency array on this useEffect ensures this only runs once,
+      // preventing re-initialization on state changes and fixing the crash.
       if (!playerRef.current) {
         playerRef.current = new (window as any).YT.Player('youtube-player-container', {
           height: '0',
@@ -804,7 +813,7 @@ const App: React.FC = () => {
     } else {
       initializePlayer();
     }
-  }, [handleNextSong]);
+  }, []); // <-- Empty dependency array is the crucial fix.
 
   useEffect(() => {
     if (!isPlayerReady || !playerRef.current) return;
