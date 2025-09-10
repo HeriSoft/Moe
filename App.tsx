@@ -106,6 +106,8 @@ const App: React.FC = () => {
   const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); // New
   const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); // New
   const [isAdminMusicOpen, setIsAdminMusicOpen] = useState(false); // New
+  const [siteSettings, setSiteSettings] = useState<{ logoDriveId?: string | null }>({});
+
 
   // --- New Music Box State ---
   const [musicBoxState, setMusicBoxState] = useState<'closed' | 'open' | 'minimized'>('closed');
@@ -169,6 +171,18 @@ const App: React.FC = () => {
   }, [loadChatsFromDrive]);
 
 
+  const fetchSiteSettings = useCallback(async () => {
+    try {
+        const response = await fetch('/api/admin?action=get_site_settings');
+        if (response.ok) {
+            const data = await response.json();
+            setSiteSettings(data || {});
+        }
+    } catch (error) {
+        console.error("Failed to fetch site settings:", error);
+    }
+  }, []);
+
   // --- Initialization Effect ---
   useEffect(() => {
     // Load local-only settings first
@@ -183,9 +197,10 @@ const App: React.FC = () => {
     const savedModel = localStorage.getItem('defaultModel');
     if (savedModel) setModel(savedModel);
 
+    fetchSiteSettings();
     // Initialize Google Drive Service
     googleDriveService.initClient(handleAuthChange);
-  }, [handleAuthChange]);
+  }, [handleAuthChange, fetchSiteSettings]);
   
   // Save active chat ID to localStorage whenever it changes
   useEffect(() => {
@@ -896,6 +911,7 @@ const App: React.FC = () => {
         onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
         isLoggedIn={isLoggedIn}
         userProfile={userProfile}
+        siteSettings={siteSettings}
       />
       <main className="flex-1 min-w-0">
         <ChatView
@@ -993,6 +1009,7 @@ const App: React.FC = () => {
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
         userProfile={userProfile}
+        onSettingsChanged={fetchSiteSettings}
       />
       <AdminMovieModal
         isOpen={isAdminMovieModalOpen}
