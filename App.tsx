@@ -525,7 +525,7 @@ const App: React.FC = () => {
 
       if (detailedError.includes('This is a Pro feature')) {
           if (userProfile?.email !== ADMIN_EMAIL) {
-            setIsMembershipModalOpen(true);
+            handleProFeatureBlock();
           }
       } else {
           setNotifications(prev => [`[${new Date().toLocaleTimeString()}] ${detailedError}`, ...prev.slice(0, 19)]);
@@ -639,6 +639,11 @@ const App: React.FC = () => {
   const isAdmin = userProfile?.email === ADMIN_EMAIL;
   
   const handleProFeatureBlock = () => {
+      if (!isLoggedIn) {
+          setIsLoginModalOpen(true);
+          setNotifications(prev => ["Please sign in to use Pro features.", ...prev.slice(0, 19)]);
+          return;
+      }
       if (userProfile?.email !== ADMIN_EMAIL) {
           setIsMembershipModalOpen(true);
       }
