@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, PlayIcon, PauseIcon, ForwardIcon, BackwardIcon, StopIcon, MusicalNoteIcon, MinusIcon } from './icons';
+import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, PlayIcon, PauseIcon, ForwardIcon, BackwardIcon, StopIcon, MusicalNoteIcon, MinusIcon, StarIcon } from './icons';
 import type { UserProfile, Song } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
@@ -18,9 +18,10 @@ interface MusicBoxModalProps {
   onTogglePlay: () => void;
   onNext: () => void;
   onPrev: () => void;
+  onToggleFavorite: (songId: string) => void;
 }
 
-export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev }) => {
+export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev, onToggleFavorite }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeGenre, setActiveGenre] = useState('all');
     const [error, setError] = useState<string | null>(null); // Kept for local errors if any
@@ -88,7 +89,17 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                                         <p className={`font-semibold ${currentSong?.id === song.id ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-800 dark:text-white'}`}>{song.title}</p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">{song.artist}</p>
                                     </div>
-                                    <div className="ml-auto">
+                                    <div className="ml-auto flex items-center gap-2">
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent the whole row from being clicked
+                                                onToggleFavorite(song.id);
+                                            }}
+                                            className="p-1 text-slate-400 hover:text-yellow-400 transition-colors"
+                                            aria-label={song.is_favorite ? 'Unfavorite song' : 'Favorite song'}
+                                        >
+                                            <StarIcon className={`w-5 h-5 ${song.is_favorite ? 'text-yellow-400' : ''}`} solid={song.is_favorite} />
+                                        </button>
                                         {currentSong?.id === song.id && isPlaying && <MusicalNoteIcon className="w-5 h-5 text-indigo-500 animate-pulse"/>}
                                     </div>
                                 </button>
@@ -101,7 +112,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                         style={{ backgroundImage: `url(${backgroundImageUrl})` }}
                     >
                         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
-                        <div className="z-10 w-40 h-40 sm:w-56 sm:h-56 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
+                        <div className="z-10 w-40 h-40 sm:w-48 sm:h-48 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
                             <div className={`relative w-full h-full p-2 ${isPlaying ? 'animate-spin-slow' : ''}`}>
                                 {currentSong?.avatar_drive_id ? (
                                     <img src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} alt="avatar" className="w-full h-full object-cover rounded-full" />
@@ -110,7 +121,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                                 )}
                             </div>
                         </div>
-                        <div className="z-10 w-full mt-4 sm:mt-6">
+                        <div className="z-10 w-full mt-2 sm:mt-4">
                             <div className="relative w-full overflow-hidden h-8">
                                 <div className={`absolute whitespace-nowrap ${isPlaying ? 'marquee' : 'justify-center'}`}>
                                     <h3 className="text-2xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title || 'Select a song'}</h3>
@@ -119,14 +130,14 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             </div>
                             <p className="text-slate-300 mt-1" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.5)'}}>{currentSong?.artist || '...'}</p>
                         </div>
-                        <div className="z-10 mt-6 sm:mt-8 flex items-center justify-center gap-6">
+                        <div className="z-10 mt-4 sm:mt-6 flex items-center justify-center gap-6">
                             <button onClick={onPrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-7 h-7"/></button>
                             <button onClick={() => handlePlayPause()} className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
                                 {isPlaying ? <PauseIcon className="w-8 h-8 ml-0.5"/> : <PlayIcon className="w-8 h-8 ml-1"/>}
                             </button>
                             <button onClick={onNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-7 h-7"/></button>
                         </div>
-                        <button onClick={handleStop} className="z-10 mt-4 sm:mt-6 flex items-center gap-2 text-sm text-slate-400 hover:text-red-400">
+                        <button onClick={handleStop} className="z-10 mt-2 sm:mt-4 flex items-center gap-2 text-sm text-slate-400 hover:text-red-400">
                             <StopIcon className="w-4 h-4"/> Stop
                         </button>
                     </div>
