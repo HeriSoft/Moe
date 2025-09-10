@@ -1040,7 +1040,6 @@ const App: React.FC = () => {
         setNotifications={setNotifications}
         onDataChange={fetchSongs}
       />
-      <div id="youtube-player-container" style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}></div>
     </div>
   );
 };
