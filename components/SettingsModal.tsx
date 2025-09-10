@@ -99,7 +99,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     setIsRecording(false);
     if (animationFrameIdRef.current) { cancelAnimationFrame(animationFrameIdRef.current); animationFrameIdRef.current = null; }
     setAudioLevel(0);
-    if (audioContextRef.current?.state !== 'closed') { audioContextRef.current.close().catch(console.error); audioContextRef.current = null; }
+    // FIX: Check for existence of audioContextRef.current before trying to access its properties.
+    if (audioContextRef.current) {
+      if (audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(console.error);
+      }
+      audioContextRef.current = null;
+    }
     setMicStream(currentStream => { if (currentStream) { currentStream.getTracks().forEach(track => track.stop()); } return null; });
   }, []);
   
