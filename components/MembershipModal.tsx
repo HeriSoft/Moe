@@ -1,8 +1,10 @@
 
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CloseIcon, CheckCircleIcon, SparklesIcon } from './icons';
 import type { UserProfile } from '../types';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
+import { renderFormattedText } from './utils';
 
 interface MembershipModalProps {
   isOpen: boolean;
@@ -19,7 +21,9 @@ interface PaymentSettings {
 const FeatureListItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <li className="flex items-start">
     <CheckCircleIcon className="w-6 h-6 text-green-400 mr-3 flex-shrink-0 mt-1" />
-    <span className="text-slate-600 dark:text-slate-300">{children}</span>
+    <span className="text-slate-600 dark:text-slate-300">
+        {typeof children === 'string' ? renderFormattedText(children) : children}
+    </span>
   </li>
 );
 
@@ -27,7 +31,6 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
   const [view, setView] = useState<'initial' | 'qr_bank' | 'qr_momo' | 'success'>('initial');
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
-  // FIX: useRef was not imported from React.
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -88,25 +91,25 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
 
         <ul className="space-y-4 text-sm sm:text-base">
           <FeatureListItem>
-            **Unlimited** Image Generation with advanced models (Imagen 4 & DALL-E 3).
+            Tạo hình ảnh với các mô hình **tiên tiến** (Imagen 4, DALL-E 3. Flux.1).
           </FeatureListItem>
           <FeatureListItem>
-            Access to the powerful **Image Editing** tool.
+            Truy cập vào công cụ **chỉnh sửa hình ảnh** mạnh mẽ của mô hình: Banana Gemini và Flux Kontext.
           </FeatureListItem>
           <FeatureListItem>
-            Unlock the **Face Swap** feature for creative fun.
+            Mở khóa tính năng **Face Swap** để thỏa sức sáng tạo.
           </FeatureListItem>
            <FeatureListItem>
-            High-quality **Text-to-Speech** audio generation.
+            Tạo âm thanh **Chuyển văn bản thành giọng nói** chất lượng cao.
           </FeatureListItem>
            <FeatureListItem>
-            Access exclusive models like **GPT-5, Claude, and GPT-o3**.
+            Truy cập các mô hình **độc quyền** như GPT-5, Claude và GPT-o3.
           </FeatureListItem>
           <FeatureListItem>
-            Generate videos with the upcoming **Video Generation** feature.
+            Tạo video bằng tính năng **Tạo video mô hình**: Veo, Kling sắp ra mắt.
           </FeatureListItem>
           <FeatureListItem>
-            Priority access to all **new features** as they are released.
+            Quyền truy cập ưu tiên vào tất cả **Tính năng mới** khi chúng được phát hành.
           </FeatureListItem>
         </ul>
       </div>
@@ -126,7 +129,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
           </button>
       </div>
        <p className="text-xs text-slate-400 dark:text-slate-500 mt-4 text-center">
-          You can cancel your subscription at any time.
+          Bạn có thể hủy đăng ký của mình bất cứ lúc nào.
        </p>
     </>
   );
@@ -180,6 +183,8 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
           </button>
       </div>
   );
+
+  if (!isOpen) return null;
 
   return (
     <div
