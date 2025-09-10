@@ -105,4 +105,6 @@ export interface Song {
   genre: string;
   url: string; // YouTube URL or other embeddable URL
   created_at?: string;
+  avatar_drive_id?: string; // Drive ID for the spinning disc avatar
+  background_drive_id?: string; // Drive ID for the player background
 }
