@@ -14,7 +14,7 @@ import { FilesLibraryModal } from './components/FilesLibraryModal'; // New
 import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; // New
 import {
   streamModelResponse,
-  logUserLogin,
+  fetchUserProfileAndLogLogin,
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
@@ -124,7 +124,6 @@ const App: React.FC = () => {
       if (loggedIn && profile) {
           setUserProfile(profile);
           loadChatsFromDrive();
-          logUserLogin(profile); // Log the login event
       } else {
           setUserProfile(undefined);
           setChatSessions([]); // Clear sessions on logout
@@ -733,6 +732,8 @@ const App: React.FC = () => {
         setModel={setModel}
         chatBgColor={chatBgColor}
         setChatBgColor={setChatBgColor}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
       />
       <LoginModal 
         isOpen={isLoginModalOpen}
