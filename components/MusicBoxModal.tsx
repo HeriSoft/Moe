@@ -29,8 +29,17 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
     const filteredSongs = useMemo(() => {
         return songs.filter(song => {
             const matchesSearch = song.title.toLowerCase().includes(searchTerm.toLowerCase()) || song.artist.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesGenre = activeGenre === 'all' || song.genre === activeGenre;
-            return matchesSearch && matchesGenre;
+            
+            let matchesFilter = false;
+            if (activeGenre === 'all') {
+                matchesFilter = true;
+            } else if (activeGenre === 'favorites') {
+                matchesFilter = song.is_favorite === true;
+            } else {
+                matchesFilter = song.genre === activeGenre;
+            }
+
+            return matchesSearch && matchesFilter;
         });
     }, [songs, searchTerm, activeGenre]);
 
@@ -76,6 +85,13 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"/>
                         </div>
                         <div className="flex flex-wrap gap-2 mb-2">
+                             <button 
+                                onClick={() => setActiveGenre('favorites')} 
+                                className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-colors ${activeGenre === 'favorites' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                             >
+                                <StarIcon solid={activeGenre === 'favorites'} className="w-4 h-4" /> 
+                                Yêu thích
+                            </button>
                              <button onClick={() => setActiveGenre('all')} className={`px-3 py-1 text-xs rounded-full ${activeGenre === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>All</button>
                              {GENRES.map(g => <button key={g} onClick={() => setActiveGenre(g)} className={`px-3 py-1 text-xs rounded-full ${activeGenre === g ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>{g}</button>)}
                         </div>
@@ -112,7 +128,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                         style={{ backgroundImage: `url(${backgroundImageUrl})` }}
                     >
                         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
-                        <div className="z-10 w-40 h-40 sm:w-48 sm:h-48 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
+                        <div className="z-10 w-40 h-40 sm:w-48 sm:h-48 my-2 sm:my-0 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
                             <div className={`relative w-full h-full p-2 ${isPlaying ? 'animate-spin-slow' : ''}`}>
                                 {currentSong?.avatar_drive_id ? (
                                     <img src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} alt="avatar" className="w-full h-full object-cover rounded-full" />
