@@ -32,14 +32,23 @@ export default async function handler(req, res) {
         }
         
         const userEmail = req.headers['x-user-email'];
-
-        if (userEmail !== ADMIN_EMAIL) {
-            return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
-        }
+        const isAdmin = userEmail === ADMIN_EMAIL;
 
         switch (req.method) {
             case 'GET': {
                 const actionQuery = req.query.action;
+
+                // Public endpoint to get payment settings for the membership modal
+                if (actionQuery === 'get_payment_settings') {
+                    const settings = await redis.get('payment_settings');
+                    return res.status(200).json(settings ? JSON.parse(settings) : {});
+                }
+
+                // --- Admin-only actions below ---
+                if (!isAdmin) {
+                    return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
+                }
+
                 if (actionQuery === 'get_logs') {
                     const logs = await redis.lrange('user_logs', 0, 200);
                     return res.status(200).json({ logs });
@@ -63,7 +72,12 @@ export default async function handler(req, res) {
             }
 
             case 'POST': {
-                const { action, ip, email } = req.body;
+                if (!isAdmin) {
+                    return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
+                }
+
+                const { action, ip, email, bankQrId, momoQrId, memoFormat } = req.body;
+                
                 if (action === 'block_ip') {
                     if (!ip) return res.status(400).json({ error: 'IP address is required' });
                     await redis.sadd('blocked_ips', ip);
@@ -75,6 +89,11 @@ export default async function handler(req, res) {
                     await redis.srem('blocked_ips', ip);
                      await logAction(ADMIN_EMAIL, `unblocked IP ${ip} for user ${email}`);
                     return res.status(200).json({ success: true, message: `IP ${ip} unblocked.` });
+                }
+                if (action === 'save_payment_settings') {
+                    await redis.set('payment_settings', JSON.stringify({ bankQrId, momoQrId, memoFormat }));
+                    await logAction(ADMIN_EMAIL, `updated payment settings`);
+                    return res.status(200).json({ success: true, message: 'Payment settings saved.' });
                 }
                 return res.status(400).json({ error: 'Invalid POST action' });
             }
