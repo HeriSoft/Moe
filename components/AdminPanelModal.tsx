@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -15,6 +15,7 @@ interface AdminPanelModalProps {
   isOpen: boolean;
   onClose: () => void;
   userProfile: UserProfile | undefined;
+  onSettingsChanged: () => void;
 }
 
 interface UserIpData {
@@ -25,7 +26,7 @@ interface UserIpData {
 
 const ADMIN_API_ENDPOINT = '/api/admin';
 
-type AdminTab = 'logs' | 'ips' | 'users' | 'memberships' | 'payments';
+type AdminTab = 'logs' | 'ips' | 'users' | 'memberships' | 'payments' | 'siteSettings';
 
 // --- STYLING CONSTANTS for MODERATORS ---
 const MOD_ICON = (props: any) => <StarIcon {...props} solid={true} />;
@@ -38,6 +39,97 @@ const LoadingSpinner: React.FC = () => (
         <RefreshIcon className="w-8 h-8 animate-spin text-slate-500" />
     </div>
 );
+
+
+const SiteSettings: React.FC<{ userProfile: UserProfile | undefined, onSettingsChanged: () => void }> = ({ userProfile, onSettingsChanged }) => {
+    const [logoDriveId, setLogoDriveId] = useState<string | null>(null);
+    const [initialLogoId, setInitialLogoId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    
+    useEffect(() => {
+        const fetchSettings = async () => {
+            setIsLoading(true);
+            try {
+                const response = await fetch(`${ADMIN_API_ENDPOINT}?action=get_site_settings`);
+                if (!response.ok) throw new Error('Could not fetch site settings');
+                const data = await response.json();
+                setLogoDriveId(data.logoDriveId || null);
+                setInitialLogoId(data.logoDriveId || null);
+            } catch (e) {
+                setError(e instanceof Error ? e.message : 'Unknown error');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchSettings();
+    }, []);
+
+    const handleSelectLogo = () => {
+        googleDriveService.showPicker((files) => {
+            if (files && files.length > 0) {
+                setLogoDriveId(files[0].id);
+            }
+        }, { mimeTypes: 'image/png,image/jpeg,image/webp,image/svg+xml' });
+    };
+
+    const handleSave = async () => {
+        if (!userProfile) return;
+        setIsLoading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'save_site_settings', logoDriveId }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Failed to save settings.');
+            setSuccess('Settings saved successfully!');
+            onSettingsChanged(); // Notify App to refetch
+            setInitialLogoId(logoDriveId);
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Unknown error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    const handleRemoveLogo = () => {
+        setLogoDriveId(null);
+    };
+    
+    const isDirty = logoDriveId !== initialLogoId;
+
+    return (
+        <div className="space-y-6 max-w-md mx-auto p-4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg">
+            <h3 className="text-xl font-semibold text-center">Site Settings</h3>
+            {error && <p className="text-red-500 text-sm text-center bg-red-500/10 p-2 rounded-md">{error}</p>}
+            {success && <p className="text-green-500 text-sm text-center bg-green-500/10 p-2 rounded-md">{success}</p>}
+            
+            <div className="space-y-2">
+                <label className="font-semibold">Site Logo</label>
+                <p className="text-xs text-slate-500 mb-2">This logo will replace the "Moe Chat" text in the sidebar.</p>
+                <div className="h-24 w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center p-2">
+                    {logoDriveId ? <img src={googleDriveService.getDriveFilePublicUrl(logoDriveId)} alt="Site Logo Preview" className="max-h-full max-w-full object-contain"/> : <span className="text-slate-400">No Logo Set</span>}
+                </div>
+                <div className="flex gap-2 mt-2">
+                    <button onClick={handleSelectLogo} className="flex-1 py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Logo from Drive</button>
+                    <button onClick={handleRemoveLogo} disabled={!logoDriveId} className="py-2 px-4 bg-red-500/20 text-red-500 rounded-md hover:bg-red-500/30 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Remove</button>
+                </div>
+            </div>
+
+            <div className="flex justify-end">
+                <button onClick={handleSave} disabled={isLoading || !isDirty} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed">
+                    {isLoading ? 'Saving...' : 'Save Settings'}
+                </button>
+            </div>
+        </div>
+    );
+};
 
 
 const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ userProfile }) => {
@@ -270,7 +362,7 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
 };
 
 
-export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile }) => {
+export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile, onSettingsChanged }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('users');
   const [logs, setLogs] = useState<string[]>([]);
   const [ipData, setIpData] = useState<UserIpData[]>([]);
@@ -390,6 +482,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           <TabButton tabId="memberships" title="Memberships" icon={SparklesIcon} />
           <TabButton tabId="ips" title="IP Management" icon={ShieldCheckIcon} />
           <TabButton tabId="payments" title="Payments" icon={CurrencyDollarIcon} />
+          <TabButton tabId="siteSettings" title="Site Settings" icon={WrenchScrewdriverIcon} />
           <TabButton tabId="logs" title="User Logs" icon={ClipboardDocumentListIcon} />
         </div>
 
@@ -398,6 +491,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           {!isLoading && activeTab === 'users' && userProfile && <UserManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('users')} />}
           {!isLoading && activeTab === 'memberships' && userProfile && <MembershipManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('memberships')} />}
           {!isLoading && activeTab === 'payments' && <PaymentSettings userProfile={userProfile} />}
+          {!isLoading && activeTab === 'siteSettings' && <SiteSettings userProfile={userProfile} onSettingsChanged={onSettingsChanged} />}
           {!isLoading && activeTab === 'logs' && (
             <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg font-mono text-xs text-slate-600 dark:text-slate-300">
                 {logs.length > 0 ? logs.map((log, index) => <p key={index}>{log}</p>) : <p>No logs found.</p>}
