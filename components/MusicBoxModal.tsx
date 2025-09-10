@@ -245,7 +245,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             </div>
 
                             {/* Info & Controls (Right) */}
-                            <div className="flex flex-col items-start justify-center flex-grow min-w-0">
+                            <div className="flex flex-col items-start justify-center flex-grow min-w-0 py-2">
                                 {/* Info */}
                                 <div className="w-full text-left">
                                     <div className="relative w-full overflow-hidden h-8 flex justify-start items-center">
