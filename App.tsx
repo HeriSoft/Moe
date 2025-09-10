@@ -756,6 +756,21 @@ const App: React.FC = () => {
       setIsPlaying(prev => !prev);
     }
   }, [currentSong]);
+  
+  const handleNextSong = useCallback(() => {
+    if (songs.length === 0) return;
+    const currentIndex = currentSong ? songs.findIndex(s => s.id === currentSong.id) : -1;
+    const nextIndex = (currentIndex + 1) % songs.length;
+    handleSetCurrentSong(songs[nextIndex], true);
+  }, [songs, currentSong, handleSetCurrentSong]);
+
+  const handlePrevSong = useCallback(() => {
+    if (songs.length === 0) return;
+    const currentIndex = currentSong ? songs.findIndex(s => s.id === currentSong.id) : -1;
+    const prevIndex = (currentIndex - 1 + songs.length) % songs.length;
+    handleSetCurrentSong(songs[prevIndex], true);
+  }, [songs, currentSong, handleSetCurrentSong]);
+
 
   const videoSrc = useMemo(() => {
     if (isPlaying && currentSong) {
@@ -763,6 +778,36 @@ const App: React.FC = () => {
     }
     return '';
   }, [isPlaying, currentSong]);
+  
+  // --- Media Session API for Background Playback ---
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+        if (currentSong) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: currentSong.title,
+                artist: currentSong.artist,
+                album: 'Moe Chat Music',
+                artwork: currentSong.avatar_drive_id
+                    ? [{ src: googleDriveService.getDriveFilePublicUrl(currentSong.avatar_drive_id), sizes: '512x512', type: 'image/png' }]
+                    : []
+            });
+
+            navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+            navigator.mediaSession.setActionHandler('play', () => handleTogglePlay());
+            navigator.mediaSession.setActionHandler('pause', () => handleTogglePlay());
+            navigator.mediaSession.setActionHandler('nexttrack', () => handleNextSong());
+            navigator.mediaSession.setActionHandler('previoustrack', () => handlePrevSong());
+        } else {
+            navigator.mediaSession.metadata = null;
+            navigator.mediaSession.playbackState = 'none';
+            navigator.mediaSession.setActionHandler('play', null);
+            navigator.mediaSession.setActionHandler('pause', null);
+            navigator.mediaSession.setActionHandler('nexttrack', null);
+            navigator.mediaSession.setActionHandler('previoustrack', null);
+        }
+    }
+  }, [currentSong, isPlaying, handleTogglePlay, handleNextSong, handlePrevSong]);
 
 
   return (
@@ -936,6 +981,8 @@ const App: React.FC = () => {
         isLoading={isMusicLoading}
         onSetCurrentSong={handleSetCurrentSong}
         onTogglePlay={handleTogglePlay}
+        onNext={handleNextSong}
+        onPrev={handlePrevSong}
       />
       <AdminMusicModal
         isOpen={isAdminMusicOpen}
