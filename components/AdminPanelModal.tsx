@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon } from './icons';
 import type { UserProfile } from '../types';
+import * as googleDriveService from '../services/googleDriveService';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -24,6 +25,105 @@ const PlaceholderComponent: React.FC<{ title: string; }> = ({ title }) => (
         <p className="mt-2">This feature is under development and will be available soon.</p>
     </div>
 );
+
+const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ userProfile }) => {
+    const [bankQrId, setBankQrId] = useState<string | null>(null);
+    const [momoQrId, setMomoQrId] = useState<string | null>(null);
+    const [memoFormat, setMemoFormat] = useState('moechat {userName}');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            setIsLoading(true);
+            try {
+                const response = await fetch(`${ADMIN_API_ENDPOINT}?action=get_payment_settings`);
+                if (!response.ok) throw new Error('Could not fetch settings');
+                const data = await response.json();
+                if (data.bankQrId) setBankQrId(data.bankQrId);
+                if (data.momoQrId) setMomoQrId(data.momoQrId);
+                if (data.memoFormat) setMemoFormat(data.memoFormat);
+            } catch (e) {
+                setError(e instanceof Error ? e.message : 'Unknown error');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchSettings();
+    }, []);
+
+    const handleSelectImage = (setter: React.Dispatch<React.SetStateAction<string | null>>) => {
+        googleDriveService.showPicker((files) => {
+            if (files && files.length > 0) {
+                setter(files[0].id);
+            }
+        }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+    };
+
+    const handleSave = async () => {
+        if (!userProfile) return;
+        setIsLoading(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'save_payment_settings', bankQrId, momoQrId, memoFormat }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Failed to save settings.');
+            setSuccess('Settings saved successfully!');
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Unknown error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    return (
+        <div className="space-y-6 max-w-2xl mx-auto p-4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg">
+            <h3 className="text-xl font-semibold text-center">Payment Configuration</h3>
+            {error && <p className="text-red-500 text-sm text-center bg-red-500/10 p-2 rounded-md">{error}</p>}
+            {success && <p className="text-green-500 text-sm text-center bg-green-500/10 p-2 rounded-md">{success}</p>}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <label className="font-semibold">Bank QR Code</label>
+                    <div className="aspect-square w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+                        {bankQrId ? <img src={googleDriveService.getDriveFilePublicUrl(bankQrId)} alt="Bank QR Preview" className="w-full h-full object-contain rounded-lg"/> : <PhotoIcon className="w-16 h-16 text-slate-400"/>}
+                    </div>
+                    <button onClick={() => handleSelectImage(setBankQrId)} className="w-full py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Image from Drive</button>
+                </div>
+                 <div className="space-y-2">
+                    <label className="font-semibold">Momo QR Code</label>
+                    <div className="aspect-square w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+                        {momoQrId ? <img src={googleDriveService.getDriveFilePublicUrl(momoQrId)} alt="Momo QR Preview" className="w-full h-full object-contain rounded-lg"/> : <PhotoIcon className="w-16 h-16 text-slate-400"/>}
+                    </div>
+                    <button onClick={() => handleSelectImage(setMomoQrId)} className="w-full py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Image from Drive</button>
+                </div>
+            </div>
+            <div>
+                <label htmlFor="memo-format" className="font-semibold block mb-2">Transfer Memo Format</label>
+                <input
+                    id="memo-format"
+                    type="text"
+                    value={memoFormat}
+                    onChange={e => setMemoFormat(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md p-2 font-mono"
+                />
+                <p className="text-xs text-slate-500 mt-1">Use <code className="bg-slate-200 dark:bg-slate-700 p-0.5 rounded">{`{userName}`}</code> as a placeholder for the user's first name.</p>
+            </div>
+            <div className="flex justify-end">
+                <button onClick={handleSave} disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
+                    {isLoading ? 'Saving...' : 'Save Settings'}
+                </button>
+            </div>
+        </div>
+    );
+};
 
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile }) => {
@@ -192,7 +292,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           )}
           {activeTab === 'users' && <PlaceholderComponent title="User Management" />}
           {activeTab === 'memberships' && <PlaceholderComponent title="Membership Plans" />}
-          {activeTab === 'payments' && <PlaceholderComponent title="Payment Settings (PayPal)" />}
+          {activeTab === 'payments' && <PaymentSettings userProfile={userProfile} />}
         </div>
       </div>
     </div>
