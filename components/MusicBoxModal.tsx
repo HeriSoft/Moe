@@ -138,8 +138,8 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             </div>
                         </div>
                         <div className="z-10 w-full mt-2 sm:mt-4">
-                            <div className="relative w-full overflow-hidden h-8">
-                                <div className={`absolute whitespace-nowrap ${isPlaying ? 'marquee' : 'justify-center'}`}>
+                            <div className="relative w-full overflow-hidden h-8 flex justify-center items-center">
+                                <div className={`whitespace-nowrap ${isPlaying ? 'marquee' : ''}`}>
                                     <h3 className="text-2xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title || 'Select a song'}</h3>
                                     {isPlaying && <h3 className="text-2xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title}</h3>}
                                 </div>
