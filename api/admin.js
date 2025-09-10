@@ -67,6 +67,29 @@ export default async function handler(req, res) {
                     return res.status(200).json(settings ? JSON.parse(settings) : {});
                 }
 
+                // Endpoint for a logged-in user to get their own membership details
+                if (actionQuery === 'get_membership_details') {
+                    if (!userEmail) return res.status(403).json({ error: 'Forbidden', details: 'Authentication required.' });
+
+                    // In a real app, you'd query a 'payments' table. Here we mock it for demonstration.
+                    const mockHistory = [
+                        { date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), amount: 250000, memo: `moechat_${userEmail.split('@')[0]}`, status: 'Completed' },
+                    ];
+                    
+                    const { rows } = await pool.query(
+                        'SELECT subscription_status, subscription_expires_at FROM users WHERE email = $1',
+                        [userEmail]
+                    );
+
+                    const userData = rows[0] || { subscription_status: 'inactive', subscription_expires_at: null };
+
+                    return res.status(200).json({
+                        history: mockHistory,
+                        status: userData.subscription_status,
+                        expiresAt: userData.subscription_expires_at,
+                    });
+                }
+
                 // --- Admin-only actions below ---
                 if (!isAdmin) {
                     return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
@@ -107,11 +130,23 @@ export default async function handler(req, res) {
             }
 
             case 'POST': {
+                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360 } = req.body;
+
+                if (action === 'cancel_subscription_user') {
+                     if (!userEmail) return res.status(403).json({ error: 'Forbidden' });
+                     await pool.query(
+                        `UPDATE users SET subscription_status = 'cancelled', updated_at = NOW() WHERE email = $1;`,
+                        [userEmail]
+                     );
+                     await invalidateUserProCache(userEmail);
+                     await logAction(userEmail, `cancelled their membership subscription.`);
+                     return res.status(200).json({ success: true });
+                }
+
+                // --- Admin-only actions below ---
                 if (!isAdmin) {
                     return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
                 }
-
-                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator } = req.body;
                 
                 if (action === 'block_ip') {
                     if (!ip) return res.status(400).json({ error: 'IP address is required' });
@@ -126,7 +161,7 @@ export default async function handler(req, res) {
                     return res.status(200).json({ success: true, message: `IP ${ip} unblocked.` });
                 }
                 if (action === 'save_payment_settings') {
-                    await redis.set('payment_settings', JSON.stringify({ bankQrId, momoQrId, memoFormat }));
+                    await redis.set('payment_settings', JSON.stringify({ bankQrId, momoQrId, memoFormat, price30, price90, price360 }));
                     await logAction(ADMIN_EMAIL, `updated payment settings`);
                     return res.status(200).json({ success: true, message: 'Payment settings saved.' });
                 }
