@@ -25,9 +25,9 @@ async function handleProxyError(response: Response): Promise<never> {
 }
 
 
-export async function logUserLogin(user: UserProfile) {
+export async function fetchUserProfileAndLogLogin(user: UserProfile): Promise<UserProfile> {
     try {
-        await fetch('/api/proxy', {
+        const response = await fetch('/api/proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -35,8 +35,16 @@ export async function logUserLogin(user: UserProfile) {
                 payload: { user }
             })
         });
+        if (!response.ok) {
+            // Fallback to original user profile if API fails
+            console.error("Failed to fetch full user profile:", await response.text());
+            return user;
+        }
+        const data = await response.json();
+        return data.user || user; // Return full profile from DB, or original as fallback
     } catch (error) {
-        console.error("Failed to log user login:", error);
+        console.error("Failed to log user login/fetch profile:", error);
+        return user; // Fallback
     }
 }
 
