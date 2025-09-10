@@ -942,6 +942,7 @@ const App: React.FC = () => {
         onClose={() => setIsAdminMusicOpen(false)}
         userProfile={userProfile}
         setNotifications={setNotifications}
+        onDataChange={fetchSongs}
       />
       {videoSrc && (
         <iframe 
