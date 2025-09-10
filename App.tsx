@@ -11,6 +11,7 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { AdminMovieModal } from './components/AdminMovieModal';
 import { VideoCinemaModal } from './components/VideoCinemaModal';
 import { MembershipModal } from './components/MembershipModal';
+import { MembershipManagementModal } from './components/MembershipManagementModal'; // New
 import { FilesLibraryModal } from './components/FilesLibraryModal'; // New
 import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; // New
 import {
@@ -82,6 +83,7 @@ const App: React.FC = () => {
   const [isAdminMovieModalOpen, setIsAdminMovieModalOpen] = useState(false);
   const [isVideoCinemaModalOpen, setIsVideoCinemaModalOpen] = useState(false);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
+  const [isMembershipManagementOpen, setIsMembershipManagementOpen] = useState(false); // New
   const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); // New
   const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); // New
   
@@ -662,6 +664,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleMembershipClick = () => {
+    if (!isLoggedIn) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+    if (userProfile?.isPro) {
+      setIsMembershipManagementOpen(true);
+    } else {
+      setIsMembershipModalOpen(true);
+    }
+  };
+
 
   return (
     <div className="relative flex h-screen w-full font-sans overflow-hidden">
@@ -684,6 +698,7 @@ const App: React.FC = () => {
         onAdminPanelClick={() => setIsAdminPanelOpen(true)}
         onAdminMovieModalClick={() => setIsAdminMovieModalOpen(true)}
         onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)} // New
+        onMembershipClick={handleMembershipClick} // New
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
         onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
@@ -810,6 +825,12 @@ const App: React.FC = () => {
         isOpen={isMembershipModalOpen}
         onClose={() => setIsMembershipModalOpen(false)}
         userProfile={userProfile}
+      />
+      <MembershipManagementModal
+        isOpen={isMembershipManagementOpen}
+        onClose={() => setIsMembershipManagementOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
       />
     </div>
   );
