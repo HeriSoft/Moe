@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, ChatBubbleIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, ChatBubbleIcon, MusicalNoteIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 
 // Add SpeechRecognition types to window for TypeScript
@@ -102,6 +102,7 @@ interface ChatViewProps {
   onOpenVideoCinema: () => void; // For Video Cinema
   onOpenFilesLibrary: () => void; // For Files Library
   onOpenCCTalk: () => void; // For CCTalk
+  onOpenMusicBox: () => void; // For Music Box
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
 }
@@ -172,7 +173,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, onOpenMusicBox, userProfile, onProFeatureBlock }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -537,14 +538,23 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             <WelcomeScreen onPromptClick={startChatWithPrompt} />
           )}
         </main>
-
-        <button
-          onClick={scrollToBottom}
-          aria-label="Scroll to bottom"
-          className={`absolute bottom-4 right-4 sm:right-6 z-20 p-2 rounded-full bg-indigo-600 text-white shadow-lg transition-opacity duration-300 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#171725] ${showScrollToBottom ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        >
-          <ArrowDownIcon className="w-6 h-6" />
-        </button>
+        
+        <div className="absolute bottom-4 right-4 sm:right-6 z-20 flex flex-col items-center gap-2">
+            <button
+              onClick={onOpenMusicBox}
+              aria-label="Open Music Box"
+              className="p-2 rounded-full bg-pink-600 text-white shadow-lg transition-all duration-300 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 dark:focus:ring-offset-[#171725]"
+            >
+              <MusicalNoteIcon className="w-6 h-6" />
+            </button>
+            <button
+              onClick={scrollToBottom}
+              aria-label="Scroll to bottom"
+              className={`p-2 rounded-full bg-indigo-600 text-white shadow-lg transition-opacity duration-300 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#171725] ${showScrollToBottom ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            >
+              <ArrowDownIcon className="w-6 h-6" />
+            </button>
+        </div>
       </div>
 
       <footer className="flex-shrink-0 p-2 sm:p-4 sm:pt-0">
