@@ -50,9 +50,19 @@ async function createTables() {
             // Ignore "duplicate column" error
             if (e.code !== '42701' && e.code !== '42P07') throw e;
         }
-        console.log("Table 'songs' is ready.");
+        
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS user_song_favorites (
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, song_id)
+            );
+        `);
+
+        console.log("Tables 'songs' and 'user_song_favorites' are ready.");
     } catch (error) {
-        console.error("Error creating/altering songs table:", error);
+        console.error("Error creating/altering music tables:", error);
         throw new Error("Failed to initialize database tables for music.");
     }
 }
@@ -80,32 +90,69 @@ export default async function handler(req, res) {
             // --- PUBLIC ACTIONS ---
             case 'get_public_songs': {
                 const { searchTerm = '', genre = 'all' } = payload;
+                
+                let userId = null;
+                if (userEmail) {
+                    const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [userEmail]);
+                    if (userResult.rows.length > 0) {
+                        userId = userResult.rows[0].id;
+                    }
+                }
 
                 let whereClauses = [];
                 let queryParams = [];
                 let paramIndex = 1;
 
                 if (searchTerm) {
-                    whereClauses.push(`(title ILIKE $${paramIndex} OR artist ILIKE $${paramIndex})`);
+                    whereClauses.push(`(s.title ILIKE $${paramIndex} OR s.artist ILIKE $${paramIndex})`);
                     queryParams.push(`%${searchTerm}%`);
                     paramIndex++;
                 }
 
                 if (genre !== 'all') {
-                    whereClauses.push(`genre = $${paramIndex}`);
+                    whereClauses.push(`s.genre = $${paramIndex}`);
                     queryParams.push(genre);
                     paramIndex++;
                 }
 
                 const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
                 
+                const finalParams = userId ? [...queryParams, userId] : queryParams;
+
                 const query = {
-                    text: `SELECT * FROM songs ${whereString} ORDER BY created_at DESC;`,
-                    values: queryParams
+                    text: `
+                        SELECT 
+                            s.*,
+                            ${userId ? `(EXISTS (SELECT 1 FROM user_song_favorites usf WHERE usf.song_id = s.id AND usf.user_id = $${paramIndex}))` : 'false'} AS is_favorite
+                        FROM songs s
+                        ${whereString} 
+                        ORDER BY s.created_at DESC;
+                    `,
+                    values: finalParams
                 };
 
                 const { rows: songs } = await pool.query(query);
                 return res.status(200).json({ songs });
+            }
+
+            case 'toggle_favorite': {
+                if (!userEmail) return res.status(401).json({ error: 'Unauthorized' });
+                const { songId } = payload;
+                if (!songId) return res.status(400).json({ error: 'Song ID is required.' });
+
+                const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [userEmail]);
+                if (userResult.rows.length === 0) return res.status(404).json({ error: 'User not found.' });
+                const userId = userResult.rows[0].id;
+
+                const existingFavorite = await pool.query('SELECT * FROM user_song_favorites WHERE user_id = $1 AND song_id = $2', [userId, songId]);
+
+                if (existingFavorite.rows.length > 0) {
+                    await pool.query('DELETE FROM user_song_favorites WHERE user_id = $1 AND song_id = $2', [userId, songId]);
+                    return res.status(200).json({ success: true, status: 'unfavorited' });
+                } else {
+                    await pool.query('INSERT INTO user_song_favorites (user_id, song_id) VALUES ($1, $2)', [userId, songId]);
+                    return res.status(201).json({ success: true, status: 'favorited' });
+                }
             }
 
             // --- ADMIN ACTIONS ---
