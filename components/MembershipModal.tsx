@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CloseIcon, CheckCircleIcon, SparklesIcon } from './icons';
 import type { UserProfile } from '../types';
@@ -74,8 +73,12 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
   }, [view]);
 
   const transferMemo = useMemo(() => {
-    if (!settings?.memoFormat || !userProfile?.name) return 'moechat';
-    return settings.memoFormat.replace('{userName}', userProfile.name.split(' ')[0]);
+    const format = settings?.memoFormat || 'moechat {userName}';
+    if (!userProfile?.name) {
+        return format.replace('{userName}', '').trim() || 'moechat';
+    }
+    const userName = userProfile.name.replace(/\s+/g, '');
+    return format.replace('{userName}', userName);
   }, [settings, userProfile]);
 
   const minutes = Math.floor(countdown / 60);
