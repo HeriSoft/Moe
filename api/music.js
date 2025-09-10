@@ -34,7 +34,9 @@ async function createTables() {
                 artist VARCHAR(255),
                 genre VARCHAR(100),
                 url TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                avatar_drive_id VARCHAR(255),
+                background_drive_id VARCHAR(255)
             );
         `);
         console.log("Table 'songs' is ready.");
@@ -103,24 +105,24 @@ export default async function handler(req, res) {
 
             case 'add_song': {
                 if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
-                const { title, artist, genre, url } = payload;
+                const { title, artist, genre, url, avatar_drive_id, background_drive_id } = payload;
                 if (!title || !url) return res.status(400).json({ error: 'Title and URL are required.' });
                 
                 const { rows } = await pool.query(
-                    'INSERT INTO songs (title, artist, genre, url) VALUES ($1, $2, $3, $4) RETURNING id;',
-                    [title, artist, genre, url]
+                    'INSERT INTO songs (title, artist, genre, url, avatar_drive_id, background_drive_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;',
+                    [title, artist, genre, url, avatar_drive_id, background_drive_id]
                 );
                 return res.status(201).json({ success: true, songId: rows[0].id });
             }
 
             case 'update_song': {
                 if (!isAdmin) return res.status(403).json({ error: 'Forbidden' });
-                const { songId, title, artist, genre, url } = payload;
+                const { songId, title, artist, genre, url, avatar_drive_id, background_drive_id } = payload;
                 if (!songId || !title || !url) return res.status(400).json({ error: 'Song ID, title, and URL are required.' });
 
                 await pool.query(
-                    'UPDATE songs SET title = $1, artist = $2, genre = $3, url = $4 WHERE id = $5;',
-                    [title, artist, genre, url, songId]
+                    'UPDATE songs SET title = $1, artist = $2, genre = $3, url = $4, avatar_drive_id = $5, background_drive_id = $6 WHERE id = $7;',
+                    [title, artist, genre, url, avatar_drive_id, background_drive_id, songId]
                 );
                 return res.status(200).json({ success: true });
             }
