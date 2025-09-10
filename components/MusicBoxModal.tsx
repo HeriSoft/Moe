@@ -186,7 +186,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                              <button onClick={() => handleGenreChange('all')} className={`px-3 py-1 text-xs rounded-full ${activeGenre === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>All</button>
                              {GENRES.map(g => <button key={g} onClick={() => handleGenreChange(g)} className={`px-3 py-1 text-xs rounded-full ${activeGenre === g ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>{g}</button>)}
                         </div>
-                         <div className="flex-grow overflow-y-auto pr-2 -mr-2 space-y-2">
+                         <div className="flex-grow md:flex-grow-0 md:h-[340px] overflow-y-auto pr-2 -mr-2 space-y-2">
                             {isLoading && <div className="flex justify-center items-center h-full"><RefreshIcon className="w-8 h-8 animate-spin"/></div>}
                             {error && <p className="text-red-500">{error}</p>}
                             {songsToDisplay.map((song, index) => {
