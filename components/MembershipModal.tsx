@@ -1,9 +1,19 @@
-import React, { useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CloseIcon, CheckCircleIcon, SparklesIcon } from './icons';
+import type { UserProfile } from '../types';
+import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 interface MembershipModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userProfile?: UserProfile;
+}
+
+interface PaymentSettings {
+  bankQrId?: string;
+  momoQrId?: string;
+  memoFormat?: string;
 }
 
 const FeatureListItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -13,20 +23,163 @@ const FeatureListItem: React.FC<{ children: React.ReactNode }> = ({ children }) 
   </li>
 );
 
-export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClose }) => {
+export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClose, userProfile }) => {
+  const [view, setView] = useState<'initial' | 'qr_bank' | 'qr_momo' | 'success'>('initial');
+  const [settings, setSettings] = useState<PaymentSettings | null>(null);
+  const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
+  // FIX: useRef was not imported from React.
+  const timerRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      // Reset state and fetch settings when modal opens
+      setView('initial');
+      setCountdown(300);
+      
+      const fetchSettings = async () => {
+          try {
+              const response = await fetch('/api/admin?action=get_payment_settings');
+              if (response.ok) {
+                  const data = await response.json();
+                  setSettings(data);
+              }
+          } catch (e) {
+              console.error("Failed to fetch payment settings", e);
+          }
+      };
+      fetchSettings();
+      
     } else {
       document.body.style.overflow = 'auto';
+      if (timerRef.current) clearInterval(timerRef.current);
     }
+    
+    return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [isOpen]);
+  
+  useEffect(() => {
+    if (view === 'qr_bank' || view === 'qr_momo') {
+        timerRef.current = window.setInterval(() => {
+            setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+    } else {
+        if (timerRef.current) clearInterval(timerRef.current);
+    }
+  }, [view]);
 
-  if (!isOpen) return null;
+  const transferMemo = useMemo(() => {
+    if (!settings?.memoFormat || !userProfile?.name) return 'moechat';
+    return settings.memoFormat.replace('{userName}', userProfile.name.split(' ')[0]);
+  }, [settings, userProfile]);
 
-  const handleRegisterClick = () => {
-    alert('Payment integration is coming soon. Thank you for your interest!');
+  const minutes = Math.floor(countdown / 60);
+  const seconds = countdown % 60;
+
+  const renderInitialView = () => (
+    <>
+      <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 sm:p-6 rounded-lg">
+        <div className="text-center mb-6">
+          <p className="text-4xl font-bold text-slate-900 dark:text-white">250.000 VNĐ</p>
+          <p className="text-slate-500 dark:text-slate-400">/ tháng</p>
+        </div>
+
+        <ul className="space-y-4 text-sm sm:text-base">
+          <FeatureListItem>
+            **Unlimited** Image Generation with advanced models (Imagen 4 & DALL-E 3).
+          </FeatureListItem>
+          <FeatureListItem>
+            Access to the powerful **Image Editing** tool.
+          </FeatureListItem>
+          <FeatureListItem>
+            Unlock the **Face Swap** feature for creative fun.
+          </FeatureListItem>
+           <FeatureListItem>
+            High-quality **Text-to-Speech** audio generation.
+          </FeatureListItem>
+           <FeatureListItem>
+            Access exclusive models like **GPT-5, Claude, and GPT-o3**.
+          </FeatureListItem>
+          <FeatureListItem>
+            Generate videos with the upcoming **Video Generation** feature.
+          </FeatureListItem>
+          <FeatureListItem>
+            Priority access to all **new features** as they are released.
+          </FeatureListItem>
+        </ul>
+      </div>
+      
+      <div className="mt-6 space-y-3">
+          <button
+              onClick={() => setView('qr_bank')}
+              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-base"
+          >
+              Thanh toán qua Ngân hàng
+          </button>
+           <button
+              onClick={() => setView('qr_momo')}
+              className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-base"
+          >
+              Thanh toán qua Momo
+          </button>
+      </div>
+       <p className="text-xs text-slate-400 dark:text-slate-500 mt-4 text-center">
+          You can cancel your subscription at any time.
+       </p>
+    </>
+  );
+  
+  const renderQrView = (type: 'bank' | 'momo') => {
+    const qrId = type === 'bank' ? settings?.bankQrId : settings?.momoQrId;
+    const qrUrl = qrId ? getDriveFilePublicUrl(qrId) : '';
+
+    return (
+      <div className="text-center">
+        <h3 className="text-xl font-semibold mb-4">Quét mã QR để thanh toán</h3>
+        <div className="w-48 h-48 mx-auto bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+            {qrUrl ? <img src={qrUrl} alt={`${type} QR Code`} className="w-full h-full object-contain rounded-lg"/> : <p className="text-xs p-4">Admin has not set a QR code yet.</p>}
+        </div>
+        <div className="mt-4 space-y-2 text-sm">
+            <p>Số tiền: <strong className="text-lg">250.000 VNĐ</strong></p>
+            <p>Nội dung chuyển khoản:</p>
+            <p className="font-mono text-base bg-slate-200 dark:bg-slate-900 inline-block px-3 py-1 rounded-md">{transferMemo}</p>
+        </div>
+        <p className="text-xs text-amber-500 mt-4 p-2 bg-amber-500/10 rounded-md">
+            <strong>Quan Trọng:</strong> Hãy chuyển khoản đúng số tiền và nội dung, nếu không đúng sẽ không được nâng cấp.
+        </p>
+         <div className="mt-6">
+            <p className="text-sm mb-2">Giao dịch sẽ hết hạn sau:</p>
+            <p className="text-2xl font-bold font-mono text-red-500">{`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`}</p>
+         </div>
+         <div className="mt-6 flex flex-col sm:flex-row gap-3">
+             <button onClick={() => setView('initial')} className="w-full sm:w-1/2 bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500 font-semibold py-2 px-4 rounded-lg transition-colors">
+                Quay lại
+            </button>
+            <button
+                onClick={() => setView('success')}
+                className="w-full sm:w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            >
+                Hoàn tất chuyển khoản
+            </button>
+         </div>
+      </div>
+    );
   };
+  
+  const renderSuccessView = () => (
+      <div className="text-center py-8">
+          <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4"/>
+          <h3 className="text-2xl font-bold">Thành công!</h3>
+          <p className="mt-2 text-slate-600 dark:text-slate-400">
+             Vui lòng chờ. Nếu đã chuyển khoản, bạn vui lòng đăng nhập lại để kiểm tra nâng cấp nhé!
+          </p>
+          <button onClick={onClose} className="mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-8 rounded-lg transition-colors">
+              Đóng
+          </button>
+      </div>
+  );
 
   return (
     <div
@@ -37,7 +190,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
       aria-labelledby="membership-title"
     >
       <div
-        className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-lg p-6 sm:p-8 m-4 text-slate-800 dark:text-slate-200"
+        className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-md p-6 m-4 text-slate-800 dark:text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
@@ -53,53 +206,12 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
             <CloseIcon className="w-7 h-7" />
           </button>
         </div>
-
-        <p className="text-slate-600 dark:text-slate-400 mb-6 text-center">
-          Unlock all premium features and get the best experience Moe Chat has to offer.
-        </p>
-
-        <div className="bg-slate-100 dark:bg-[#2d2d40] p-6 rounded-lg">
-          <div className="text-center mb-6">
-            <p className="text-4xl font-bold text-slate-900 dark:text-white">$20</p>
-            <p className="text-slate-500 dark:text-slate-400">per month</p>
-          </div>
-
-          <ul className="space-y-4">
-            <FeatureListItem>
-              **Unlimited** Image Generation with advanced models (Imagen 4 & DALL-E 3).
-            </FeatureListItem>
-            <FeatureListItem>
-              Access to the powerful **Image Editing** tool.
-            </FeatureListItem>
-            <FeatureListItem>
-              Unlock the **Face Swap** feature for creative fun.
-            </FeatureListItem>
-             <FeatureListItem>
-              High-quality **Text-to-Speech** audio generation.
-            </FeatureListItem>
-             <FeatureListItem>
-              Access exclusive models like **GPT-5, Claude, and GPT-o3**.
-            </FeatureListItem>
-            <FeatureListItem>
-              Generate videos with the upcoming **Video Generation** feature.
-            </FeatureListItem>
-            <FeatureListItem>
-              Priority access to all **new features** as they are released.
-            </FeatureListItem>
-          </ul>
-        </div>
         
-        <div className="mt-8">
-            <button
-                onClick={handleRegisterClick}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg"
-            >
-                Register
-            </button>
-        </div>
-         <p className="text-xs text-slate-400 dark:text-slate-500 mt-4 text-center">
-            You can cancel your subscription at any time.
-         </p>
+        {view === 'initial' && renderInitialView()}
+        {view === 'qr_bank' && renderQrView('bank')}
+        {view === 'qr_momo' && renderQrView('momo')}
+        {view === 'success' && renderSuccessView()}
+        
       </div>
     </div>
   );
