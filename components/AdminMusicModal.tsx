@@ -22,9 +22,10 @@ interface AdminMusicModalProps {
   onClose: () => void;
   userProfile: UserProfile | undefined;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
+  onDataChange: () => void;
 }
 
-export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClose, userProfile, setNotifications }) => {
+export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onDataChange }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'add'>('list');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +135,7 @@ export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClos
           const result = await response.json();
           if (!response.ok) throw new Error(result.details || 'Failed to submit song');
           setNotifications(prev => [`Successfully ${editingSong ? 'updated' : 'added'} song: ${title}`, ...prev]);
+          onDataChange(); // Notify parent component to refetch songs for MusicBox
           setActiveTab('list');
           setEditingSong(null);
       } catch (e) {
@@ -156,7 +158,8 @@ export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClos
           const result = await response.json();
           if (!response.ok) throw new Error(result.details || 'Failed to delete song');
           setNotifications(prev => [`Successfully deleted song: ${songTitle}`, ...prev]);
-          fetchSongs(); // Refresh list
+          fetchSongs(); // Refresh list for this admin modal
+          onDataChange(); // Notify parent component to refetch songs for MusicBox
       } catch (e) {
           setError(e instanceof Error ? e.message : 'Unknown error');
       } finally {
