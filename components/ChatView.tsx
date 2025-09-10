@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { ChatSession, Attachment, Message, UserProfile } from '../types';
+import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
 import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, ChatBubbleIcon, MusicalNoteIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
+import { getDriveFilePublicUrl } from '../services/googleDriveService';
+
 
 // Add SpeechRecognition types to window for TypeScript
 declare global {
@@ -105,6 +107,10 @@ interface ChatViewProps {
   onOpenMusicBox: () => void; // For Music Box
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
+  // Music Box background state
+  musicBoxState: 'closed' | 'open' | 'minimized';
+  currentSong: Song | null;
+  isPlaying: boolean;
 }
 
 const PROMPT_STARTERS = [
@@ -173,7 +179,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, onOpenMusicBox, userProfile, onProFeatureBlock }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, onOpenMusicBox, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -545,7 +551,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
               aria-label="Open Music Box"
               className="p-2 rounded-full bg-pink-600 text-white shadow-lg transition-all duration-300 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 dark:focus:ring-offset-[#171725]"
             >
-              <MusicalNoteIcon className="w-6 h-6" />
+              {musicBoxState !== 'closed' && currentSong?.avatar_drive_id ? (
+                <img 
+                  src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} 
+                  alt="Now Playing" 
+                  className={`w-6 h-6 rounded-full object-cover ${isPlaying ? 'animate-spin-slow' : ''}`}
+                />
+              ) : (
+                <MusicalNoteIcon className="w-6 h-6" />
+              )}
             </button>
             <button
               onClick={scrollToBottom}
@@ -659,7 +673,15 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             Moe Chat may produce inaccurate information about people, places, or facts.
          </p>
       </footer>
-
+      <style>{`
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin-slow 10s linear infinite;
+        }
+      `}</style>
     </div>
   );
 };
