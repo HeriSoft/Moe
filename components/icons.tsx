@@ -378,7 +378,7 @@ export const TicketIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 // --- NEW ICONS for Music Player ---
 export const MusicalNoteIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-2.25 2.25h-1.5a2.25 2.25 0 01-2.25-2.25v-3.75m0-6.553L9 9m7.5 0v3.75m-3.75 0V9" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9c0 .593 0 1.178 0 1.75m0 0c0 .573 0 1.147 0 1.72M9 14.25c-1.12 0-2.193.103-3.25.3-1.8.32-3.25 1.8-3.25 3.45 0 1.65 1.45 3.15 3.25 3.45 1.057.2 2.13.3 3.25.3s2.193-.1 3.25-.3c1.8-.3 3.25-1.8 3.25-3.45 0-1.65-1.45-3.15-3.25-3.45A49.13 49.13 0 0 0 9 14.25Z" />
     </svg>
 );
 
