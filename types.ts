@@ -107,4 +107,5 @@ export interface Song {
   created_at?: string;
   avatar_drive_id?: string; // Drive ID for the spinning disc avatar
   background_drive_id?: string; // Drive ID for the player background
+  is_favorite?: boolean; // True if the current user has favorited this song
 }
