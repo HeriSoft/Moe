@@ -739,6 +739,47 @@ const App: React.FC = () => {
     }
   }, [userProfile, setNotifications]);
 
+  const handleToggleSongFavorite = async (songId: string) => {
+    if (!userProfile) {
+        setIsLoginModalOpen(true);
+        setNotifications(prev => ["Please sign in to favorite songs.", ...prev.slice(0, 19)]);
+        return;
+    }
+
+    // Optimistic UI update
+    const originalSongs = songs;
+    setSongs(prevSongs =>
+        prevSongs.map(song =>
+            song.id === songId
+                ? { ...song, is_favorite: !song.is_favorite }
+                : song
+        )
+    );
+
+    try {
+        const response = await fetch('/api/music', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-Email': userProfile.email,
+            },
+            body: JSON.stringify({
+                action: 'toggle_favorite',
+                songId: songId,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update favorite status.');
+        }
+    } catch (error) {
+        console.error("Error toggling favorite:", error);
+        // Revert on error
+        setSongs(originalSongs);
+        setNotifications(prev => ["Could not update favorite status. Please try again.", ...prev.slice(0, 19)]);
+    }
+  };
+
   const handleOpenMusicBox = () => {
     if (musicBoxState === 'minimized') {
         setMusicBoxState('open');
@@ -1058,6 +1099,7 @@ const App: React.FC = () => {
         onTogglePlay={handleTogglePlay}
         onNext={handleNextSong}
         onPrev={handlePrevSong}
+        onToggleFavorite={handleToggleSongFavorite}
       />
       <AdminMusicModal
         isOpen={isAdminMusicOpen}
