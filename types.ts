@@ -42,6 +42,8 @@ export interface UserProfile {
     email: string;
     imageUrl: string;
     isPro?: boolean; // To track membership status
+    subscriptionExpiresAt?: string | null; // NEW: For membership duration
+    isModerator?: boolean; // NEW: For moderator status
 }
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
