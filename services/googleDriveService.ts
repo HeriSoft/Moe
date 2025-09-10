@@ -11,6 +11,7 @@ declare global {
 }
 
 import type { ChatSession, UserProfile } from '../types';
+import { fetchUserProfileAndLogLogin } from './geminiService';
 
 // Use Vite's import.meta.env to access environment variables on the client-side
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -131,22 +132,26 @@ export async function initClient(
                                 throw new Error(`User info fetch failed with status: ${profileResponse.status}`);
                             }
 
-                            const profile = await profileResponse.json();
+                            const googleProfile = await profileResponse.json();
 
-                            if (!profile || !profile.sub) {
+                            if (!googleProfile || !googleProfile.sub) {
                                 console.warn("Token exists but userinfo is empty. Signing out.");
                                 signOut(() => onAuthChange(false));
                                 return;
                             }
                             
-                            const userProfile: UserProfile = {
-                                id: profile.sub,
-                                name: profile.name,
-                                email: profile.email,
-                                imageUrl: profile.picture,
+                            const basicUserProfile: UserProfile = {
+                                id: googleProfile.sub,
+                                name: googleProfile.name,
+                                email: googleProfile.email,
+                                imageUrl: googleProfile.picture,
                             };
-                            console.log("Profile fetched successfully:", userProfile.name);
-                            onAuthChange(true, userProfile);
+                            
+                            // Fetch full profile from our DB to get membership status etc.
+                            const fullProfile = await fetchUserProfileAndLogLogin(basicUserProfile);
+
+                            console.log("Full profile fetched successfully:", fullProfile.name);
+                            onAuthChange(true, fullProfile);
                         } catch (error) {
                             console.error("Error fetching user info for existing session, signing out:", error);
                             signOut(() => onAuthChange(false));
