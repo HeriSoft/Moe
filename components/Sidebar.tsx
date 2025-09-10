@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
 import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, MusicalNoteIcon } from './icons';
+import * as googleDriveService from '../services/googleDriveService';
 
 // VIP Tag component
 const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
@@ -24,6 +25,7 @@ interface SidebarProps {
   isOpen: boolean;
   isLoggedIn: boolean;
   userProfile?: UserProfile;
+  siteSettings: { logoDriveId?: string | null };
 }
 
 const UserProfileSection: React.FC<{ 
@@ -117,7 +119,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onAdminMusicClick, onMembershipClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onAdminMusicClick, onMembershipClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile, siteSettings }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -138,8 +140,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
   return (
     <>
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#171725] text-white flex flex-col p-4 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Moe Chat</h1>
+        <div className="mb-6 h-10 flex items-center">
+            {siteSettings?.logoDriveId ? (
+                <img 
+                    src={googleDriveService.getDriveFilePublicUrl(siteSettings.logoDriveId)}
+                    alt="Moe Chat Logo"
+                    className="max-h-full w-auto"
+                />
+            ) : (
+                <h1 className="text-2xl font-bold">Moe Chat</h1>
+            )}
         </div>
         
         <button 
