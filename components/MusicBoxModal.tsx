@@ -223,42 +223,50 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                                 );
                             })}
                          </div>
-                         {renderPagination()}
+                         {activeGenre === 'all' && renderPagination()}
                     </div>
                     {/* Right: Player */}
                     <div 
-                        className="w-full md:w-1/2 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-6 flex flex-col justify-between items-center text-center relative overflow-hidden bg-cover bg-center"
+                        className="w-full md:w-1/2 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-4 flex flex-col justify-center items-center text-center relative overflow-hidden bg-cover bg-center"
                         style={{ backgroundImage: `url(${backgroundImageUrl})` }}
                     >
                         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
-                        <div className="z-10 w-40 h-40 sm:w-48 sm:h-48 my-2 sm:my-0 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
-                            <div className={`relative w-full h-full p-2 ${isPlaying ? 'animate-spin-slow' : ''}`}>
-                                {currentSong?.avatar_drive_id ? (
-                                    <img src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} alt="avatar" className="w-full h-full object-cover rounded-full" />
-                                ) : (
-                                    <MusicalNoteIcon className="w-20 h-20 text-slate-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"/>
-                                )}
-                            </div>
-                        </div>
-                        <div className="z-10 w-full mt-2 sm:mt-4">
-                            <div className="relative w-full overflow-hidden h-8 flex justify-center items-center">
-                                <div className={`whitespace-nowrap ${isPlaying ? 'marquee' : ''}`}>
-                                    <h3 className="text-2xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title || 'Select a song'}</h3>
-                                    {isPlaying && <h3 className="text-2xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title}</h3>}
+
+                        <div className="z-10 flex flex-row items-center gap-4 w-full">
+                            {/* Avatar (Left) */}
+                            <div className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
+                                <div className={`relative w-full h-full p-2 ${isPlaying ? 'animate-spin-slow' : ''}`}>
+                                    {currentSong?.avatar_drive_id ? (
+                                        <img src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} alt="avatar" className="w-full h-full object-cover rounded-full" />
+                                    ) : (
+                                        <MusicalNoteIcon className="w-12 h-12 text-slate-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"/>
+                                    )}
                                 </div>
                             </div>
-                            <p className="text-slate-300 mt-1" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.5)'}}>{currentSong?.artist || '...'}</p>
+
+                            {/* Info & Controls (Right) */}
+                            <div className="flex flex-col items-start justify-center flex-grow min-w-0">
+                                {/* Info */}
+                                <div className="w-full text-left">
+                                    <div className="relative w-full overflow-hidden h-8 flex justify-start items-center">
+                                        <div className={`whitespace-nowrap ${isPlaying ? 'marquee' : ''}`}>
+                                            <h3 className="text-xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title || 'Select a song'}</h3>
+                                            {isPlaying && <h3 className="text-xl font-bold text-white inline-block pr-12" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>{currentSong?.title}</h3>}
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-slate-300" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.5)'}}>{currentSong?.artist || '...'}</p>
+                                </div>
+                                {/* Controls */}
+                                <div className="mt-2 flex items-center justify-start gap-2">
+                                    <button onClick={onPrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-6 h-6"/></button>
+                                    <button onClick={() => handlePlayPause()} className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
+                                        {isPlaying ? <PauseIcon className="w-6 h-6"/> : <PlayIcon className="w-6 h-6 ml-1"/>}
+                                    </button>
+                                    <button onClick={onNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-6 h-6"/></button>
+                                    <button onClick={handleStop} className="p-2 text-slate-400 hover:text-red-400"><StopIcon className="w-5 h-5"/></button>
+                                </div>
+                            </div>
                         </div>
-                        <div className="z-10 mt-4 sm:mt-6 flex items-center justify-center gap-6">
-                            <button onClick={onPrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-7 h-7"/></button>
-                            <button onClick={() => handlePlayPause()} className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
-                                {isPlaying ? <PauseIcon className="w-8 h-8 ml-0.5"/> : <PlayIcon className="w-8 h-8 ml-1"/>}
-                            </button>
-                            <button onClick={onNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-7 h-7"/></button>
-                        </div>
-                        <button onClick={handleStop} className="z-10 mt-2 sm:mt-4 flex items-center gap-2 text-sm text-slate-400 hover:text-red-400">
-                            <StopIcon className="w-4 h-4"/> Stop
-                        </button>
                     </div>
                 </div>
             </div>
