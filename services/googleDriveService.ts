@@ -408,10 +408,11 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export function getDriveFilePublicUrl(fileId: string): string {
-    // FIX: Use the /uc endpoint for more reliable public image embedding.
-    // NOTE: The underlying file in Google Drive MUST be shared publicly
-    // ("Anyone with the link can view") for this URL to work for all users.
-    return `https://drive.google.com/uc?id=${fileId}`;
+    // FIX: Revert to using the /thumbnail endpoint but now append the API key.
+    // This provides the necessary authentication for Google to serve the thumbnail
+    // to any user, resolving the issue of broken images for non-admin users.
+    // This still requires the underlying file to be publicly shared.
+    return `https://drive.google.com/thumbnail?id=${fileId}&key=${GOOGLE_API_KEY}`;
 }
 
 export async function downloadDriveFile(fileId: string): Promise<string> {
