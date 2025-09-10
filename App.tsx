@@ -56,11 +56,11 @@ const PERSONAS: { [key: string]: { name: string; icon: React.FC<any>; prompt: st
   }
 };
 
-const getYouTubeEmbedUrl = (url: string | undefined): string => {
-    if (!url) return '';
-    let videoId = '';
+const getYouTubeVideoId = (url: string | undefined): string | null => {
+    if (!url) return null;
+    let videoId: string | null = null;
     const patterns = [
-        /(?:https?:\/\/(?:www\.)?)?youtube\.com\/(?:watch\?v=|embed\/|v\/)([\w-]{11})/,
+        /(?:https?:\/\/(?:www\.)?)?youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)([\w-]{11})/,
         /(?:https?:\/\/)?youtu\.be\/([\w-]{11})/
     ];
     for (const pattern of patterns) {
@@ -70,10 +70,7 @@ const getYouTubeEmbedUrl = (url: string | undefined): string => {
             break;
         }
     }
-    if (videoId) {
-        return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}&enablejsapi=1`;
-    }
-    return url;
+    return videoId;
 };
 
 
@@ -116,6 +113,8 @@ const App: React.FC = () => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMusicLoading, setIsMusicLoading] = useState(false);
+  const playerRef = useRef<any>(null); // For YouTube Player instance
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -771,13 +770,63 @@ const App: React.FC = () => {
     handleSetCurrentSong(songs[prevIndex], true);
   }, [songs, currentSong, handleSetCurrentSong]);
 
+  // --- YouTube Player API Integration ---
+  useEffect(() => {
+    const onPlayerStateChange = (event: any) => {
+      const YT = (window as any).YT;
+      if (!YT) return;
+      
+      if (event.data === YT.PlayerState.PLAYING) {
+        setIsPlaying(true);
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        setIsPlaying(false);
+      } else if (event.data === YT.PlayerState.ENDED) {
+        handleNextSong();
+      }
+    };
 
-  const videoSrc = useMemo(() => {
-    if (isPlaying && currentSong) {
-      return getYouTubeEmbedUrl(currentSong.url);
+    const initializePlayer = () => {
+      if (!playerRef.current) {
+        playerRef.current = new (window as any).YT.Player('youtube-player-container', {
+          height: '0',
+          width: '0',
+          playerVars: { 'controls': 0, 'rel': 0, 'showinfo': 0, 'modestbranding': 1, 'playsinline': 1 },
+          events: {
+            'onReady': () => setIsPlayerReady(true),
+            'onStateChange': onPlayerStateChange,
+          }
+        });
+      }
+    };
+    
+    if (!(window as any).YT || !(window as any).YT.Player) {
+      (window as any).onYouTubeIframeAPIReady = initializePlayer;
+    } else {
+      initializePlayer();
     }
-    return '';
-  }, [isPlaying, currentSong]);
+  }, [handleNextSong]);
+
+  useEffect(() => {
+    if (!isPlayerReady || !playerRef.current) return;
+    const videoId = getYouTubeVideoId(currentSong?.url);
+    if (videoId) {
+      const currentVideoUrl = playerRef.current.getVideoUrl();
+      if (!currentVideoUrl || !currentVideoUrl.includes(videoId)) {
+        playerRef.current.loadVideoById(videoId);
+      }
+    } else {
+      playerRef.current.stopVideo();
+    }
+  }, [currentSong, isPlayerReady]);
+
+  useEffect(() => {
+    if (!isPlayerReady || !playerRef.current || !currentSong) return;
+    if (isPlaying) {
+      playerRef.current.playVideo();
+    } else {
+      playerRef.current.pauseVideo();
+    }
+  }, [isPlaying, isPlayerReady, currentSong]);
   
   // --- Media Session API for Background Playback ---
   useEffect(() => {
@@ -991,15 +1040,7 @@ const App: React.FC = () => {
         setNotifications={setNotifications}
         onDataChange={fetchSongs}
       />
-      {videoSrc && (
-        <iframe 
-            src={videoSrc}
-            title="Music Player Backend"
-            style={{ display: 'none' }}
-            allow="autoplay; encrypted-media"
-            sandbox="allow-scripts allow-same-origin"
-        ></iframe>
-      )}
+      <div id="youtube-player-container" style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}></div>
     </div>
   );
 };
