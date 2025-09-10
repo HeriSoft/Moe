@@ -4,6 +4,7 @@ import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { CCTalkModal } from './components/CCTalkModal'; // New
+import { WelcomeModal } from './components/WelcomeModal'; // New
 import { GenerationModal } from './components/GenerationModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
@@ -87,6 +88,10 @@ const App: React.FC = () => {
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
 
+  // --- New Welcome Modal State ---
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(() => {
+    return !localStorage.getItem('hasVisitedMoeChat');
+  });
 
   useEffect(() => {
     sessionsRef.current = chatSessions;
@@ -743,6 +748,18 @@ const App: React.FC = () => {
             setIsLoginModalOpen(false);
         }}
       />
+      <WelcomeModal
+        isOpen={isWelcomeModalOpen && !isLoggedIn && isAuthReady}
+        onClose={() => {
+          setIsWelcomeModalOpen(false);
+          localStorage.setItem('hasVisitedMoeChat', 'true');
+        }}
+        onSignIn={() => {
+          setIsWelcomeModalOpen(false);
+          localStorage.setItem('hasVisitedMoeChat', 'true');
+          googleDriveService.signIn();
+        }}
+       />
       <CCTalkModal
         isOpen={isCCTalkModalOpen}
         onClose={() => setIsCCTalkModalOpen(false)}
