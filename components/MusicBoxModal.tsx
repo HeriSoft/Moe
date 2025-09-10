@@ -14,7 +14,7 @@ interface MusicBoxModalProps {
 const getYouTubeEmbedUrl = (url: string | undefined): string => {
     if (!url) return '';
     let videoId = '';
-    // Regex để tìm video ID từ các định dạng URL YouTube khác nhau
+    // Regex to find video ID from various YouTube URL formats
     const patterns = [
         /(?:https?:\/\/(?:www\.)?)?youtube\.com\/(?:watch\?v=|embed\/|v\/)([\w-]{11})/,
         /(?:https?:\/\/)?youtu\.be\/([\w-]{11})/
@@ -29,10 +29,10 @@ const getYouTubeEmbedUrl = (url: string | undefined): string => {
     }
 
     if (videoId) {
-        // loop=1 yêu cầu tham số playlist phải được đặt thành cùng một video ID để lặp lại một video
-        return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}`;
+        // loop=1 requires playlist param to be set to the same video ID to loop a single video
+        return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}&enablejsapi=1`;
     }
-    // Fallback cho các URL stream audio/video trực tiếp khác có thể hoạt động trong iframe
+    // Fallback for other direct audio/video stream URLs that might work in an iframe
     return url;
 };
 
@@ -70,6 +70,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
         if (isOpen) {
             fetchSongs();
         } else {
+            // Stop music when closing modal
             setIsPlaying(false);
             setVideoSrc('');
         }
@@ -87,26 +88,30 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
     
     useEffect(() => {
         if (isPlaying && currentSong) {
-            setVideoSrc(getYouTubeEmbedUrl(currentSong.url));
+            const embedUrl = getYouTubeEmbedUrl(currentSong.url);
+            // Only update src if it's different to avoid reloading
+            if (embedUrl !== videoSrc) {
+               setVideoSrc(embedUrl);
+            }
         } else {
-            setVideoSrc(''); // Điều này sẽ dừng video một cách hiệu quả
+            setVideoSrc(''); // This will effectively stop the video
         }
-    }, [isPlaying, currentSong]);
+    }, [isPlaying, currentSong, videoSrc]);
 
 
     const handlePlayPause = (index?: number) => {
-        // Nếu một bài hát mới được nhấp vào
+        // If a new song is clicked
         if (index !== undefined && index !== currentSongIndex) {
             setCurrentSongIndex(index);
             if (!isPlaying) {
                 setIsPlaying(true);
             }
         } 
-        // Nếu bật/tắt bài hát hiện tại hoặc bắt đầu bài hát đầu tiên
+        // If toggling the current song or starting the first song
         else if (currentSongIndex !== null) {
             setIsPlaying(!isPlaying);
         } 
-        // Nếu không có bài hát nào được chọn và nút play được nhấn
+        // If no song is selected and play button is pressed
         else if (filteredSongs.length > 0) {
             setCurrentSongIndex(0);
             setIsPlaying(true);
@@ -202,7 +207,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, u
                         <div className="mt-8 flex items-center justify-center gap-6">
                             <button onClick={handlePrev} className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white"><BackwardIcon className="w-7 h-7"/></button>
                             <button onClick={() => handlePlayPause()} className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
-                                {isPlaying ? <PauseIcon className="w-8 h-8"/> : <PlayIcon className="w-8 h-8 pl-1"/>}
+                                {isPlaying ? <PauseIcon className="w-8 h-8"/> : <PlayIcon className="w-8 h-8"/>}
                             </button>
                             <button onClick={handleNext} className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white"><ForwardIcon className="w-7 h-7"/></button>
                         </div>
