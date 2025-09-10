@@ -13,6 +13,7 @@ interface SidebarProps {
   onAdminPanelClick: () => void;
   onAdminMovieModalClick: () => void;
   onAdminFilesLibraryClick: () => void; // New prop for files library admin
+  onMembershipClick: () => void; // New prop for membership modal
   isAdmin: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
@@ -30,8 +31,9 @@ const UserProfileSection: React.FC<{
   onAdminPanelClick: () => void;
   onAdminMovieModalClick: () => void;
   onAdminFilesLibraryClick: () => void; // New prop for files library admin
+  onMembershipClick: () => void; // New prop for membership modal
   isAdmin: boolean;
-}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, isAdmin }) => {
+}> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onMembershipClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
     return (
         <div className="flex flex-col items-center w-full">
@@ -42,6 +44,15 @@ const UserProfileSection: React.FC<{
                     <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
                 </div>
             </button>
+            <div className="w-full mt-2 space-y-2">
+              <button
+                onClick={onMembershipClick}
+                className="w-full px-3 py-1.5 text-sm font-semibold bg-amber-600 hover:bg-amber-700 rounded-md transition-colors flex items-center justify-center gap-2"
+              >
+                <TicketIcon className="w-5 h-5" />
+                {userProfile.isPro ? 'Membership Management' : 'Upgrade to Pro'}
+              </button>
+            </div>
             {isAdmin && (
               <div className="w-full mt-2 space-y-2">
                 <button
@@ -91,7 +102,7 @@ const UserProfileSection: React.FC<{
 };
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, startNewChat, setActiveChat, deleteChat, toggleFavorite, onSettingsClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onMembershipClick, isAdmin, onSignIn, onSignOut, isOpen, isLoggedIn, userProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
 
   const sortedSessions = React.useMemo(() => {
@@ -194,6 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
               onAdminPanelClick={onAdminPanelClick}
               onAdminMovieModalClick={onAdminMovieModalClick}
               onAdminFilesLibraryClick={onAdminFilesLibraryClick}
+              onMembershipClick={onMembershipClick}
               isAdmin={isAdmin}
           />
       </div>
