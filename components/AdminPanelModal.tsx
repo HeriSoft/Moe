@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserGroupIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -278,7 +278,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
             response = await fetch(`${ADMIN_API_ENDPOINT}?action=get_all_users`, { headers });
             if (!response.ok) throw new Error(`Failed to fetch users: ${response.statusText}`);
             const data = await response.json();
-            setAllUsers(data.users || []);
+            // Map API response (snake_case) to frontend component props (camelCase)
+            const mappedUsers = (data.users || []).map((user: any) => ({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                imageUrl: user.image_url, // Fix: map image_url to imageUrl
+                isPro: user.isPro,
+                subscriptionExpiresAt: user.subscriptionExpiresAt,
+                isModerator: user.isModerator,
+            }));
+            setAllUsers(mappedUsers);
         }
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
@@ -355,7 +365,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
         {error && <div className="p-3 mb-4 bg-red-500/10 text-red-500 rounded-lg text-sm">{error}</div>}
 
         <div className="border-b border-slate-200 dark:border-slate-700 flex flex-shrink-0 flex-wrap">
-          <TabButton tabId="users" title="Users" icon={UserGroupIcon} />
+          <TabButton tabId="users" title="Users" icon={UserCircleIcon} />
           <TabButton tabId="memberships" title="Memberships" icon={SparklesIcon} />
           <TabButton tabId="ips" title="IP Management" icon={ShieldCheckIcon} />
           <TabButton tabId="payments" title="Payments" icon={CurrencyDollarIcon} />
