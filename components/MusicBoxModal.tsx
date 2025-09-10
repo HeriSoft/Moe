@@ -16,9 +16,11 @@ interface MusicBoxModalProps {
   isLoading: boolean;
   onSetCurrentSong: (song: Song | null, shouldPlay: boolean) => void;
   onTogglePlay: () => void;
+  onNext: () => void;
+  onPrev: () => void;
 }
 
-export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay }) => {
+export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeGenre, setActiveGenre] = useState('all');
     const [error, setError] = useState<string | null>(null); // Kept for local errors if any
@@ -30,11 +32,6 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
             return matchesSearch && matchesGenre;
         });
     }, [songs, searchTerm, activeGenre]);
-    
-    const currentSongInFilteredListIndex = useMemo(() => {
-        if (!currentSong) return -1;
-        return filteredSongs.findIndex(s => s.id === currentSong.id);
-    }, [currentSong, filteredSongs]);
 
     const handlePlayPause = (index?: number) => {
         // If a specific (and different) song is clicked
@@ -45,27 +42,6 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
         } else if (filteredSongs.length > 0) { // If no song is selected, play the first one
             onSetCurrentSong(filteredSongs[0], true);
         }
-    };
-
-    const handleNext = useCallback(() => {
-        if (filteredSongs.length === 0) return;
-        // If not playing, or current song isn't in the filter, start with the first song
-        if (currentSongInFilteredListIndex === -1) {
-            onSetCurrentSong(filteredSongs[0], true);
-            return;
-        }
-        const nextIndex = (currentSongInFilteredListIndex + 1) % filteredSongs.length;
-        onSetCurrentSong(filteredSongs[nextIndex], true);
-    }, [currentSongInFilteredListIndex, filteredSongs, onSetCurrentSong]);
-
-    const handlePrev = () => {
-        if (filteredSongs.length === 0) return;
-        if (currentSongInFilteredListIndex === -1) {
-            onSetCurrentSong(filteredSongs[filteredSongs.length - 1], true);
-            return;
-        }
-        const prevIndex = (currentSongInFilteredListIndex - 1 + filteredSongs.length) % filteredSongs.length;
-        onSetCurrentSong(filteredSongs[prevIndex], true);
     };
     
     const handleStop = () => {
@@ -144,11 +120,11 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             <p className="text-slate-300 mt-1" style={{textShadow: '1px 1px 2px rgba(0,0,0,0.5)'}}>{currentSong?.artist || '...'}</p>
                         </div>
                         <div className="z-10 mt-8 flex items-center justify-center gap-6">
-                            <button onClick={handlePrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-7 h-7"/></button>
+                            <button onClick={onPrev} className="p-2 text-slate-300 hover:text-white"><BackwardIcon className="w-7 h-7"/></button>
                             <button onClick={() => handlePlayPause()} className="w-16 h-16 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-700">
                                 {isPlaying ? <PauseIcon className="w-8 h-8 ml-0.5"/> : <PlayIcon className="w-8 h-8 ml-1"/>}
                             </button>
-                            <button onClick={handleNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-7 h-7"/></button>
+                            <button onClick={onNext} className="p-2 text-slate-300 hover:text-white"><ForwardIcon className="w-7 h-7"/></button>
                         </div>
                         <button onClick={handleStop} className="z-10 mt-6 flex items-center gap-2 text-sm text-slate-400 hover:text-red-400">
                             <StopIcon className="w-4 h-4"/> Stop
