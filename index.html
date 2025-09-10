@@ -44,6 +44,8 @@
 </head>
   <body class="bg-white dark:bg-[#212133] transition-colors duration-300">
     <div id="root"></div>
+    <!-- YouTube Player will be mounted here, outside of React's control -->
+    <div id="youtube-player-container" style="position: fixed; top: -9999px; left: -9999px;"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
