@@ -34,17 +34,29 @@ async function createTables() {
                 artist VARCHAR(255),
                 genre VARCHAR(100),
                 url TEXT NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                avatar_drive_id VARCHAR(255),
-                background_drive_id VARCHAR(255)
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // Add new columns if they do not exist to support existing installations
+        try {
+            await pool.query('ALTER TABLE songs ADD COLUMN avatar_drive_id VARCHAR(255);');
+        } catch (e) {
+            // Ignore "duplicate column" error (42701 for pg, 42P07 for others)
+            if (e.code !== '42701' && e.code !== '42P07') throw e;
+        }
+        try {
+            await pool.query('ALTER TABLE songs ADD COLUMN background_drive_id VARCHAR(255);');
+        } catch (e) {
+            // Ignore "duplicate column" error
+            if (e.code !== '42701' && e.code !== '42P07') throw e;
+        }
         console.log("Table 'songs' is ready.");
     } catch (error) {
-        console.error("Error creating songs table:", error);
+        console.error("Error creating/altering songs table:", error);
         throw new Error("Failed to initialize database tables for music.");
     }
 }
+
 
 let isDbInitialized = false;
 
