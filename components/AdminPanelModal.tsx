@@ -7,6 +7,7 @@ import * as googleDriveService from '../services/googleDriveService';
 type AdminUser = UserProfile & {
     subscriptionExpiresAt?: string | null;
     isModerator?: boolean;
+    isPro?: boolean;
 };
 
 
@@ -29,7 +30,8 @@ type AdminTab = 'logs' | 'ips' | 'users' | 'memberships' | 'payments';
 // --- STYLING CONSTANTS for MODERATORS ---
 const MOD_ICON = (props: any) => <StarIcon {...props} solid={true} />;
 const MOD_TEXT_COLOR = "text-purple-400"; // e.g., "text-purple-400"
-const VIP_ICON = (props: any) => <SparklesIcon {...props} className="text-cyan-400" />;
+const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
+
 
 const LoadingSpinner: React.FC = () => (
     <div className="flex justify-center items-center h-full">
@@ -228,7 +230,7 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
                             <p className={`font-semibold flex items-center gap-1.5 ${user.isModerator ? MOD_TEXT_COLOR : ''}`}>
                                 {user.isModerator && <MOD_ICON className="w-4 h-4" />}
                                 {user.name}
-                                {user.isPro && <VIP_ICON className="w-4 h-4" />}
+                                {user.isPro && <VipTag />}
                             </p>
                             <p className="text-sm text-slate-500">{user.email}</p>
                         </div>
@@ -420,6 +422,36 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           )}
         </div>
       </div>
+       <style>{`
+        @keyframes shine-vip {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .vip-tag-shine {
+            position: relative;
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 0.75rem; /* 12px */
+            font-weight: 700;
+            line-height: 1.2;
+            color: #1e293b; /* slate-800 */
+            background: linear-gradient(110deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
+            border-radius: 0.375rem; /* rounded-md */
+            overflow: hidden;
+            -webkit-mask-image: -webkit-radial-gradient(white, black);
+        }
+        .vip-tag-shine::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
+            animation: shine-vip 3s ease-in-out infinite;
+            animation-delay: 1s;
+        }
+      `}</style>
     </div>
   );
 };
