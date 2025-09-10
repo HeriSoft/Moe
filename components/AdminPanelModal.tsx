@@ -44,6 +44,9 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
     const [bankQrId, setBankQrId] = useState<string | null>(null);
     const [momoQrId, setMomoQrId] = useState<string | null>(null);
     const [memoFormat, setMemoFormat] = useState('moechat {userName}');
+    const [price30, setPrice30] = useState(250000);
+    const [price90, setPrice90] = useState(700000);
+    const [price360, setPrice360] = useState(2500000);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
@@ -58,6 +61,9 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
                 if (data.bankQrId) setBankQrId(data.bankQrId);
                 if (data.momoQrId) setMomoQrId(data.momoQrId);
                 if (data.memoFormat) setMemoFormat(data.memoFormat);
+                if (data.price30) setPrice30(data.price30);
+                if (data.price90) setPrice90(data.price90);
+                if (data.price360) setPrice360(data.price360);
             } catch (e) {
                 setError(e instanceof Error ? e.message : 'Unknown error');
             } finally {
@@ -84,7 +90,7 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
             const response = await fetch(ADMIN_API_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
-                body: JSON.stringify({ action: 'save_payment_settings', bankQrId, momoQrId, memoFormat }),
+                body: JSON.stringify({ action: 'save_payment_settings', bankQrId, momoQrId, memoFormat, price30, price90, price360 }),
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.details || 'Failed to save settings.');
@@ -119,17 +125,32 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
                     <button onClick={() => handleSelectImage(setMomoQrId)} className="w-full py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Image from Drive</button>
                 </div>
             </div>
-            <div>
-                <label htmlFor="memo-format" className="font-semibold block mb-2">Transfer Memo Format</label>
-                <input
-                    id="memo-format"
-                    type="text"
-                    value={memoFormat}
-                    onChange={e => setMemoFormat(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md p-2 font-mono"
-                />
-                <p className="text-xs text-slate-500 mt-1">Use <code className="bg-slate-200 dark:bg-slate-700 p-0.5 rounded">{`{userName}`}</code> as a placeholder for the user's first name.</p>
+
+            <div className="space-y-4">
+                <div>
+                    <label htmlFor="memo-format" className="font-semibold block mb-2">Transfer Memo Format</label>
+                    <input id="memo-format" type="text" value={memoFormat} onChange={e => setMemoFormat(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md p-2 font-mono" />
+                    <p className="text-xs text-slate-500 mt-1">Use <code className="bg-slate-200 dark:bg-slate-700 p-0.5 rounded">{`{userName}`}</code> as a placeholder for the user's first name.</p>
+                </div>
+                <div>
+                    <label className="font-semibold block mb-2">Renewal Prices (VNĐ)</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label htmlFor="price30" className="text-sm">30 Days</label>
+                            <input id="price30" type="number" value={price30} onChange={e => setPrice30(Number(e.target.value))} className="w-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md p-2" />
+                        </div>
+                        <div>
+                            <label htmlFor="price90" className="text-sm">90 Days</label>
+                            <input id="price90" type="number" value={price90} onChange={e => setPrice90(Number(e.target.value))} className="w-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md p-2" />
+                        </div>
+                        <div>
+                            <label htmlFor="price360" className="text-sm">360 Days</label>
+                            <input id="price360" type="number" value={price360} onChange={e => setPrice360(Number(e.target.value))} className="w-full mt-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md p-2" />
+                        </div>
+                    </div>
+                </div>
             </div>
+
             <div className="flex justify-end">
                 <button onClick={handleSave} disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
                     {isLoading ? 'Saving...' : 'Save Settings'}
