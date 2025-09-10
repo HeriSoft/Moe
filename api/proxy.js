@@ -271,31 +271,54 @@ export default async function handler(req, res) {
         switch (action) {
             case 'logLogin': {
                 const { user } = payload;
-                const userEmail = user?.email;
-                if (userEmail) {
-                    // Log to Redis
-                    if (isRedisConfigured) {
-                        await logAction(userEmail, 'logged in');
-                        const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress;
-                        await redis.hset('user_ips', userEmail, userIp);
+                if (!user || !user.email) {
+                    return res.status(400).json({ error: 'User profile is required.' });
+                }
+
+                // Log to Redis
+                if (isRedisConfigured) {
+                    await logAction(user.email, 'logged in');
+                    const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress;
+                    await redis.hset('user_ips', user.email, userIp);
+                }
+                
+                // Upsert user into PostgreSQL database
+                try {
+                    await pool.query(`
+                        INSERT INTO users (email, name, image_url)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (email) DO UPDATE SET
+                            name = EXCLUDED.name,
+                            image_url = EXCLUDED.image_url,
+                            updated_at = CURRENT_TIMESTAMP;
+                    `, [user.email, user.name, user.imageUrl]);
+
+                    // Fetch the complete, updated profile from the database
+                    const { rows } = await pool.query(
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator FROM users WHERE email = $1;`,
+                        [user.email]
+                    );
+                    
+                    if (rows.length > 0) {
+                        const dbUser = rows[0];
+                        const fullUserProfile = {
+                            id: dbUser.id,
+                            name: dbUser.name,
+                            email: dbUser.email,
+                            imageUrl: dbUser.image_url,
+                            subscriptionExpiresAt: dbUser.subscription_expires_at,
+                            isModerator: dbUser.is_moderator,
+                            isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date()
+                        };
+                        return res.status(200).json({ success: true, user: fullUserProfile });
                     }
                     
-                    // Upsert user into PostgreSQL database
-                    try {
-                        await pool.query(`
-                            INSERT INTO users (email, name, image_url)
-                            VALUES ($1, $2, $3)
-                            ON CONFLICT (email) DO UPDATE SET
-                                name = EXCLUDED.name,
-                                image_url = EXCLUDED.image_url,
-                                updated_at = CURRENT_TIMESTAMP;
-                        `, [user.email, user.name, user.imageUrl]);
-                    } catch (dbError) {
-                        console.error("Database error during user login upsert:", dbError);
-                        // Don't fail the whole login for this, just log it.
-                    }
+                    return res.status(404).json({ error: 'User not found after login.' });
+
+                } catch (dbError) {
+                    console.error("Database error during user login/profile fetch:", dbError);
+                    return res.status(500).json({ error: 'Database operation failed.' });
                 }
-                return res.status(200).json({ success: true });
             }
 
             case 'generateContentStream': {
