@@ -22,7 +22,7 @@ import {
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
-import type { ChatSession, Message, Attachment, UserProfile } from './types';
+import type { ChatSession, Message, Attachment, UserProfile, Song } from './types';
 
 const MAX_FILES = 4;
 const MAX_IMAGE_FILES = 1;
@@ -54,6 +54,26 @@ const PERSONAS: { [key: string]: { name: string; icon: React.FC<any>; prompt: st
     prompt: 'You are an experienced academic tutor. Your goal is to help users understand complex subjects by breaking them down into simple, easy-to-digest concepts. Use analogies, ask guiding questions, and be patient and encouraging.',
     description: 'Explains complex topics in a simple way.'
   }
+};
+
+const getYouTubeEmbedUrl = (url: string | undefined): string => {
+    if (!url) return '';
+    let videoId = '';
+    const patterns = [
+        /(?:https?:\/\/(?:www\.)?)?youtube\.com\/(?:watch\?v=|embed\/|v\/)([\w-]{11})/,
+        /(?:https?:\/\/)?youtu\.be\/([\w-]{11})/
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            videoId = match[1];
+            break;
+        }
+    }
+    if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}&enablejsapi=1`;
+    }
+    return url;
 };
 
 
@@ -88,8 +108,14 @@ const App: React.FC = () => {
   const [isMembershipManagementOpen, setIsMembershipManagementOpen] = useState(false); // New
   const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); // New
   const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); // New
-  const [isMusicBoxOpen, setIsMusicBoxOpen] = useState(false); // New
   const [isAdminMusicOpen, setIsAdminMusicOpen] = useState(false); // New
+
+  // --- New Music Box State ---
+  const [musicBoxState, setMusicBoxState] = useState<'closed' | 'open' | 'minimized'>('closed');
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMusicLoading, setIsMusicLoading] = useState(false);
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -680,6 +706,64 @@ const App: React.FC = () => {
     }
   };
 
+  // --- Music Box Handlers ---
+  const fetchSongs = useCallback(async () => {
+    if (!userProfile) return;
+    setIsMusicLoading(true);
+    try {
+        const params = new URLSearchParams({ action: 'get_public_songs' });
+        const response = await fetch(`/api/music?${params.toString()}`, {
+            headers: { 'X-User-Email': userProfile.email }
+        });
+        if (!response.ok) throw new Error('Failed to fetch songs');
+        const data = await response.json();
+        setSongs(data.songs || []);
+    } catch (e) {
+        setNotifications(prev => [e instanceof Error ? e.message : 'Failed to load music', ...prev.slice(0, 19)]);
+    } finally {
+        setIsMusicLoading(false);
+    }
+  }, [userProfile, setNotifications]);
+
+  const handleOpenMusicBox = () => {
+    if (musicBoxState === 'minimized') {
+        setMusicBoxState('open');
+        return;
+    }
+    if (songs.length === 0 && !isMusicLoading) {
+        fetchSongs();
+    }
+    setMusicBoxState('open');
+  };
+
+  const handleCloseMusicBox = () => {
+    setIsPlaying(false);
+    setCurrentSong(null);
+    setMusicBoxState('closed');
+  };
+
+  const handleMinimizeMusicBox = () => {
+    setMusicBoxState('minimized');
+  };
+  
+  const handleSetCurrentSong = useCallback((song: Song | null, shouldPlay: boolean) => {
+    setCurrentSong(song);
+    setIsPlaying(shouldPlay);
+  }, []);
+
+  const handleTogglePlay = useCallback(() => {
+    if (currentSong) {
+      setIsPlaying(prev => !prev);
+    }
+  }, [currentSong]);
+
+  const videoSrc = useMemo(() => {
+    if (isPlaying && currentSong) {
+      return getYouTubeEmbedUrl(currentSong.url);
+    }
+    return '';
+  }, [isPlaying, currentSong]);
+
 
   return (
     <div className="relative flex h-screen w-full font-sans overflow-hidden">
@@ -744,9 +828,12 @@ const App: React.FC = () => {
           onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
           onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)}
           onOpenCCTalk={() => setIsCCTalkModalOpen(true)}
-          onOpenMusicBox={() => setIsMusicBoxOpen(true)}
+          onOpenMusicBox={handleOpenMusicBox}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
+          musicBoxState={musicBoxState}
+          currentSong={currentSong}
+          isPlaying={isPlaying}
         />
       </main>
       <SettingsModal
@@ -839,9 +926,16 @@ const App: React.FC = () => {
         setNotifications={setNotifications}
       />
       <MusicBoxModal
-        isOpen={isMusicBoxOpen}
-        onClose={() => setIsMusicBoxOpen(false)}
+        isOpen={musicBoxState === 'open'}
+        onClose={handleCloseMusicBox}
+        onMinimize={handleMinimizeMusicBox}
         userProfile={userProfile}
+        songs={songs}
+        currentSong={currentSong}
+        isPlaying={isPlaying}
+        isLoading={isMusicLoading}
+        onSetCurrentSong={handleSetCurrentSong}
+        onTogglePlay={handleTogglePlay}
       />
       <AdminMusicModal
         isOpen={isAdminMusicOpen}
@@ -849,6 +943,15 @@ const App: React.FC = () => {
         userProfile={userProfile}
         setNotifications={setNotifications}
       />
+      {videoSrc && (
+        <iframe 
+            src={videoSrc}
+            title="Music Player Backend"
+            style={{ display: 'none' }}
+            allow="autoplay; encrypted-media"
+            sandbox="allow-scripts allow-same-origin"
+        ></iframe>
+      )}
     </div>
   );
 };
