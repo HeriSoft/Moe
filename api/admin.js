@@ -45,7 +45,48 @@ async function invalidateUserProCache(email) {
     }
 }
 
+async function createTables() {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                image_url TEXT,
+                subscription_status VARCHAR(50) DEFAULT 'inactive',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Safely add new columns
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_moderator BOOLEAN NOT NULL DEFAULT false;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
+
+        console.log("Table 'users' is ready.");
+    } catch (error) {
+        console.error("Error creating/altering users table:", error);
+        throw new Error("Failed to initialize database tables.");
+    } finally {
+        client.release();
+    }
+}
+
+let isDbInitialized = false;
+
 export default async function handler(req, res) {
+    if (!isDbInitialized) {
+        try {
+            await createTables();
+            isDbInitialized = true;
+        } catch (initError) {
+             return res.status(503).json({ error: 'Service Unavailable', details: 'The database could not be initialized. Please try again later.' });
+        }
+    }
+    
     try {
         if (!redis) {
             return res.status(503).json({
