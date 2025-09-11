@@ -25,6 +25,36 @@ async function handleProxyError(response: Response): Promise<never> {
 }
 
 
+export async function addExp(amount: number, user: UserProfile): Promise<{level: number, exp: number}> {
+    if (!user || !user.email) {
+        throw new Error("User must be logged in to gain EXP.");
+    }
+    try {
+        const response = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'add_exp',
+                payload: { amount, user }
+            })
+        });
+
+        if (!response.ok) {
+            await handleProxyError(response);
+        }
+        
+        const data = await response.json();
+        if (data.success && data.user) {
+            return data.user;
+        } else {
+            throw new Error("Failed to update EXP on the server.");
+        }
+    } catch (error) {
+        console.error("Failed to add EXP:", error);
+        throw error;
+    }
+}
+
 export async function fetchUserProfileAndLogLogin(user: UserProfile): Promise<UserProfile> {
     try {
         const response = await fetch('/api/proxy', {
