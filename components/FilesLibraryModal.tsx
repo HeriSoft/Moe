@@ -26,9 +26,10 @@ interface FilesLibraryModalProps {
   onClose: () => void;
   userProfile: UserProfile | undefined;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
+  handleExpGain: (amount: number) => void;
 }
 
-export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, onClose, userProfile, setNotifications }) => {
+export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, onClose, userProfile, setNotifications, handleExpGain }) => {
     const [files, setFiles] = useState<FileItem[]>([]);
     const [expandedFileId, setExpandedFileId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -114,7 +115,8 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
 
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.details || 'Could not get download links.');
-
+                    
+                    handleExpGain(20); // +20 EXP for VIP download
                     result.urls?.forEach((url: string) => window.open(url, '_blank'));
 
                 } catch (e) {
@@ -125,6 +127,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                 setShownVipInfoFileIds(prev => new Set(prev).add(file.id));
             }
         } else {
+            handleExpGain(5); // +5 EXP for standard download
             if (file.parts.length > 1) {
                 setExpandedFileId(expandedFileId === file.id ? null : file.id);
             } else if (file.parts.length === 1) {
