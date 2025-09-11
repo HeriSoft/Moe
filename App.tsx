@@ -18,7 +18,7 @@ import { MusicBoxModal } from './components/MusicBoxModal'; // New
 import { AdminMusicModal } from './components/AdminMusicModal'; // New
 import {
   streamModelResponse,
-  fetchUserProfileAndLogLogin,
+  addExp,
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
@@ -254,6 +254,18 @@ const App: React.FC = () => {
       });
     }
   }, [model, activeChatId, isLoggedIn]);
+  
+  const handleExpGain = useCallback(async (amount: number) => {
+    if (!isLoggedIn || !userProfile) return;
+
+    try {
+        const { level, exp } = await addExp(amount, userProfile);
+        setUserProfile(prev => prev ? { ...prev, level, exp } : undefined);
+    } catch (error) {
+        console.error("Failed to update EXP:", error);
+        // Do not notify the user, this is a background process.
+    }
+  }, [isLoggedIn, userProfile]);
 
   const startNewChat = useCallback(async (): Promise<string | null> => {
     if (!isLoggedIn) {
@@ -508,6 +520,7 @@ const App: React.FC = () => {
         messages: [...currentChat.messages, userMessage],
       };
       setChatSessions(prev => prev.map(s => s.id === activeChatId ? currentChat as ChatSession : s));
+      handleExpGain(5); // +5 EXP for sending a message
       await googleDriveService.saveSession(currentChat).catch(e => console.error("Save after user message failed:", e));
     }
     
@@ -846,11 +859,11 @@ const App: React.FC = () => {
     handleSetCurrentSong(filteredSongs[prevIndex], true);
   }, [filteredSongs, currentSong, handleSetCurrentSong]);
 
-  // --- Ref for YouTube player callback to prevent re-initialization ---
+  // --- Refs for YouTube player callbacks to prevent re-initialization ---
   const handleNextSongRef = useRef(handleNextSong);
-  useEffect(() => {
-    handleNextSongRef.current = handleNextSong;
-  }, [handleNextSong]);
+  useEffect(() => { handleNextSongRef.current = handleNextSong; }, [handleNextSong]);
+  const handleExpGainRef = useRef(handleExpGain);
+  useEffect(() => { handleExpGainRef.current = handleExpGain; }, [handleExpGain]);
 
   // --- YouTube Player API Integration ---
   useEffect(() => {
@@ -863,14 +876,12 @@ const App: React.FC = () => {
       } else if (event.data === YT.PlayerState.PAUSED) {
         setIsPlaying(false);
       } else if (event.data === YT.PlayerState.ENDED) {
+        handleExpGainRef.current(10); // +10 EXP per song listened
         handleNextSongRef.current(); // Use the ref to call the latest callback
       }
     };
 
     const initializePlayer = () => {
-      // Only initialize if the player ref is null.
-      // The empty dependency array on this useEffect ensures this only runs once,
-      // preventing re-initialization on state changes and fixing the crash.
       if (!playerRef.current) {
         playerRef.current = new (window as any).YT.Player('youtube-player-container', {
           height: '0',
@@ -889,7 +900,7 @@ const App: React.FC = () => {
     } else {
       initializePlayer();
     }
-  }, []); // <-- Empty dependency array is the crucial fix.
+  }, []); // <-- Empty dependency array is crucial.
 
   useEffect(() => {
     if (!isPlayerReady || !playerRef.current) return;
@@ -1014,6 +1025,7 @@ const App: React.FC = () => {
           musicBoxState={musicBoxState}
           currentSong={currentSong}
           isPlaying={isPlaying}
+          handleExpGain={handleExpGain}
         />
       </main>
       <SettingsModal
@@ -1059,6 +1071,7 @@ const App: React.FC = () => {
         userProfile={userProfile}
         setNotifications={setNotifications}
         onProFeatureBlock={handleProFeatureBlock}
+        handleExpGain={handleExpGain}
       />
       <MediaGalleryModal
           isOpen={isMediaGalleryOpen}
@@ -1082,12 +1095,14 @@ const App: React.FC = () => {
         isOpen={isVideoCinemaModalOpen}
         onClose={() => setIsVideoCinemaModalOpen(false)}
         userProfile={userProfile}
+        handleExpGain={handleExpGain}
       />
       <FilesLibraryModal
         isOpen={isFilesLibraryOpen}
         onClose={() => setIsFilesLibraryOpen(false)}
         userProfile={userProfile}
         setNotifications={setNotifications}
+        handleExpGain={handleExpGain}
       />
       <AdminFilesLibraryModal
         isOpen={isAdminFilesLibraryOpen}
