@@ -48,7 +48,12 @@ async function createTables() {
                 name VARCHAR(255),
                 image_url TEXT,
                 subscription_status VARCHAR(50) DEFAULT 'inactive',
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                subscription_expires_at TIMESTAMPTZ,
+                is_moderator BOOLEAN NOT NULL DEFAULT false,
+                updated_at TIMESTAMPTZ,
+                level INTEGER NOT NULL DEFAULT 0,
+                exp INTEGER NOT NULL DEFAULT 0
             );
         `);
         await pool.query(`
