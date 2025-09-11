@@ -52,9 +52,10 @@ interface GenerationModalProps {
   userProfile: UserProfile | undefined;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   onProFeatureBlock: () => void;
+  handleExpGain: (amount: number) => void;
 }
 
-export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock }) => {
+export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain }) => {
     const [activeMode, setActiveMode] = useState<CreativeMode>('image');
     const [prompt, setPrompt] = useState('');
     const [inputImage1, setInputImage1] = useState<Attachment | null>(null);
@@ -110,6 +111,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             if (activeMode === 'image') {
                 if (!prompt) throw new Error("A prompt is required for image generation.");
                 result = await generateImage(prompt, genSettings, userProfile);
+                handleExpGain(100);
             } else if (activeMode === 'edit') {
                 if (!prompt) throw new Error("A prompt is required for image editing.");
                 if (!inputImage1) throw new Error("At least one image is required for editing.");
@@ -117,10 +119,12 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                 const { attachments, text } = await editImage(prompt, imagesToEdit, editSettings, userProfile);
                 result = attachments;
                 resultText = text;
+                handleExpGain(100);
             } else if (activeMode === 'faceSwap') {
                 if (!inputImage1 || !inputImage2) throw new Error("A target image and a source face are required.");
                 const swappedImage = await swapFace(inputImage1, inputImage2, userProfile);
                 result = [swappedImage];
+                handleExpGain(100);
             } else if (activeMode === 'video') {
                 throw new Error("This feature is not yet available.");
             }
