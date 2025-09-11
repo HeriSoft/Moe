@@ -12,18 +12,22 @@ const getExpForLevel = (level: number): number => {
     return 100 + (level * 50) + (level * level * 5);
 };
 
-const getLevelInfo = (level: number): { name: string; className: string } => {
+const getLevelInfo = (level: number): { name: string; className: string; isMarquee?: boolean } => {
     if (level <= 5) return { name: 'Newbie', className: 'text-white' };
-    if (level <= 15) return { name: 'Member', className: 'text-cyan-400' };
-    if (level <= 20) return { name: 'Active Member', className: 'text-purple-400' };
-    if (level <= 25) return { name: 'Enthusiast', className: 'bg-gradient-to-r from-purple-400 to-white bg-clip-text text-transparent' };
-    if (level <= 30) return { name: 'Contributor', className: 'bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent' };
-    if (level <= 35) return { name: 'Pro', className: 'bg-gradient-to-r from-pink-400 to-red-400 bg-clip-text text-transparent' };
-    if (level <= 40) return { name: 'Veteran', className: 'text-lime-400' };
-    if (level <= 45) return { name: 'Expert', className: 'bg-gradient-to-r from-lime-400 to-yellow-400 bg-clip-text text-transparent' };
-    if (level <= 50) return { name: 'Master', className: 'bg-gradient-to-r from-purple-400 to-lime-400 bg-clip-text text-transparent' };
-    if (level <= 55) return { name: 'Grandmaster', className: 'bg-gradient-to-r from-teal-400 to-white bg-clip-text text-transparent' };
-    // Add more levels later as requested
+    if (level <= 10) return { name: 'Member', className: 'text-cyan-400' };
+    if (level <= 15) return { name: 'Active Member', className: 'text-purple-400' }; // Light Purple
+    if (level <= 20) return { name: 'Enthusiast', className: 'text-purple-500' };
+    if (level <= 25) return { name: 'Contributor', className: 'bg-gradient-to-r from-purple-400 to-white bg-clip-text text-transparent' };
+    if (level <= 30) return { name: 'Pro', className: 'bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent' };
+    if (level <= 35) return { name: 'Veteran', className: 'bg-gradient-to-r from-pink-400 to-red-400 bg-clip-text text-transparent' };
+    if (level <= 40) return { name: 'Expert', className: 'bg-gradient-to-r from-lime-400 to-white bg-clip-text text-transparent' }; // Green/White
+    if (level <= 45) return { name: 'Master', className: 'bg-gradient-to-r from-lime-400 to-yellow-400 bg-clip-text text-transparent' };
+    if (level <= 50) return { name: 'Grandmaster', className: 'bg-gradient-to-r from-purple-400 to-lime-400 bg-clip-text text-transparent' };
+    if (level <= 55) return { name: 'Guardian', className: 'bg-gradient-to-r from-teal-400 to-white bg-clip-text text-transparent' };
+    if (level <= 60) return { name: 'Titan', className: 'bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent' };
+    if (level <= 65) return { name: 'Immortal', className: 'bg-gradient-to-r from-red-500 to-yellow-400 bg-clip-text text-transparent animate-pulse' }; // Red/Yellow Pulse
+    if (level <= 70) return { name: 'Mythic', className: 'bg-gradient-to-r from-red-500 to-blue-500 bg-clip-text text-transparent animate-pulse' }; // Red/Blue Pulse
+    if (level <= 75) return { name: 'Ascendant', className: 'level-ascendant bg-gradient-to-r from-teal-400 to-yellow-400 bg-clip-text text-transparent animate-pulse', isMarquee: true }; // Teal/Yellow Pulse + Marquee
     return { name: 'Legend', className: 'bg-gradient-to-r from-amber-400 via-red-500 to-purple-500 animate-pulse bg-clip-text text-transparent' };
 };
 
@@ -72,16 +76,34 @@ const UserProfileSection: React.FC<{
     const expNeeded = getExpForLevel(level);
     const progress = level >= 100 ? 100 : Math.round((exp / expNeeded) * 100);
     const levelInfo = getLevelInfo(level);
+    
+    const UserNameContent = (
+      <>
+        <span>{userProfile.name}</span>
+        {userProfile.isPro && <VipTag />}
+      </>
+    );
+
+    const UserNameDisplay = (
+        <p className={`font-semibold flex items-center gap-2 ${levelInfo.className} ${!levelInfo.isMarquee && 'truncate'}`}>
+            {UserNameContent}
+        </p>
+    );
+
+    const MarqueeUserNameDisplay = (
+       <div className="w-full overflow-hidden whitespace-nowrap">
+            <p className={`font-semibold inline-flex items-center gap-2 ${levelInfo.className}`}>
+                {UserNameContent}
+            </p>
+       </div>
+    );
 
     return (
         <div className="flex flex-col items-center w-full">
             <button onClick={onProfileClick} className="flex items-center p-2 rounded-md hover:bg-[#2d2d40] transition-colors text-left w-full">
                 <img src={userProfile.imageUrl} alt={userProfile.name} className="w-8 h-8 rounded-full mr-3 flex-shrink-0" />
                 <div className="flex-grow min-w-0">
-                    <p className={`font-semibold truncate flex items-center gap-2 ${levelInfo.className}`}>
-                      <span>{userProfile.name}</span>
-                      {userProfile.isPro && <VipTag />}
-                    </p>
+                    {levelInfo.isMarquee ? MarqueeUserNameDisplay : UserNameDisplay}
                     <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
                 </div>
             </button>
@@ -312,6 +334,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
             background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
             animation: shine-vip 3s ease-in-out infinite;
             animation-delay: 1s;
+        }
+        @keyframes marquee-ascendant {
+            0% { transform: translateX(50%); }
+            100% { transform: translateX(-100%); }
+        }
+        .level-ascendant {
+            animation: marquee-ascendant 10s linear infinite;
         }
       `}</style>
     </>
