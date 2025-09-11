@@ -3,6 +3,31 @@ import type { ChatSession, UserProfile } from '../types';
 import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, MusicalNoteIcon } from './icons';
 import * as googleDriveService from '../services/googleDriveService';
 
+// --- NEW EXP SYSTEM HELPERS ---
+
+const getExpForLevel = (level: number): number => {
+    if (level >= 100) return Infinity;
+    // New scaling formula: starts at 100, gets progressively harder.
+    // e.g., L0->1: 100, L10->11: 1100, L50->51: 15100
+    return 100 + (level * 50) + (level * level * 5);
+};
+
+const getLevelInfo = (level: number): { name: string; className: string } => {
+    if (level <= 5) return { name: 'Newbie', className: 'text-white' };
+    if (level <= 15) return { name: 'Member', className: 'text-cyan-400' };
+    if (level <= 20) return { name: 'Active Member', className: 'text-purple-400' };
+    if (level <= 25) return { name: 'Enthusiast', className: 'bg-gradient-to-r from-purple-400 to-white bg-clip-text text-transparent' };
+    if (level <= 30) return { name: 'Contributor', className: 'bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent' };
+    if (level <= 35) return { name: 'Pro', className: 'bg-gradient-to-r from-pink-400 to-red-400 bg-clip-text text-transparent' };
+    if (level <= 40) return { name: 'Veteran', className: 'text-lime-400' };
+    if (level <= 45) return { name: 'Expert', className: 'bg-gradient-to-r from-lime-400 to-yellow-400 bg-clip-text text-transparent' };
+    if (level <= 50) return { name: 'Master', className: 'bg-gradient-to-r from-purple-400 to-lime-400 bg-clip-text text-transparent' };
+    if (level <= 55) return { name: 'Grandmaster', className: 'bg-gradient-to-r from-teal-400 to-white bg-clip-text text-transparent' };
+    // Add more levels later as requested
+    return { name: 'Legend', className: 'bg-gradient-to-r from-amber-400 via-red-500 to-purple-500 animate-pulse bg-clip-text text-transparent' };
+};
+
+
 // VIP Tag component
 const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
 
@@ -42,18 +67,40 @@ const UserProfileSection: React.FC<{
   isAdmin: boolean;
 }> = ({ isLoggedIn, userProfile, onSignIn, onSignOut, onProfileClick, onAdminPanelClick, onAdminMovieModalClick, onAdminFilesLibraryClick, onAdminMusicClick, onMembershipClick, isAdmin }) => {
   if (isLoggedIn && userProfile) {
+    const level = userProfile.level ?? 0;
+    const exp = userProfile.exp ?? 0;
+    const expNeeded = getExpForLevel(level);
+    const progress = level >= 100 ? 100 : Math.round((exp / expNeeded) * 100);
+    const levelInfo = getLevelInfo(level);
+
     return (
         <div className="flex flex-col items-center w-full">
             <button onClick={onProfileClick} className="flex items-center p-2 rounded-md hover:bg-[#2d2d40] transition-colors text-left w-full">
                 <img src={userProfile.imageUrl} alt={userProfile.name} className="w-8 h-8 rounded-full mr-3 flex-shrink-0" />
                 <div className="flex-grow min-w-0">
-                    <p className="font-semibold truncate flex items-center gap-2">
+                    <p className={`font-semibold truncate flex items-center gap-2 ${levelInfo.className}`}>
                       <span>{userProfile.name}</span>
                       {userProfile.isPro && <VipTag />}
                     </p>
                     <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
                 </div>
             </button>
+
+            {/* EXP BAR */}
+            <div className="w-full mt-2 px-2">
+                <div className="flex justify-between items-center text-xs mb-1">
+                    <span className="font-bold text-slate-300">Lv. {level}</span>
+                    <span className="text-slate-400">{exp} / {expNeeded === Infinity ? 'MAX' : expNeeded} EXP</span>
+                </div>
+                <div className="w-full bg-slate-700 rounded-full h-2.5">
+                    <div 
+                        className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-2.5 rounded-full" 
+                        style={{ width: `${progress}%` }}
+                    ></div>
+                </div>
+                 <div className="text-right text-xs mt-1 text-slate-400">{progress}%</div>
+            </div>
+
             <div className="w-full mt-2 space-y-2">
               <button
                 onClick={onMembershipClick}
