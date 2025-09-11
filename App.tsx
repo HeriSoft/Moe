@@ -117,6 +117,8 @@ const App: React.FC = () => {
   const [isMusicLoading, setIsMusicLoading] = useState(false);
   const playerRef = useRef<any>(null); // For YouTube Player instance
   const [isPlayerReady, setIsPlayerReady] = useState(false);
+  const [musicSearchTerm, setMusicSearchTerm] = useState('');
+  const [musicActiveGenre, setMusicActiveGenre] = useState('all');
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -739,6 +741,24 @@ const App: React.FC = () => {
     }
   }, [userProfile, setNotifications]);
 
+  const filteredSongs = useMemo(() => {
+    return songs.filter(song => {
+        const matchesSearch = song.title.toLowerCase().includes(musicSearchTerm.toLowerCase()) || 
+                              song.artist.toLowerCase().includes(musicSearchTerm.toLowerCase());
+        
+        let matchesFilter = false;
+        if (musicActiveGenre === 'all') {
+            matchesFilter = true;
+        } else if (musicActiveGenre === 'favorites') {
+            matchesFilter = song.is_favorite === true;
+        } else {
+            matchesFilter = song.genre === musicActiveGenre;
+        }
+
+        return matchesSearch && matchesFilter;
+    });
+  }, [songs, musicSearchTerm, musicActiveGenre]);
+
   const handleToggleSongFavorite = async (songId: string) => {
     if (!userProfile) {
         setIsLoginModalOpen(true);
@@ -813,18 +833,18 @@ const App: React.FC = () => {
   }, [currentSong]);
   
   const handleNextSong = useCallback(() => {
-    if (songs.length === 0) return;
-    const currentIndex = currentSong ? songs.findIndex(s => s.id === currentSong.id) : -1;
-    const nextIndex = (currentIndex + 1) % songs.length;
-    handleSetCurrentSong(songs[nextIndex], true);
-  }, [songs, currentSong, handleSetCurrentSong]);
+    if (filteredSongs.length === 0) return;
+    const currentIndex = currentSong ? filteredSongs.findIndex(s => s.id === currentSong.id) : -1;
+    const nextIndex = (currentIndex + 1) % filteredSongs.length;
+    handleSetCurrentSong(filteredSongs[nextIndex], true);
+  }, [filteredSongs, currentSong, handleSetCurrentSong]);
 
   const handlePrevSong = useCallback(() => {
-    if (songs.length === 0) return;
-    const currentIndex = currentSong ? songs.findIndex(s => s.id === currentSong.id) : -1;
-    const prevIndex = (currentIndex - 1 + songs.length) % songs.length;
-    handleSetCurrentSong(songs[prevIndex], true);
-  }, [songs, currentSong, handleSetCurrentSong]);
+    if (filteredSongs.length === 0) return;
+    const currentIndex = currentSong ? filteredSongs.findIndex(s => s.id === currentSong.id) : -1;
+    const prevIndex = (currentIndex - 1 + filteredSongs.length) % filteredSongs.length;
+    handleSetCurrentSong(filteredSongs[prevIndex], true);
+  }, [filteredSongs, currentSong, handleSetCurrentSong]);
 
   // --- Ref for YouTube player callback to prevent re-initialization ---
   const handleNextSongRef = useRef(handleNextSong);
@@ -1091,7 +1111,7 @@ const App: React.FC = () => {
         onClose={handleCloseMusicBox}
         onMinimize={handleMinimizeMusicBox}
         userProfile={userProfile}
-        songs={songs}
+        songs={filteredSongs}
         currentSong={currentSong}
         isPlaying={isPlaying}
         isLoading={isMusicLoading}
@@ -1100,6 +1120,10 @@ const App: React.FC = () => {
         onNext={handleNextSong}
         onPrev={handlePrevSong}
         onToggleFavorite={handleToggleSongFavorite}
+        activeGenre={musicActiveGenre}
+        setActiveGenre={setMusicActiveGenre}
+        searchTerm={musicSearchTerm}
+        setSearchTerm={setMusicSearchTerm}
       />
       <AdminMusicModal
         isOpen={isAdminMusicOpen}
