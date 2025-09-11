@@ -28,6 +28,21 @@ if (process.env.REDIS_URL) {
 async function createTables() {
     try {
         await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                image_url TEXT,
+                subscription_status VARCHAR(50) DEFAULT 'inactive',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                subscription_expires_at TIMESTAMPTZ,
+                is_moderator BOOLEAN NOT NULL DEFAULT false,
+                updated_at TIMESTAMPTZ,
+                level INTEGER NOT NULL DEFAULT 0,
+                exp INTEGER NOT NULL DEFAULT 0
+            );
+        `);
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS songs (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 title VARCHAR(255) NOT NULL,
