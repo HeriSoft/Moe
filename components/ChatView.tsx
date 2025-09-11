@@ -111,6 +111,7 @@ interface ChatViewProps {
   musicBoxState: 'closed' | 'open' | 'minimized';
   currentSong: Song | null;
   isPlaying: boolean;
+  handleExpGain: (amount: number) => void;
 }
 
 const PROMPT_STARTERS = [
@@ -179,7 +180,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, onOpenMusicBox, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, onOpenMusicBox, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -253,6 +254,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
     try {
         const base64Audio = await generateSpeech(text, userProfile);
+        handleExpGain(50); // +50 EXP
         const byteCharacters = atob(base64Audio);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
@@ -286,7 +288,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
             return currentState;
         });
     }
-  }, [setNotifications, userProfile, onProFeatureBlock]);
+  }, [setNotifications, userProfile, onProFeatureBlock, handleExpGain]);
 
 
   useEffect(() => {
