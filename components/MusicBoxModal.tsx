@@ -20,11 +20,13 @@ interface MusicBoxModalProps {
   onNext: () => void;
   onPrev: () => void;
   onToggleFavorite: (songId: string) => void;
+  activeGenre: string;
+  setActiveGenre: (genre: string) => void;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
 }
 
-export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev, onToggleFavorite }) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [activeGenre, setActiveGenre] = useState('all');
+export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev, onToggleFavorite, activeGenre, setActiveGenre, searchTerm, setSearchTerm }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [error, setError] = useState<string | null>(null);
 
@@ -33,31 +35,14 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
         setCurrentPage(1); // Reset to first page when filter changes
     };
 
-    const filteredSongs = useMemo(() => {
-        return songs.filter(song => {
-            const matchesSearch = song.title.toLowerCase().includes(searchTerm.toLowerCase()) || song.artist.toLowerCase().includes(searchTerm.toLowerCase());
-            
-            let matchesFilter = false;
-            if (activeGenre === 'all') {
-                matchesFilter = true;
-            } else if (activeGenre === 'favorites') {
-                matchesFilter = song.is_favorite === true;
-            } else {
-                matchesFilter = song.genre === activeGenre;
-            }
-
-            return matchesSearch && matchesFilter;
-        });
-    }, [songs, searchTerm, activeGenre]);
-
     const totalPages = useMemo(() => {
-        return Math.ceil(filteredSongs.length / SONGS_PER_PAGE);
-    }, [filteredSongs]);
+        return Math.ceil(songs.length / SONGS_PER_PAGE);
+    }, [songs]);
 
     const songsToDisplay = useMemo(() => {
         const startIndex = (currentPage - 1) * SONGS_PER_PAGE;
-        return filteredSongs.slice(startIndex, startIndex + SONGS_PER_PAGE);
-    }, [filteredSongs, currentPage]);
+        return songs.slice(startIndex, startIndex + SONGS_PER_PAGE);
+    }, [songs, currentPage]);
 
 
     const handlePlayPause = (index?: number) => {
