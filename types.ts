@@ -44,6 +44,8 @@ export interface UserProfile {
     isPro?: boolean; // To track membership status
     subscriptionExpiresAt?: string | null; // NEW: For membership duration
     isModerator?: boolean; // NEW: For moderator status
+    level?: number; // For user level
+    exp?: number; // For user experience points
 }
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
