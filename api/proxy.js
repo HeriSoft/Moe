@@ -62,6 +62,9 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_moderator BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
+
 
         console.log("Table 'users' is ready.");
     } catch (error) {
@@ -119,6 +122,11 @@ async function isUserPro(email) {
 
 
 // --- Helper & Logging Functions ---
+const getExpForLevel = (level) => {
+    // New scaling formula to match the frontend.
+    return 100 + (level * 50) + (level * level * 5);
+};
+
 async function logAction(email, message) {
     if (!isRedisConfigured || !email) return;
     try {
@@ -295,7 +303,7 @@ export default async function handler(req, res) {
 
                     // Fetch the complete, updated profile from the database
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator FROM users WHERE email = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp FROM users WHERE email = $1;`,
                         [user.email]
                     );
                     
@@ -308,7 +316,9 @@ export default async function handler(req, res) {
                             imageUrl: dbUser.image_url,
                             subscriptionExpiresAt: dbUser.subscription_expires_at,
                             isModerator: dbUser.is_moderator,
-                            isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date()
+                            isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                            level: dbUser.level,
+                            exp: dbUser.exp,
                         };
                         return res.status(200).json({ success: true, user: fullUserProfile });
                     }
@@ -319,6 +329,54 @@ export default async function handler(req, res) {
                     console.error("Database error during user login/profile fetch:", dbError);
                     return res.status(500).json({ error: 'Database operation failed.' });
                 }
+            }
+            
+            case 'add_exp': {
+                const { amount } = payload;
+                const email = userEmail;
+                if (!email || !amount) {
+                    return res.status(400).json({ error: 'User and amount are required.' });
+                }
+
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+                    const { rows } = await client.query('SELECT id, level, exp FROM users WHERE email = $1 FOR UPDATE;', [email]);
+                    if (rows.length === 0) {
+                        throw new Error('User not found.');
+                    }
+
+                    let { id, level, exp } = rows[0];
+                    if (level >= 100) {
+                        await client.query('COMMIT');
+                        return res.status(200).json({ success: true, user: { level, exp } });
+                    }
+
+                    exp += amount;
+                    let expToNextLevel = getExpForLevel(level);
+
+                    while (level < 100 && exp >= expToNextLevel) {
+                        exp -= expToNextLevel;
+                        level++;
+                        expToNextLevel = getExpForLevel(level);
+                    }
+
+                    if (level >= 100) {
+                        exp = 0; // Cap EXP at max level
+                    }
+
+                    await client.query('UPDATE users SET level = $1, exp = $2, updated_at = NOW() WHERE id = $3;', [level, exp, id]);
+                    await client.query('COMMIT');
+                    
+                    result = { success: true, user: { level, exp } };
+                } catch (dbError) {
+                    await client.query('ROLLBACK');
+                    console.error("Database error during EXP update:", dbError);
+                    return res.status(500).json({ error: 'Database operation failed.' });
+                } finally {
+                    client.release();
+                }
+                break;
             }
 
             case 'generateContentStream': {
