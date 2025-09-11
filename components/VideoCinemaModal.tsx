@@ -25,9 +25,10 @@ interface VideoCinemaModalProps {
   isOpen: boolean;
   onClose: () => void;
   userProfile: UserProfile | undefined;
+  handleExpGain: (amount: number) => void;
 }
 
-export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onClose, userProfile }) => {
+export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onClose, userProfile, handleExpGain }) => {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [selectedEpisode, setSelectedEpisode] = useState<number>(1);
@@ -90,6 +91,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
   
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie);
+    handleExpGain(5); // +5 EXP for watching a movie
     setVideoUrl('');
     setError(null);
     const episodes = movie.episodes ? [...movie.episodes].sort((a, b) => a.episode_number - b.episode_number) : [];
