@@ -276,12 +276,22 @@ export default async function handler(req, res) {
                          return res.status(400).json({ error: 'Amount must be a valid number.' });
                     }
                     const { rows } = await pool.query(
-                        `UPDATE users SET points = points + $1, updated_at = NOW() WHERE email = $2 RETURNING points;`,
+                        `UPDATE users SET points = points + $1, updated_at = NOW() WHERE email = $2 RETURNING *;`,
                         [amountNum, email]
                     );
                     if (rows.length === 0) throw new Error('Target user not found.');
+
+                    const dbUser = rows[0];
+                    const fullUserProfile = {
+                        id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                        subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                        isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
+                        hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                    };
+
                     await logAction(ADMIN_EMAIL, `added ${amountNum} points to ${email}.`);
-                    return res.status(200).json({ success: true, points: rows[0].points });
+                    return res.status(200).json({ success: true, user: fullUserProfile });
                 }
 
                 return res.status(400).json({ error: 'Invalid POST action' });
