@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon } from './icons';
 import type { UserProfile } from '../types';
-import TienLenGame from './games/TienLenGame';
-import FlappyBirdGame from './games/FlappyBirdGame';
-import EightBallPoolGame from './games/EightBallPoolGame';
+import TienLenGame from './Games/TienLenGame';
+import FlappyBirdGame from './Games/FlappyBirdGame';
+import EightBallPoolGame from './Games/EightBallPoolGame';
+import LuckyWheel from './games/LuckyWheel';
 
 interface GamePortalModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface GamePortalModalProps {
   userProfile?: UserProfile;
   handlePointsGain: (amount: number) => void;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
+  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>; // To update profile after winning prize
 }
 
 type ActiveGame = 'lobby' | 'tienlen' | 'flappy' | 'pool';
@@ -27,7 +29,7 @@ const GameCard: React.FC<{ title: string; description: string; Icon: React.FC<an
     </div>
 );
 
-export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClose, userProfile, handlePointsGain, setNotifications }) => {
+export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClose, userProfile, handlePointsGain, setNotifications, setUserProfile }) => {
   const [activeGame, setActiveGame] = useState<ActiveGame>('lobby');
   const points = userProfile?.points ?? 0;
   const tickets = Math.floor(points / 1000);
@@ -43,6 +45,31 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
       document.body.style.overflow = 'auto';
     };
   }, [isOpen]);
+  
+  const handlePrizeWon = async (prize: { prizeId: string, label: string }) => {
+      if (!userProfile) return;
+
+      try {
+          const response = await fetch('/api/proxy', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  action: 'awardPrize',
+                  payload: { user: userProfile, prizeId: prize.prizeId }
+              })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.details || 'Failed to award prize.');
+
+          setUserProfile(result.user); // Update user profile with new stats/cosmetics
+          setNotifications(prev => [`Congratulations! You won: ${prize.label}`, ...prev.slice(0, 19)]);
+          
+      } catch (error) {
+           const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+           setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+      }
+  };
+
 
   if (!isOpen) return null;
   
@@ -76,7 +103,7 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
         </div>
 
         {activeGame === 'lobby' ? (
-            <div className="flex-grow overflow-y-auto">
+            <div className="flex-grow overflow-y-auto pr-2 -mr-2">
                 <div className="text-center p-6 mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-md">
                     <p className="text-lg font-semibold text-slate-600 dark:text-slate-300">Tổng điểm của bạn</p>
                     <p className="text-5xl font-bold text-indigo-600 dark:text-indigo-400 my-2">{points.toLocaleString()}</p>
@@ -85,7 +112,7 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
                         <span>Bạn có <strong>{tickets}</strong> vé quay thưởng (1000 điểm/vé)</span>
                     </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <GameCard 
                         title="Tiến Lên Miền Nam"
                         description="Đánh bài với Bot logic. Thắng +100 điểm, thua -50 điểm."
@@ -108,6 +135,13 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
                         bgColorClass="bg-gradient-to-br from-purple-500 to-purple-700"
                     />
                 </div>
+                <div className="mt-8 border-t-2 border-dashed border-slate-300 dark:border-slate-600 pt-8">
+                    <LuckyWheel 
+                        points={points} 
+                        onSpinStart={() => handlePointsGain(-1000)}
+                        onPrizeWon={handlePrizeWon}
+                    />
+                </div>
             </div>
         ) : (
             <div className="flex-grow flex items-center justify-center bg-slate-200 dark:bg-slate-900/50 rounded-lg p-2 overflow-hidden">
@@ -118,4 +152,3 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
     </div>
   );
 };
-
