@@ -424,14 +424,24 @@ export default async function handler(req, res) {
                 if (!userEmail || !prizeId) {
                     return res.status(400).json({ error: 'User and prizeId are required.' });
                 }
-                await logAction(userEmail, `won prize ${prizeId} from lucky wheel`);
+                
                 const client = await pool.connect();
                 try {
                     await client.query('BEGIN');
                     
-                    const userResult = await client.query('SELECT id, level, exp FROM users WHERE email = $1 FOR UPDATE;', [userEmail]);
-                    if (userResult.rows.length === 0) throw new Error('User not found.');
-                    let { id, level, exp } = userResult.rows[0];
+                    // Atomically deduct points for the spin and get the user's current state
+                    const pointsResult = await client.query(
+                        `UPDATE users SET points = points - 1000 WHERE email = $1 AND points >= 1000 RETURNING id, level, exp;`,
+                        [userEmail]
+                    );
+            
+                    if (pointsResult.rows.length === 0) {
+                        await client.query('ROLLBACK');
+                        return res.status(400).json({ error: 'Forbidden', details: 'Not enough points to spin.' });
+                    }
+            
+                    let { id, level, exp } = pointsResult.rows[0];
+                    await logAction(userEmail, `spent 1000 points and won prize ${prizeId} from lucky wheel`);
 
                     let expToAdd = 0;
                     switch (prizeId) {
