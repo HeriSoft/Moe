@@ -420,6 +420,40 @@ export const MinusIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
+// --- NEW ICONS for Game Portal ---
+export const CardsIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+    </svg>
+);
+
+export const BirdIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12.75 21.75a.75.75 0 00.75-.75v-.375c0-.621.504-1.125 1.125-1.125h.375a.75.75 0 00.75-.75V18a.75.75 0 00-.75-.75h-1.5a.75.75 0 01-.75-.75v-3a.75.75 0 01.75-.75h1.5a.75.75 0 00.75-.75v-3.75a.75.75 0 00-.75-.75h-.375a1.125 1.125 0 01-1.125-1.125V3.75a.75.75 0 00-.75-.75h-1.5a.75.75 0 00-.75.75v.375c0 .621-.504 1.125-1.125 1.125h-.375a.75.75 0 00-.75.75V9a.75.75 0 00.75.75h1.5a.75.75 0 01.75.75v3a.75.75 0 01-.75.75h-1.5a.75.75 0 00-.75.75v.75a.75.75 0 00.75.75h.375c.621 0 1.125.504 1.125 1.125v.375a.75.75 0 00.75.75h1.5z" />
+    </svg>
+);
+
+export const Pool8BallIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <circle cx="12" cy="12" r="9" fill="black" stroke="none"/>
+        <circle cx="12" cy="12" r="4.5" fill="white" stroke="none"/>
+        <text x="12" y="14.5" textAnchor="middle" fill="black" fontSize="5" fontWeight="bold">8</text>
+    </svg>
+);
+
+// FIX: Add missing ArrowsUpDownIcon and ArrowUturnLeftIcon
+export const ArrowsUpDownIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+  </svg>
+);
+
+export const ArrowUturnLeftIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+  </svg>
+);
+
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
