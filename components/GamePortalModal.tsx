@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon } from './icons';
 import type { UserProfile } from '../types';
-import TienLenGame from './Games/TienLenGame';
-import FlappyBirdGame from './Games/FlappyBirdGame';
-import EightBallPoolGame from './Games/EightBallPoolGame';
+import TienLenGame from './games/TienLenGame';
+import FlappyBirdGame from './games/FlappyBirdGame';
+import EightBallPoolGame from './games/EightBallPoolGame';
 
 interface GamePortalModalProps {
   isOpen: boolean;
@@ -118,3 +118,4 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
     </div>
   );
 };
+
