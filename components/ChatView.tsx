@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, ChatBubbleIcon, MusicalNoteIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
@@ -103,7 +103,7 @@ interface ChatViewProps {
   onOpenMediaGallery: () => void; // For media gallery
   onOpenVideoCinema: () => void; // For Video Cinema
   onOpenFilesLibrary: () => void; // For Files Library
-  onOpenCCTalk: () => void; // For CCTalk
+  onOpenGamePortal: () => void; // For Game Portal
   onOpenMusicBox: () => void; // For Music Box
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
@@ -180,7 +180,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenCCTalk, onOpenMusicBox, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -415,7 +415,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
 
   const currentModelName = activeChat?.model ?? defaultModel;
   const isDeepSeekModel = currentModelName === 'deepseek-v3.1';
-  const canSeeCCTalk = userProfile?.email === 'heripixiv@gmail.com' || userProfile?.isModerator;
   
   const languages = [
     { code: 'Vietnamese', name: 'Tiếng Việt' }, { code: 'English', name: 'English' },
@@ -536,15 +535,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         </main>
         
         <div className="absolute bottom-4 right-4 sm:right-6 z-20 flex flex-col items-center gap-2">
-            {canSeeCCTalk && (
-              <button
-                onClick={onOpenCCTalk}
-                aria-label="Open ccTalk"
-                className="p-2 rounded-full bg-sky-600 text-white shadow-lg transition-all duration-300 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-[#171725]"
-              >
-                <ChatBubbleIcon className="w-6 h-6" />
-              </button>
-            )}
+            <button
+              onClick={onOpenGamePortal}
+              aria-label="Open Game Portal"
+              className="p-2 rounded-full bg-sky-600 text-white shadow-lg transition-all duration-300 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-[#171725]"
+            >
+              <PuzzlePieceIcon className="w-6 h-6" />
+            </button>
             <button
               onClick={onOpenMusicBox}
               aria-label="Open Music Box"
