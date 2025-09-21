@@ -1,6 +1,3 @@
-// [TienLenGame.tsx] Module Start
-console.log("[TienLenGame.tsx] Initializing Tien Len game logic module.");
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TienLenCard, PlayerHand, TienLenGameState, CardSuit, CardRank, ValidatedHand, TienLenHandType } from '../../types';
 import { createDeck, shuffleDeck, dealCards, sortHand, identifyHandCombination, canPlayOver, getPlayableHands, getLowestCardPlayer } from './tienlen/tienlenUtils';
