@@ -138,7 +138,6 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
                 <div className="mt-8 border-t-2 border-dashed border-slate-300 dark:border-slate-600 pt-8">
                     <LuckyWheel 
                         points={points} 
-                        onSpinStart={() => handlePointsGain(-1000)}
                         onPrizeWon={handlePrizeWon}
                     />
                 </div>
@@ -152,5 +151,3 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
     </div>
   );
 };
-
-
