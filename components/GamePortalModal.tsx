@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 // FIX: Import the newly added ArrowUturnLeftIcon
 import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon } from './icons';
 import type { UserProfile } from '../types';
-import TienLenGame from './Games/tienlen/TienLenGame';
+import TienLenGame from './Games/TienLenGame';
 import FlappyBirdGame from './Games/FlappyBirdGame';
 import EightBallPoolGame from './Games/EightBallPoolGame';
 
@@ -50,7 +50,6 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
   const renderGame = () => {
     switch(activeGame) {
         case 'tienlen':
-            // FIX: This now correctly passes props to the updated TienLenGame component.
             return <TienLenGame handlePointsGain={handlePointsGain} setNotifications={setNotifications} />;
         case 'flappy':
             return <FlappyBirdGame handlePointsGain={handlePointsGain} />;
