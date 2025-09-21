@@ -183,4 +183,6 @@ export interface TienLenGameState {
 export interface TienLenGameModalProps {
   isOpen: boolean;
   onClose: () => void;
+  handlePointsGain: (amount: number) => void;
+  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
 }
