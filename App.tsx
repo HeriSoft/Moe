@@ -1085,7 +1085,6 @@ const App: React.FC = () => {
         userProfile={userProfile}
         handlePointsGain={handlePointsGain}
         setNotifications={setNotifications}
-        // FIX: Pass the setUserProfile prop to the GamePortalModal component.
         setUserProfile={setUserProfile}
       />
       <GenerationModal
@@ -1107,6 +1106,7 @@ const App: React.FC = () => {
         onClose={() => setIsAdminPanelOpen(false)}
         userProfile={userProfile}
         onSettingsChanged={fetchSiteSettings}
+        setUserProfile={setUserProfile}
       />
       <AdminMovieModal
         isOpen={isAdminMovieModalOpen}
