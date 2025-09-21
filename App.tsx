@@ -1085,6 +1085,8 @@ const App: React.FC = () => {
         userProfile={userProfile}
         handlePointsGain={handlePointsGain}
         setNotifications={setNotifications}
+        // FIX: Pass the setUserProfile prop to the GamePortalModal component.
+        setUserProfile={setUserProfile}
       />
       <GenerationModal
         isOpen={isGenerationModalOpen}
