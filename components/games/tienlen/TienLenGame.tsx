@@ -1,4 +1,3 @@
-
 // [TienLenGame.tsx] Module Start
 console.log("[TienLenGame.tsx] Initializing Tien Len game logic module.");
 
@@ -6,8 +5,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TienLenCard, PlayerHand, TienLenGameState, CardSuit, CardRank, ValidatedHand, TienLenHandType } from '../../../types.ts';
 import { createDeck, shuffleDeck, dealCards, sortHand, identifyHandCombination, canPlayOver, getPlayableHands, getLowestCardPlayer } from './tienlenUtils.ts';
 import CardDisplay from './TienLenCard.tsx';
-import { useNotification } from '../../../contexts/NotificationContext.tsx';
-import { UserIcon, RobotIcon, ArrowPathIcon, PauseIcon, PlayIcon, ClockIcon, ArrowsUpDownIcon } from '../../Icons.tsx';
+// FIX: Correct import path casing and add ArrowsUpDownIcon
+import { UserIcon, RobotIcon, ArrowPathIcon, PauseIcon, PlayIcon, ClockIcon, ArrowsUpDownIcon } from '../../icons';
 import { CARDS_PER_PLAYER, TIEN_LEN_TURN_COUNTDOWN_SECONDS, TIEN_LEN_AI_THINKING_MILLISECONDS, TIEN_LEN_SUIT_VALUES } from '../../../constants.ts';
 
 
@@ -29,10 +28,15 @@ const INITIAL_GAME_STATE: TienLenGameState = {
   isFirstTurnOfGame: true,
 };
 
-const TienLenGame: React.FC = () => {
+// FIX: Add props interface to accept functions from parent
+interface TienLenGameProps {
+  handlePointsGain: (amount: number) => void;
+  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
+const TienLenGame: React.FC<TienLenGameProps> = ({ handlePointsGain, setNotifications }) => {
   const [gameState, setGameState] = useState<TienLenGameState>(INITIAL_GAME_STATE);
   const [selectedPlayerCards, setSelectedPlayerCards] = useState<TienLenCard[]>([]);
-  const { addNotification } = useNotification();
   const turnIntervalRef = useRef<number | null>(null);
 
   const handlePassTurnCallbackRef = useRef<((isAutoPass?: boolean) => void) | null>(null);
@@ -67,14 +71,15 @@ const TienLenGame: React.FC = () => {
           // Ensure state reflects timer is 0 before passing turn
           const stateBeforePass = { ...prevTimerState, turnTimer: 0 };
           if (handlePassTurnCallbackRef.current) {
-              addNotification("Time's up! Your turn has been passed automatically.", "info");
+              // FIX: Use setNotifications prop instead of context
+              setNotifications(prev => ["Time's up! Your turn has been passed automatically.", ...prev.slice(0, 19)]);
               handlePassTurnCallbackRef.current(true); 
           }
           return stateBeforePass; 
         }
       });
     }, 1000);
-  }, [addNotification]); 
+  }, [setNotifications]); 
 
 
   const aiTurnLogic = useCallback(() => {
@@ -115,7 +120,9 @@ const TienLenGame: React.FC = () => {
                     const newStatusMessage = `AI played ${aiPlayedHand.type.toLowerCase()} (${aiPlayedHand.cards.map(c => c.rank + c.suit).join(', ')}). Your turn.`;
 
                     if (newAiHand.length === 0) {
-                        addNotification("AI won the game.", "error");
+                        // FIX: Use props for notification and points
+                        setNotifications(prev => ["AI won the game. -50 points", ...prev.slice(0, 19)]);
+                        handlePointsGain(-50);
                         return { 
                             ...prevGameState, 
                             aiHand: newAiHand, 
@@ -151,7 +158,8 @@ const TienLenGame: React.FC = () => {
                 }
             } catch (e: any) {
                 console.error("Error during AI turn game logic (inside setGameState updater):", e);
-                addNotification("An error occurred during AI's turn. Passing turn to player.", "error", e.message);
+                // FIX: Use setNotifications prop
+                setNotifications(prev => ["An error occurred during AI's turn. Passing turn to player.", ...prev.slice(0, 19)]);
                 return {
                     ...prevGameState,
                     currentPlayer: 'player',
@@ -169,9 +177,10 @@ const TienLenGame: React.FC = () => {
             statusMessage: 'Critical AI error. Your turn. Game paused.',
             isPaused: true, 
         }));
-        addNotification("A critical error occurred in the AI. Game paused.", "error", e.message);
+        // FIX: Use setNotifications prop
+        setNotifications(prev => ["A critical error occurred in the AI. Game paused.", ...prev.slice(0, 19)]);
     }
-  }, [addNotification]); 
+  }, [setNotifications, handlePointsGain]); 
   
   aiTurnLogicCallbackRef.current = aiTurnLogic;
 
@@ -187,7 +196,8 @@ const TienLenGame: React.FC = () => {
       const mustPlay3S = gameState.isFirstTurnOfGame && gameState.firstPlayerOfTheGame === 'player';
       const playableStartingHands = getPlayableHands(gameState.playerHand, null, true, mustPlay3S);
       if (playableStartingHands.length > 0) {
-        addNotification("You must play a card to start a new round.", "info");
+        // FIX: Use setNotifications prop
+        setNotifications(prev => ["You must play a card to start a new round.", ...prev.slice(0, 19)]);
         return; 
       }
       // If no playable starting hands, allow pass (rare, usually means hand is empty or game logic error)
@@ -206,7 +216,7 @@ const TienLenGame: React.FC = () => {
       turnTimer: 0, // Ensure timer is 0 when passing
     }));
     setSelectedPlayerCards([]); 
-  }, [gameState.currentPlayer, gameState.winner, gameState.isPaused, gameState.isDealing, gameState.turnHistory, gameState.lastPlayedHand, gameState.playerHand, gameState.isFirstTurnOfGame, gameState.firstPlayerOfTheGame, addNotification]);
+  }, [gameState.currentPlayer, gameState.winner, gameState.isPaused, gameState.isDealing, gameState.turnHistory, gameState.lastPlayedHand, gameState.playerHand, gameState.isFirstTurnOfGame, gameState.firstPlayerOfTheGame, setNotifications]);
 
   handlePassTurnCallbackRef.current = handlePassTurn;
 
@@ -255,13 +265,17 @@ const TienLenGame: React.FC = () => {
         const aiHasFourTwos = aiHand.filter(c => c.rank === CardRank.TWO).length === 4;
 
         if (playerHasFourTwos) {
+            // FIX: Use props for notification and points
+            handlePointsGain(100);
             setGameState(prev => ({ ...prev, playerHand, aiHand, winner: 'player', playerScore: prev.playerScore + 1, statusMessage: '🎉 Tứ Quý Heo! You win instantly! 🎉', isDealing: false, turnTimer: TIEN_LEN_TURN_COUNTDOWN_SECONDS, isPaused: false }));
-            addNotification("Tứ Quý Heo! You win instantly!", "success");
+            setNotifications(prev => ["Tứ Quý Heo! You win instantly! +100 points", ...prev.slice(0, 19)]);
             return;
         }
         if (aiHasFourTwos) {
+            // FIX: Use props for notification and points
+            handlePointsGain(-50);
             setGameState(prev => ({ ...prev, playerHand, aiHand, winner: 'ai', aiScore: prev.aiScore + 1, statusMessage: '🤖 Tứ Quý Heo! AI wins instantly! 🤖', isDealing: false, turnTimer: TIEN_LEN_TURN_COUNTDOWN_SECONDS, isPaused: false }));
-            addNotification("Tứ Quý Heo! AI wins instantly!", "error");
+            setNotifications(prev => ["Tứ Quý Heo! AI wins instantly. -50 points", ...prev.slice(0, 19)]);
             return;
         }
         
@@ -280,11 +294,11 @@ const TienLenGame: React.FC = () => {
             isPaused: false,
         }));
 
-        if (!keepScores) addNotification("New game started! Good luck!", "info");
-        else addNotification("New round started!", "info");
+        if (!keepScores) setNotifications(prev => ["New game started! Good luck!", ...prev.slice(0, 19)]);
+        else setNotifications(prev => ["New round started!", ...prev.slice(0, 19)]);
 
     }, 500);
-  }, [addNotification]); 
+  }, [setNotifications, handlePointsGain]); 
 
   useEffect(() => {
     resetGame(); 
@@ -302,7 +316,7 @@ const TienLenGame: React.FC = () => {
     if (gameState.currentPlayer !== 'player' || gameState.winner || gameState.isPaused || gameState.isDealing) return;
     
     if (gameState.turnTimer <= 0) { // Double check timer even if UI is slow to update "currentPlayer"
-        addNotification("Time's up! Your turn was automatically passed.", "info");
+        setNotifications(prev => ["Time's up! Your turn was automatically passed.", ...prev.slice(0, 19)]);
         if (handlePassTurnCallbackRef.current && gameState.currentPlayer === 'player') { // Check currentPlayer again
             handlePassTurnCallbackRef.current(true);
         }
@@ -328,7 +342,7 @@ const TienLenGame: React.FC = () => {
         sortHand(newPlayerHand);
         return {...prev, playerHand: newPlayerHand};
     });
-    addNotification("Hand sorted!", "info");
+    setNotifications(prev => ["Hand sorted!", ...prev.slice(0, 19)]);
   };
 
   const playHand = (player: 'player' | 'ai', handToPlay: ValidatedHand) => {
@@ -358,7 +372,14 @@ const TienLenGame: React.FC = () => {
         };
 
         if (newHand.length === 0) {
-            addNotification(player === 'player' ? "Congratulations! You won the game!" : "AI won the game.", player === 'player' ? "success" : "error");
+            // FIX: Use props for notification and points
+            if (player === 'player') {
+                handlePointsGain(100);
+                setNotifications(prev => ["Congratulations! You won! +100 points", ...prev.slice(0, 19)]);
+            } else {
+                handlePointsGain(-50);
+                setNotifications(prev => ["AI won the game. -50 points", ...prev.slice(0, 19)]);
+            }
             return {
                 ...prev,
                 ...newStateUpdate,
@@ -376,12 +397,12 @@ const TienLenGame: React.FC = () => {
 
   const handlePlaySelectedCards = () => {
     if (gameState.currentPlayer !== 'player' || gameState.winner || gameState.isPaused || gameState.isDealing) {
-        if(selectedPlayerCards.length === 0 && !gameState.winner && !gameState.isDealing && !gameState.isPaused) addNotification("Please select cards to play.", "info");
+        if(selectedPlayerCards.length === 0 && !gameState.winner && !gameState.isDealing && !gameState.isPaused) setNotifications(prev => ["Please select cards to play.", ...prev.slice(0, 19)]);
         return;
     }
 
     if (gameState.turnTimer <= 0) {
-        addNotification("Time's up! Your turn was automatically passed.", "error");
+        setNotifications(prev => ["Time's up! Your turn was automatically passed.", ...prev.slice(0, 19)]);
         if (handlePassTurnCallbackRef.current && gameState.currentPlayer === 'player') { // Re-ensure pass if needed
             handlePassTurnCallbackRef.current(true);
         }
@@ -389,14 +410,14 @@ const TienLenGame: React.FC = () => {
     }
     
     if (selectedPlayerCards.length === 0) {
-        addNotification("Please select cards to play.", "info");
+        setNotifications(prev => ["Please select cards to play.", ...prev.slice(0, 19)]);
         return;
     }
 
 
     const validatedHand = identifyHandCombination(selectedPlayerCards);
     if (validatedHand.type === TienLenHandType.INVALID) {
-      addNotification("Invalid card combination selected.", "error");
+      setNotifications(prev => ["Invalid card combination selected.", ...prev.slice(0, 19)]);
       return;
     }
     
@@ -408,13 +429,13 @@ const TienLenGame: React.FC = () => {
     if (gameState.isFirstTurnOfGame && gameState.firstPlayerOfTheGame === 'player') {
         const hasThreeSpades = validatedHand.cards.some(c => c.rank === CardRank.THREE && c.suit === CardSuit.SPADES);
         if (!hasThreeSpades) {
-            addNotification("Your first hand must include the 3 of Spades (3♠).", "error");
+            setNotifications(prev => ["Your first hand must include the 3 of Spades (3♠).", ...prev.slice(0, 19)]);
             return;
         }
     }
 
     if (!canPlayOver(validatedHand, isPlayerStartingNewRound ? null : gameState.lastPlayedHand)) {
-      addNotification("Your hand cannot beat the last played hand or is not a valid chop.", "error");
+      setNotifications(prev => ["Your hand cannot beat the last played hand or is not a valid chop.", ...prev.slice(0, 19)]);
       return;
     }
     playHand('player', validatedHand);
