@@ -67,6 +67,7 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
 
 
         console.log("Table 'users' is ready.");
@@ -166,7 +167,7 @@ export default async function handler(req, res) {
                 }
                 if (actionQuery === 'get_all_users') {
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner FROM users ORDER BY name;`
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points FROM users ORDER BY name;`
                     );
                     const users = rows.map(user => ({
                         ...user,
@@ -182,7 +183,7 @@ export default async function handler(req, res) {
             }
 
             case 'POST': {
-                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360, logoDriveId } = req.body;
+                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360, logoDriveId, amount } = req.body;
 
                 if (action === 'cancel_subscription_user') {
                      if (!userEmail) return res.status(403).json({ error: 'Forbidden' });
@@ -267,6 +268,20 @@ export default async function handler(req, res) {
                     );
                     await logAction(ADMIN_EMAIL, `set moderator status for ${email} to ${isModerator}.`);
                     return res.status(200).json({ success: true });
+                }
+                if (action === 'add_points_admin') {
+                    if (!email || !amount) return res.status(400).json({ error: 'Email and amount are required.' });
+                    const amountNum = parseInt(amount, 10);
+                    if (isNaN(amountNum)) {
+                         return res.status(400).json({ error: 'Amount must be a valid number.' });
+                    }
+                    const { rows } = await pool.query(
+                        `UPDATE users SET points = points + $1, updated_at = NOW() WHERE email = $2 RETURNING points;`,
+                        [amountNum, email]
+                    );
+                    if (rows.length === 0) throw new Error('Target user not found.');
+                    await logAction(ADMIN_EMAIL, `added ${amountNum} points to ${email}.`);
+                    return res.status(200).json({ success: true, points: rows[0].points });
                 }
 
                 return res.status(400).json({ error: 'Invalid POST action' });
