@@ -1,6 +1,4 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const LOGICAL_TABLE_WIDTH = 600;
 const LOGICAL_TABLE_HEIGHT = 300;
@@ -29,6 +27,12 @@ interface Ball {
   isPocketed: boolean;
   type: 'cue' | 'eight' | 'solid' | 'stripe';
 }
+
+interface EightBallPoolGameProps {
+  handlePointsGain: (amount: number) => void;
+  setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
 
 const initialBallsSetup = (): Ball[] => {
   const balls: Ball[] = [];
@@ -111,7 +115,7 @@ const logicalPockets = [
 ];
 
 
-const EightBallPoolGame: React.FC = () => {
+const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain, setNotifications }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [ballsState, setBallsState] = useState<Ball[]>(initialBallsSetup());
@@ -126,7 +130,6 @@ const EightBallPoolGame: React.FC = () => {
   const [aimEndState, setAimEndState] = useState<{ x: number; y: number } | null>(null);
   const aimEndRef = useRef(aimEndState);
 
-  const { addNotification } = useNotification();
   const animationFrameIdRef = useRef<number | null>(null);
   
   const [scaleFactorState, setScaleFactorState] = useState(1);
@@ -349,9 +352,9 @@ const EightBallPoolGame: React.FC = () => {
             const dx = pocket.x - ball.x;
             const dy = pocket.y - ball.y;
             const distToPocketCenter = Math.sqrt(dx * dx + dy * dy);
-            if (distToPocketCenter < LOGICAL_POCKET_RADIUS - ball.radius / 2) { // Ball center needs to be well within pocket radius
+            if (distToPocketCenter < LOGICAL_POCKET_RADIUS - ball.radius / 2) { 
                 if (ball.type === 'cue') {
-                    addNotification("Cue ball scratched!", "error");
+                    setNotifications(prev => ["Cue ball scratched!", ...prev.slice(0, 19)]);
                     setTimeout(() => {
                         setBallsState(bs => bs.map(b => b.id === 'cue' ? {...initialBallsSetup().find(ib => ib.id === 'cue')!, isPocketed: false} : b));
                     }, 1000);
@@ -360,15 +363,17 @@ const EightBallPoolGame: React.FC = () => {
                 } else if (ball.type === 'eight') {
                     const remainingObjectBalls = processedBalls.filter(b => (b.type === 'solid' || b.type === 'stripe') && !b.isPocketed).length;
                     if (remainingObjectBalls > 0) {
-                        addNotification("8-ball pocketed too early! You lose.", "error");
+                        setNotifications(prev => ["8-ball pocketed too early! You lose.", ...prev.slice(0, 19)]);
                         if (!currentGameOver) setGameOverState('lose');
                     } else {
-                        addNotification("8-ball pocketed! You win!", "success");
+                        setNotifications(prev => ["8-ball pocketed! You win! +5 points", ...prev.slice(0, 19)]);
+                        handlePointsGain(5);
                         if (!currentGameOver) setGameOverState('win');
                     }
                     return { ...ball, isPocketed: true, vx: 0, vy: 0 };
                 } else { // Solid or Stripe ball
-                    addNotification(`${ball.type === 'solid' ? 'Solid' : 'Stripe'} ball pocketed!`, "info");
+                    setNotifications(prev => [`${ball.type === 'solid' ? 'Solid' : 'Stripe'} ball pocketed! +5 points`, ...prev.slice(0, 19)]);
+                    handlePointsGain(5);
                      return { ...ball, isPocketed: true, vx: 0, vy: 0 };
                 }
             }
@@ -385,7 +390,7 @@ const EightBallPoolGame: React.FC = () => {
     } else {
        animationFrameIdRef.current = null;
     }
-  }, [addNotification, drawTable, drawBall, drawAimingLine]);
+  }, [setNotifications, handlePointsGain, drawTable, drawBall, drawAimingLine]);
 
 
   useEffect(() => {
@@ -479,8 +484,8 @@ const EightBallPoolGame: React.FC = () => {
     const anyBallMoving = currentBalls.some(b => (b.vx !== 0 || b.vy !== 0) && !b.isPocketed);
     
     if (!cueBall || cueBall.isPocketed || anyBallMoving) {
-        if (anyBallMoving) addNotification("Wait for balls to stop before aiming.", "info");
-        else if (cueBall?.isPocketed) addNotification("Cue ball is pocketed. Wait for reset.", "info");
+        if (anyBallMoving) setNotifications(prev => ["Wait for balls to stop before aiming.", ...prev.slice(0, 19)]);
+        else if (cueBall?.isPocketed) setNotifications(prev => ["Cue ball is pocketed. Wait for reset.", ...prev.slice(0, 19)]);
         return;
     }
     
@@ -491,7 +496,7 @@ const EightBallPoolGame: React.FC = () => {
     if (!animationFrameIdRef.current) { 
         animationFrameIdRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [getLogicalPos, addNotification, gameLoop]);
+  }, [getLogicalPos, setNotifications, gameLoop]);
 
   const handleInteractionMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -546,11 +551,11 @@ const EightBallPoolGame: React.FC = () => {
     setIsAimingState(false);
     setAimStartState(null);
     setAimEndState(null);
-    addNotification("Game Reset!", "info");
+    setNotifications(prev => ["Game Reset!", ...prev.slice(0, 19)]);
     if (!animationFrameIdRef.current) { 
         animationFrameIdRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [addNotification, gameLoop]);
+  }, [setNotifications, gameLoop]);
 
   return (
     <div className="flex flex-col items-center select-none w-full">
