@@ -18,11 +18,10 @@ const prizes = [
 
 interface LuckyWheelProps {
     points: number;
-    onSpinStart: () => void;
     onPrizeWon: (prize: { prizeId: string; label: string }) => Promise<void>;
 }
 
-const LuckyWheel: React.FC<LuckyWheelProps> = ({ points, onSpinStart, onPrizeWon }) => {
+const LuckyWheel: React.FC<LuckyWheelProps> = ({ points, onPrizeWon }) => {
     const [isSpinning, setIsSpinning] = useState(false);
     const [currentRotation, setCurrentRotation] = useState(0);
     const [resultText, setResultText] = useState<string | null>(null);
@@ -34,7 +33,6 @@ const LuckyWheel: React.FC<LuckyWheelProps> = ({ points, onSpinStart, onPrizeWon
     const handleSpin = () => {
         if (isSpinning || tickets < 1) return;
 
-        onSpinStart();
         setIsSpinning(true);
         setShowResult(false);
         setResultText('');
