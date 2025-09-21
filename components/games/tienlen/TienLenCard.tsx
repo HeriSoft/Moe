@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { TienLenCard, CardSuit } from '../../../types.ts';
 
@@ -25,7 +26,7 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
     if (!suit) return 'text-neutral-800 dark:text-neutral-200'; // Default for no card
     return (suit === CardSuit.HEARTS || suit === CardSuit.DIAMONDS)
       ? 'text-red-600 dark:text-red-400'
-      : 'text-neutral-800 dark:text-neutral-200';
+      : 'text-black';
   };
 
   const baseClasses = `
