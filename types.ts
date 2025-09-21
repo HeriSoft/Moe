@@ -47,6 +47,8 @@ export interface UserProfile {
     level?: number; // For user level
     exp?: number; // For user experience points
     points?: number; // For game portal points
+    hasPermanentNameColor?: boolean; // For lucky wheel reward
+    hasSakuraBanner?: boolean; // For lucky wheel reward
 }
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
