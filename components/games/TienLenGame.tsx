@@ -114,8 +114,8 @@ const TienLenGame: React.FC<TienLenGameProps> = ({ handlePointsGain, setNotifica
                     const newStatusMessage = `AI played ${aiPlayedHand.type.toLowerCase()} (${aiPlayedHand.cards.map(c => c.rank + c.suit).join(', ')}). Your turn.`;
 
                     if (newAiHand.length === 0) {
-                        setNotifications(prev => ["AI won the game. -50 points", ...prev.slice(0, 19)]);
-                        handlePointsGain(-50);
+                        setNotifications(prev => ["AI won the game. -10 points", ...prev.slice(0, 19)]);
+                        handlePointsGain(-10);
                         return { 
                             ...prevGameState, 
                             aiHand: newAiHand, 
@@ -261,15 +261,15 @@ const TienLenGame: React.FC<TienLenGameProps> = ({ handlePointsGain, setNotifica
         const aiHasFourTwos = aiHand.filter(c => c.rank === CardRank.TWO).length === 4;
 
         if (playerHasFourTwos) {
-            handlePointsGain(100);
+            handlePointsGain(20);
             setGameState(prev => ({ ...prev, playerHand, aiHand, winner: 'player', playerScore: prev.playerScore + 1, statusMessage: '🎉 Tứ Quý Heo! You win instantly! 🎉', isDealing: false, turnTimer: TIEN_LEN_TURN_COUNTDOWN_SECONDS, isPaused: false }));
-            setNotifications(prev => ["Tứ Quý Heo! You win instantly! +100 points", ...prev.slice(0, 19)]);
+            setNotifications(prev => ["Tứ Quý Heo! You win instantly! +20 points", ...prev.slice(0, 19)]);
             return;
         }
         if (aiHasFourTwos) {
-            handlePointsGain(-50);
+            handlePointsGain(-10);
             setGameState(prev => ({ ...prev, playerHand, aiHand, winner: 'ai', aiScore: prev.aiScore + 1, statusMessage: '🤖 Tứ Quý Heo! AI wins instantly! 🤖', isDealing: false, turnTimer: TIEN_LEN_TURN_COUNTDOWN_SECONDS, isPaused: false }));
-            setNotifications(prev => ["Tứ Quý Heo! AI wins instantly. -50 points", ...prev.slice(0, 19)]);
+            setNotifications(prev => ["Tứ Quý Heo! AI wins instantly. -10 points", ...prev.slice(0, 19)]);
             return;
         }
         
@@ -367,8 +367,8 @@ const TienLenGame: React.FC<TienLenGameProps> = ({ handlePointsGain, setNotifica
 
         if (newHand.length === 0) {
             if (player === 'player') {
-                handlePointsGain(100);
-                setNotifications(prev => ["Congratulations! You won! +100 points", ...prev.slice(0, 19)]);
+                handlePointsGain(20);
+                setNotifications(prev => ["Congratulations! You won! +20 points", ...prev.slice(0, 19)]);
             }
             return {
                 ...prev,
@@ -573,3 +573,4 @@ const TienLenGame: React.FC<TienLenGameProps> = ({ handlePointsGain, setNotifica
 };
 
 export default TienLenGame;
+
