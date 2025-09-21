@@ -17,6 +17,7 @@ interface AdminPanelModalProps {
   onClose: () => void;
   userProfile: UserProfile | undefined;
   onSettingsChanged: () => void;
+  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>;
 }
 
 interface UserIpData {
@@ -313,7 +314,7 @@ const MembershipManagement: React.FC<{ users: AdminUser[], userProfile: UserProf
     );
 };
 
-const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, onUpdate: () => void }> = ({ users, userProfile, onUpdate }) => {
+const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, onUpdate: () => void, setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>> }> = ({ users, userProfile, onUpdate, setUserProfile }) => {
      const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
      const [pointsToAdd, setPointsToAdd] = useState<Record<string, string>>({});
 
@@ -348,7 +349,13 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.details || 'Failed to add points.');
-            onUpdate();
+            
+            // If the updated user is the currently logged-in admin, update the main app state
+            if (email === userProfile.email) {
+                setUserProfile(result.user);
+            }
+
+            onUpdate(); // Refresh the list in the admin panel
             setPointsToAdd(prev => ({ ...prev, [email]: '' })); // Clear input on success
         } catch (error) {
             console.error(error);
@@ -407,7 +414,7 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
 };
 
 
-export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile, onSettingsChanged }) => {
+export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose, userProfile, onSettingsChanged, setUserProfile }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('users');
   const [logs, setLogs] = useState<string[]>([]);
   const [ipData, setIpData] = useState<UserIpData[]>([]);
@@ -534,7 +541,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
 
         <div className="flex-grow overflow-y-auto mt-4 pr-2 -mr-4">
           {isLoading && <LoadingSpinner />}
-          {!isLoading && activeTab === 'users' && userProfile && <UserManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('users')} />}
+          {!isLoading && activeTab === 'users' && userProfile && <UserManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('users')} setUserProfile={setUserProfile} />}
           {!isLoading && activeTab === 'memberships' && userProfile && <MembershipManagement users={allUsers} userProfile={userProfile} onUpdate={() => fetchData('memberships')} />}
           {!isLoading && activeTab === 'payments' && <PaymentSettings userProfile={userProfile} />}
           {!isLoading && activeTab === 'siteSettings' && <SiteSettings userProfile={userProfile} onSettingsChanged={onSettingsChanged} />}
