@@ -65,6 +65,9 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
+
 
         console.log("Table 'users' is ready.");
     } catch (error) {
@@ -163,12 +166,14 @@ export default async function handler(req, res) {
                 }
                 if (actionQuery === 'get_all_users') {
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator FROM users ORDER BY name;`
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner FROM users ORDER BY name;`
                     );
                     const users = rows.map(user => ({
                         ...user,
                         subscriptionExpiresAt: user.subscription_expires_at,
                         isModerator: user.is_moderator,
+                        hasPermanentNameColor: user.has_permanent_name_color,
+                        hasSakuraBanner: user.has_sakura_banner,
                         isPro: user.subscription_expires_at && new Date(user.subscription_expires_at) > new Date()
                     }));
                     return res.status(200).json({ users });
