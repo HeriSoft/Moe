@@ -1,17 +1,16 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const GAME_WIDTH = 320;
 const GAME_HEIGHT = 480;
-const BIRD_SIZE = 20; // Represents the ball size
+const BIRD_SIZE = 20;
 const GRAVITY = 0.3;
 const JUMP_STRENGTH = -6;
 const PIPE_WIDTH = 50;
-const PIPE_GAP = 120; // Vertical gap between pipes
+const PIPE_GAP = 120;
 const PIPE_SPEED = 2;
 const PIPE_SPAWN_INTERVAL = 1800; // ms
 
-interface Bird { // Renaming to 'Ball' internally might be more consistent but 'Bird' is fine for structure
+interface Bird {
   y: number;
   velocity: number;
 }
@@ -19,24 +18,40 @@ interface Bird { // Renaming to 'Ball' internally might be more consistent but '
 interface Pipe {
   id: number;
   x: number;
-  topHeight: number; // Height of the top pipe part
+  topHeight: number;
 }
 
-const FlappyBirdGame: React.FC = () => {
-  const [ball, setBall] = useState<Bird>({ y: GAME_HEIGHT / 2 - BIRD_SIZE / 2, velocity: 0 });
+interface FlappyBirdGameProps {
+  handlePointsGain: (amount: number) => void;
+}
+
+const FlappyBirdGame: React.FC<FlappyBirdGameProps> = ({ handlePointsGain }) => {
+  const [bird, setBird] = useState<Bird>({ y: GAME_HEIGHT / 2 - BIRD_SIZE / 2, velocity: 0 });
   const [pipes, setPipes] = useState<Pipe[]>([]);
   const [score, setScore] = useState<number>(0);
   const [gameOver, setGameOver] = useState<boolean>(false);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
-
+  
   const gameAreaRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const gameLoopRef = useRef<number | null>(null);
   const lastPipeSpawnTimeRef = useRef<number>(0);
   const pipeIdCounterRef = useRef<number>(0);
   const passedPipeIdsRef = useRef<Set<number>>(new Set());
+  
+  const [scale, setScale] = useState(1);
+  const scoreReportedRef = useRef(false);
+
+  useEffect(() => {
+    if (gameOver && !scoreReportedRef.current) {
+      handlePointsGain(score);
+      scoreReportedRef.current = true;
+    }
+  }, [gameOver, score, handlePointsGain]);
+
 
   const resetGame = useCallback(() => {
-    setBall({ y: GAME_HEIGHT / 2 - BIRD_SIZE / 2, velocity: 0 });
+    setBird({ y: GAME_HEIGHT / 2 - BIRD_SIZE / 2, velocity: 0 });
     setPipes([]);
     setScore(0);
     setGameOver(false);
@@ -44,6 +59,7 @@ const FlappyBirdGame: React.FC = () => {
     lastPipeSpawnTimeRef.current = 0;
     pipeIdCounterRef.current = 0;
     passedPipeIdsRef.current.clear();
+    scoreReportedRef.current = false;
   }, []);
 
   const spawnPipe = useCallback(() => {
@@ -57,33 +73,26 @@ const FlappyBirdGame: React.FC = () => {
     ]);
   }, []);
 
-  useEffect(() => {
-    const gameLoop = (timestamp: number) => {
+  const gameLoop = useCallback(() => {
       if (!gameStarted || gameOver) {
         gameLoopRef.current = requestAnimationFrame(gameLoop);
         return;
       }
 
-      // Ball physics
-      setBall(prevBall => {
-        const newVelocity = prevBall.velocity + GRAVITY;
-        let newY = prevBall.y + newVelocity;
+      // Bird physics
+      setBird(prevBird => {
+        const newVelocity = prevBird.velocity + GRAVITY;
+        let newY = prevBird.y + newVelocity;
         
-        if (newY < 0) { // Prevent ball from going off top
+        if (newY < 0) {
             newY = 0;
-            // Optionally, could also make velocity 0 if it hits the top
-            // newVelocity = 0; 
+            return { y: newY, velocity: 0 };
         }
 
         return { y: newY, velocity: newVelocity };
       });
 
       // Pipe logic
-      if (timestamp - lastPipeSpawnTimeRef.current > PIPE_SPAWN_INTERVAL) {
-        spawnPipe();
-        lastPipeSpawnTimeRef.current = timestamp;
-      }
-
       setPipes(prevPipes =>
         prevPipes
           .map(pipe => ({ ...pipe, x: pipe.x - PIPE_SPEED }))
@@ -91,99 +100,137 @@ const FlappyBirdGame: React.FC = () => {
       );
 
       // Collision detection & Score
-      setBall(currentBall => { 
+      setBird(currentBird => { 
+        if (gameOver) return currentBird;
+
         // Ground collision
-        if (currentBall.y + BIRD_SIZE > GAME_HEIGHT) {
+        if (currentBird.y + BIRD_SIZE > GAME_HEIGHT) {
           setGameOver(true);
-          return { ...currentBall, y: GAME_HEIGHT - BIRD_SIZE, velocity: 0 }; 
+          return { ...currentBird, y: GAME_HEIGHT - BIRD_SIZE, velocity: 0 }; 
         }
 
-        const ballXPosition = GAME_WIDTH / 4 - BIRD_SIZE / 2; // Ball's fixed X position
+        const birdXPosition = GAME_WIDTH / 4;
         for (const pipe of pipes) {
-          const ballLeft = ballXPosition; 
-          const ballRight = ballLeft + BIRD_SIZE;
-          const ballTop = currentBall.y;
-          const ballBottom = currentBall.y + BIRD_SIZE;
-
-          const pipeRight = pipe.x + PIPE_WIDTH;
+          const birdLeft = birdXPosition; 
+          const birdRight = birdLeft + BIRD_SIZE;
+          const birdTop = currentBird.y;
+          const birdBottom = currentBird.y + BIRD_SIZE;
           
-          if (ballRight > pipe.x && ballLeft < pipeRight) { 
+          if (birdRight > pipe.x && birdLeft < pipe.x + PIPE_WIDTH) { 
             const topPipeBottom = pipe.topHeight;
             const bottomPipeTop = pipe.topHeight + PIPE_GAP;
-            if (ballTop < topPipeBottom || ballBottom > bottomPipeTop) { 
+            if (birdTop < topPipeBottom || birdBottom > bottomPipeTop) { 
               setGameOver(true);
-              return currentBall; 
+              return currentBird; 
             }
           }
           
-          if (pipe.x + PIPE_WIDTH < ballLeft && !passedPipeIdsRef.current.has(pipe.id)) {
+          if (pipe.x + PIPE_WIDTH < birdLeft && !passedPipeIdsRef.current.has(pipe.id)) {
             setScore(s => s + 1);
             passedPipeIdsRef.current.add(pipe.id);
           }
         }
-        return currentBall; 
+        return currentBird; 
       });
       
       gameLoopRef.current = requestAnimationFrame(gameLoop);
-    };
+  }, [gameStarted, gameOver, pipes]); 
 
+  useEffect(() => {
+      if (gameStarted && !gameOver) {
+          const now = performance.now();
+          if (now - lastPipeSpawnTimeRef.current > PIPE_SPAWN_INTERVAL) {
+            spawnPipe();
+            lastPipeSpawnTimeRef.current = now;
+          }
+      }
+  }, [gameStarted, gameOver, pipes, spawnPipe]);
+
+  const handleGameInteraction = useCallback(() => {
+    if (!gameStarted) {
+      setGameStarted(true);
+      lastPipeSpawnTimeRef.current = performance.now(); 
+      setBird(prev => ({ ...prev, velocity: JUMP_STRENGTH })); 
+    } else if (gameOver) {
+      resetGame();
+    } else {
+      setBird(prevBird => ({ ...prevBird, velocity: JUMP_STRENGTH }));
+    }
+  }, [gameStarted, gameOver, resetGame]);
+  
+  useEffect(() => {
+    const area = gameAreaRef.current;
+    if (area) {
+        area.addEventListener('click', handleGameInteraction);
+        area.focus();
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault();
+                handleGameInteraction();
+            }
+        }
+        area.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            area.removeEventListener('click', handleGameInteraction);
+            area.removeEventListener('keydown', handleKeyDown);
+        };
+    }
+  }, [handleGameInteraction]);
+
+  useEffect(() => {
     gameLoopRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
       }
     };
-  }, [gameStarted, gameOver, pipes, spawnPipe]); 
+  }, [gameLoop]); 
 
-  const handleGameInteraction = useCallback(() => {
-    if (!gameStarted) {
-      setGameStarted(true);
-      lastPipeSpawnTimeRef.current = performance.now(); 
-      setBall(prev => ({ ...prev, velocity: JUMP_STRENGTH })); 
-    } else if (gameOver) {
-      resetGame();
-    } else {
-      setBall(prevBall => ({ ...prevBall, velocity: JUMP_STRENGTH }));
-    }
-  }, [gameStarted, gameOver, resetGame]); // setGameStarted, setBall are stable from useState
-  
   useEffect(() => {
-    const area = gameAreaRef.current;
-    if (area) {
-        area.addEventListener('click', handleGameInteraction);
-        return () => {
-            area.removeEventListener('click', handleGameInteraction);
-        };
+    const handleResize = () => {
+        if (containerRef.current) {
+            const containerWidth = containerRef.current.offsetWidth;
+            setScale(containerWidth / GAME_WIDTH);
+        }
+    };
+    const resizeObserver = new ResizeObserver(handleResize);
+    if(containerRef.current) {
+        resizeObserver.observe(containerRef.current);
     }
-  }, [handleGameInteraction]); // Depends on memoized handleGameInteraction
+    handleResize();
+    return () => resizeObserver.disconnect();
+  }, []);
 
-  const ballXRenderPosition = GAME_WIDTH / 4 - BIRD_SIZE / 2;
+  const birdXRenderPosition = GAME_WIDTH / 4;
 
   return (
-    <div className="flex flex-col items-center select-none">
+    <div ref={containerRef} className="w-full max-w-[320px] aspect-[320/480] mx-auto select-none">
       <div 
         ref={gameAreaRef}
         className="relative bg-sky-400 dark:bg-sky-900 overflow-hidden border-2 border-neutral-500 dark:border-neutral-700 cursor-pointer shadow-lg"
-        style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}
+        style={{
+            width: GAME_WIDTH,
+            height: GAME_HEIGHT,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left'
+        }}
         role="application"
         tabIndex={0} 
-        aria-label="Flappy Ball Game Area. Click or Tap to make the ball jump or to start/restart game."
+        aria-label="Flappy Bird Game Area. Click, tap, or press space to make the bird jump or to start/restart game."
       >
-        {/* Ball */}
         <div
-          className="absolute bg-red-500 border-2 border-red-700 rounded-full" // Changed to red ball
+          className="absolute bg-yellow-400 border-2 border-yellow-600 rounded-full"
           style={{
             width: BIRD_SIZE,
             height: BIRD_SIZE,
-            left: ballXRenderPosition,
-            top: ball.y,
-            // transition: 'top 0.05s linear', // Removed for direct JS control
+            left: birdXRenderPosition,
+            top: bird.y,
           }}
           role="img"
-          aria-label="Ball"
+          aria-label="Bird"
         ></div>
 
-        {/* Pipes */}
         {pipes.map(pipe => (
           <React.Fragment key={pipe.id}>
             <div
@@ -215,12 +262,12 @@ const FlappyBirdGame: React.FC = () => {
 
         {(!gameStarted || gameOver) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40">
-            <div className="text-center p-4 bg-neutral-light dark:bg-neutral-darker rounded-md shadow-xl">
-                <h3 className="text-2xl font-bold text-primary dark:text-primary-light mb-2">
-                {gameOver ? 'Game Over!' : 'Flappy Ball'}
+            <div className="text-center p-4 bg-white/80 dark:bg-slate-800/80 rounded-md shadow-xl text-slate-800 dark:text-slate-200">
+                <h3 className="text-2xl font-bold mb-2">
+                {gameOver ? 'Game Over!' : 'Flappy Bird'}
                 </h3>
-                {gameOver && <p className="text-lg text-neutral-700 dark:text-neutral-300 mb-1">Your Score: {score}</p>}
-                <p className="text-md text-neutral-600 dark:text-neutral-400">
+                {gameOver && <p className="text-lg mb-1">Your Score: {score}</p>}
+                <p className="text-md">
                 {gameOver ? 'Click to Play Again' : 'Click to Start'}
                 </p>
             </div>
