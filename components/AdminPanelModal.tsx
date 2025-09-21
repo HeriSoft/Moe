@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon, PlusIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -8,6 +8,7 @@ type AdminUser = UserProfile & {
     subscriptionExpiresAt?: string | null;
     isModerator?: boolean;
     isPro?: boolean;
+    points?: number;
 };
 
 
@@ -314,9 +315,10 @@ const MembershipManagement: React.FC<{ users: AdminUser[], userProfile: UserProf
 
 const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, onUpdate: () => void }> = ({ users, userProfile, onUpdate }) => {
      const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
+     const [pointsToAdd, setPointsToAdd] = useState<Record<string, string>>({});
 
     const handleToggleMod = async (email: string, currentStatus: boolean) => {
-        setIsSubmitting(email);
+        setIsSubmitting(email + '_mod');
         try {
             const response = await fetch(ADMIN_API_ENDPOINT, {
                 method: 'POST',
@@ -332,26 +334,69 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
             setIsSubmitting(null);
         }
     };
+    
+    const handleAddPoints = async (email: string) => {
+        const amount = parseInt(pointsToAdd[email] || '0', 10);
+        if (!amount) return;
+
+        setIsSubmitting(email + '_points');
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'add_points_admin', email, amount }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Failed to add points.');
+            onUpdate();
+            setPointsToAdd(prev => ({ ...prev, [email]: '' })); // Clear input on success
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
 
     return (
         <div className="space-y-2">
             {users.map(user => (
-                <div key={user.email} className="bg-slate-100 dark:bg-[#2d2d40] p-3 rounded-lg flex justify-between items-center">
-                    <div className="flex items-center gap-2">
+                <div key={user.email} className="bg-slate-100 dark:bg-[#2d2d40] p-3 rounded-lg flex justify-between items-center flex-wrap gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-grow">
                         <img src={user.imageUrl} alt={user.name} className="w-8 h-8 rounded-full" />
-                        <div>
-                            <p className={`font-semibold flex items-center gap-1.5 ${user.isModerator ? MOD_TEXT_COLOR : ''}`}>
-                                {user.isModerator && <MOD_ICON className="w-4 h-4" />}
-                                {user.name}
+                        <div className="min-w-0">
+                            <p className={`font-semibold flex items-center gap-1.5 ${user.isModerator ? MOD_TEXT_COLOR : ''} truncate`}>
+                                {user.isModerator && <MOD_ICON className="w-4 h-4 flex-shrink-0" />}
+                                <span className="truncate">{user.name}</span>
                                 {user.isPro && <VipTag />}
                             </p>
-                            <p className="text-sm text-slate-500">{user.email}</p>
+                            <p className="text-sm text-slate-500 truncate">{user.email}</p>
+                            <p className="text-xs text-slate-400 mt-1">Points: {user.points?.toLocaleString() || 0}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                         <div className="flex items-center gap-1">
+                            <input
+                                type="number"
+                                placeholder="Pts"
+                                value={pointsToAdd[user.email] || ''}
+                                onChange={(e) => setPointsToAdd(p => ({ ...p, [user.email]: e.target.value }))}
+                                className="w-20 p-1 text-sm rounded-md bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600"
+                                disabled={isSubmitting?.startsWith(user.email)}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => handleAddPoints(user.email)}
+                                disabled={isSubmitting?.startsWith(user.email) || !pointsToAdd[user.email] || parseInt(pointsToAdd[user.email]) === 0}
+                                className="p-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"
+                                title="Add points"
+                            >
+                                <PlusIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="h-8 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
                         <span className="text-sm font-semibold">MOD</span>
                         <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked={!!user.isModerator} onChange={() => handleToggleMod(user.email, !!user.isModerator)} disabled={isSubmitting === user.email} className="sr-only peer" />
+                            <input type="checkbox" checked={!!user.isModerator} onChange={() => handleToggleMod(user.email, !!user.isModerator)} disabled={isSubmitting?.startsWith(user.email)} className="sr-only peer" />
                             <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
                         </label>
                     </div>
@@ -396,7 +441,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 id: user.id,
                 name: user.name,
                 email: user.email,
-                imageUrl: user.image_url, // Fix: map image_url to imageUrl
+                imageUrl: user.image_url,
+                points: user.points,
                 isPro: user.isPro,
                 subscriptionExpiresAt: user.subscriptionExpiresAt,
                 isModerator: user.isModerator,
