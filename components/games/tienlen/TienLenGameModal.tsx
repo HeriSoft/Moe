@@ -1,13 +1,13 @@
 import React from 'react';
 // FIX: Correct import path casing and replace XMarkIcon with CloseIcon.
 import { CloseIcon, CardsIcon } from '../../icons';
-import { TienLenGameModalProps } from '../../../types.ts';
+import { TienLenGameModalProps } from '../../../types';
 // Attempting to resolve Vercel build issue.
 // The path "./TienLenGame.tsx" should be correct if both files are in the same directory
 // and casing matches the actual filename in the repository.
-import TienLenGame from './TienLenGame.tsx';
+import TienLenGame from '../TienLenGame';
 
-const TienLenGameModal: React.FC<TienLenGameModalProps> = ({ isOpen, onClose }) => {
+const TienLenGameModal: React.FC<TienLenGameModalProps> = ({ isOpen, onClose, handlePointsGain, setNotifications }) => {
   if (!isOpen) return null;
 
   return (
@@ -39,7 +39,7 @@ const TienLenGameModal: React.FC<TienLenGameModalProps> = ({ isOpen, onClose }) 
 
         <div className="flex-grow overflow-hidden p-0.5 sm:p-1 md:p-2 bg-green-600 dark:bg-green-700 rounded-md flex items-center justify-center">
           {/* TienLenGame component will be responsible for its own layout and responsiveness */}
-          <TienLenGame />
+          <TienLenGame handlePointsGain={handlePointsGain} setNotifications={setNotifications} />
         </div>
         
         <div className="mt-1 sm:mt-2 md:mt-3 w-full flex justify-center">
