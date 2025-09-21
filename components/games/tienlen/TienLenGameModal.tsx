@@ -1,6 +1,6 @@
-
 import React from 'react';
-import { XMarkIcon, CardsIcon } from '../../Icons.tsx';
+// FIX: Correct import path casing and replace XMarkIcon with CloseIcon.
+import { CloseIcon, CardsIcon } from '../../icons';
 import { TienLenGameModalProps } from '../../../types.ts';
 // Attempting to resolve Vercel build issue.
 // The path "./TienLenGame.tsx" should be correct if both files are in the same directory
@@ -32,7 +32,8 @@ const TienLenGameModal: React.FC<TienLenGameModalProps> = ({ isOpen, onClose }) 
             className="p-1 sm:p-1.5 md:p-2 rounded-full hover:bg-white/20 transition-colors"
             aria-label="Close Tiến Lên game"
           >
-            <XMarkIcon className="w-5 h-5 sm:w-6 md:w-7" />
+            {/* FIX: Use CloseIcon instead of XMarkIcon */}
+            <CloseIcon className="w-5 h-5 sm:w-6 md:w-7" />
           </button>
         </div>
 
