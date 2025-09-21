@@ -3,22 +3,23 @@ import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
 import { SettingsModal } from './components/SettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { CCTalkModal } from './components/CCTalkModal'; // New
-import { WelcomeModal } from './components/WelcomeModal'; // New
+import { GamePortalModal } from './components/GamePortalModal'; 
+import { WelcomeModal } from './components/WelcomeModal'; 
 import { GenerationModal } from './components/GenerationModal';
 import { MediaGalleryModal } from './components/MediaGalleryModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { AdminMovieModal } from './components/AdminMovieModal';
 import { VideoCinemaModal } from './components/VideoCinemaModal';
 import { MembershipModal } from './components/MembershipModal';
-import { MembershipManagementModal } from './components/MembershipManagementModal'; // New
-import { FilesLibraryModal } from './components/FilesLibraryModal'; // New
-import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; // New
-import { MusicBoxModal } from './components/MusicBoxModal'; // New
-import { AdminMusicModal } from './components/AdminMusicModal'; // New
+import { MembershipManagementModal } from './components/MembershipManagementModal'; 
+import { FilesLibraryModal } from './components/FilesLibraryModal'; 
+import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; 
+import { MusicBoxModal } from './components/MusicBoxModal'; 
+import { AdminMusicModal } from './components/AdminMusicModal'; 
 import {
   streamModelResponse,
   addExp,
+  addPoints
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
 import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
@@ -80,7 +81,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isCCTalkModalOpen, setIsCCTalkModalOpen] = useState(false); // Changed default to false
+  const [isGamePortalOpen, setIsGamePortalOpen] = useState(false); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [model, setModel] = useState('gemini-2.5-flash');
@@ -102,10 +103,10 @@ const App: React.FC = () => {
   const [isAdminMovieModalOpen, setIsAdminMovieModalOpen] = useState(false);
   const [isVideoCinemaModalOpen, setIsVideoCinemaModalOpen] = useState(false);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
-  const [isMembershipManagementOpen, setIsMembershipManagementOpen] = useState(false); // New
-  const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); // New
-  const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); // New
-  const [isAdminMusicOpen, setIsAdminMusicOpen] = useState(false); // New
+  const [isMembershipManagementOpen, setIsMembershipManagementOpen] = useState(false); 
+  const [isFilesLibraryOpen, setIsFilesLibraryOpen] = useState(false); 
+  const [isAdminFilesLibraryOpen, setIsAdminFilesLibraryOpen] = useState(false); 
+  const [isAdminMusicOpen, setIsAdminMusicOpen] = useState(false); 
   const [siteSettings, setSiteSettings] = useState<{ logoDriveId?: string | null }>({});
 
 
@@ -266,6 +267,24 @@ const App: React.FC = () => {
         // Do not notify the user, this is a background process.
     }
   }, [isLoggedIn, userProfile]);
+
+  const handlePointsGain = useCallback(async (amount: number) => {
+    if (!isLoggedIn || !userProfile) return;
+
+    // Optimistic update
+    setUserProfile(prev => prev ? { ...prev, points: Math.max(0, (prev.points || 0) + amount) } : undefined);
+
+    try {
+        const { points } = await addPoints(amount, userProfile);
+        // Sync with server state
+        setUserProfile(prev => prev ? { ...prev, points } : undefined);
+    } catch (error) {
+        console.error("Failed to update points:", error);
+        // Revert optimistic update on failure
+        setUserProfile(prev => prev ? { ...prev, points: Math.max(0, (prev.points || 0) - amount) } : undefined);
+        setNotifications(prev => ["Could not sync points with server.", ...prev.slice(0,19)]);
+    }
+  }, [isLoggedIn, userProfile, setNotifications]);
 
   const startNewChat = useCallback(async (): Promise<string | null> => {
     if (!isLoggedIn) {
@@ -976,7 +995,7 @@ const App: React.FC = () => {
         onAdminPanelClick={() => setIsAdminPanelOpen(true)}
         onAdminMovieModalClick={() => setIsAdminMovieModalOpen(true)}
         onAdminFilesLibraryClick={() => setIsAdminFilesLibraryOpen(true)}
-        onAdminMusicClick={() => setIsAdminMusicOpen(true)} // New
+        onAdminMusicClick={() => setIsAdminMusicOpen(true)} 
         onMembershipClick={handleMembershipClick}
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
@@ -1018,7 +1037,7 @@ const App: React.FC = () => {
           onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
           onOpenVideoCinema={() => setIsVideoCinemaModalOpen(true)}
           onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)}
-          onOpenCCTalk={() => setIsCCTalkModalOpen(true)}
+          onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
@@ -1060,10 +1079,12 @@ const App: React.FC = () => {
           googleDriveService.signIn();
         }}
        />
-      <CCTalkModal
-        isOpen={isCCTalkModalOpen}
-        onClose={() => setIsCCTalkModalOpen(false)}
+      <GamePortalModal
+        isOpen={isGamePortalOpen}
+        onClose={() => setIsGamePortalOpen(false)}
         userProfile={userProfile}
+        handlePointsGain={handlePointsGain}
+        setNotifications={setNotifications}
       />
       <GenerationModal
         isOpen={isGenerationModalOpen}
