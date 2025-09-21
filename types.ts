@@ -46,6 +46,7 @@ export interface UserProfile {
     isModerator?: boolean; // NEW: For moderator status
     level?: number; // For user level
     exp?: number; // For user experience points
+    points?: number; // For game portal points
 }
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
@@ -110,4 +111,76 @@ export interface Song {
   avatar_drive_id?: string; // Drive ID for the spinning disc avatar
   background_drive_id?: string; // Drive ID for the player background
   is_favorite?: boolean; // True if the current user has favorited this song
+}
+
+// --- TYPES FOR TIEN LEN GAME ---
+
+export enum CardSuit {
+  SPADES = '♠',
+  CLUBS = '♣',
+  DIAMONDS = '♦',
+  HEARTS = '♥',
+}
+
+export enum CardRank {
+  THREE = '3', FOUR = '4', FIVE = '5', SIX = '6',
+  SEVEN = '7', EIGHT = '8', NINE = '9', TEN = '10',
+  JACK = 'J', QUEEN = 'Q', KING = 'K', ACE = 'A', TWO = '2',
+}
+
+export interface TienLenCard {
+  id: string;
+  rank: CardRank;
+  suit: CardSuit;
+  value: number;
+  isSelected: boolean;
+}
+
+export type PlayerHand = TienLenCard[];
+
+export enum TienLenHandType {
+  INVALID = 'INVALID',
+  SINGLE = 'SINGLE',
+  PAIR = 'PAIR',
+  TRIPLE = 'TRIPLE',
+  STRAIGHT = 'STRAIGHT', // Sảnh
+  FOUR_OF_A_KIND = 'FOUR_OF_A_KIND', // Tứ Quý
+  THREE_PAIR_STRAIGHT = 'THREE_PAIR_STRAIGHT', // Ba Đôi Thông
+}
+
+export interface ValidatedHand {
+  type: TienLenHandType;
+  cards: TienLenCard[];
+  rankValue: number; // Highest card value for comparison
+  suitValue?: number; // For single card comparison
+  length?: number; // For straights
+}
+
+export interface Turn {
+  player: 'player' | 'ai';
+  playedCards: ValidatedHand | null;
+  passed: boolean;
+}
+
+export interface TienLenGameState {
+  playerHand: PlayerHand;
+  aiHand: PlayerHand;
+  table: TienLenCard[];
+  lastPlayedHand: ValidatedHand | null;
+  currentPlayer: 'player' | 'ai';
+  turnHistory: Turn[];
+  winner: 'player' | 'ai' | null;
+  isDealing: boolean;
+  statusMessage: string;
+  playerScore: number;
+  aiScore: number;
+  turnTimer: number;
+  isPaused: boolean;
+  firstPlayerOfTheGame: 'player' | 'ai' | null;
+  isFirstTurnOfGame: boolean;
+}
+
+export interface TienLenGameModalProps {
+  isOpen: boolean;
+  onClose: () => void;
 }
