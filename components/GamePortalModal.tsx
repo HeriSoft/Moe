@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Import the newly added ArrowUturnLeftIcon
 import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon } from './icons';
 import type { UserProfile } from '../types';
 import TienLenGame from './Games/TienLenGame';
