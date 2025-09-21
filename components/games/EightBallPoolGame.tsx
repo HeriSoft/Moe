@@ -265,7 +265,7 @@ const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain,
         let subMessage = "";
         if (isGameOver === 'lose') {
             if (cueBallData?.isPocketed) {
-                subMessage = "Cue ball scratched!";
+                subMessage = "Cue ball scratched! (-10 points)";
             } else {
                 subMessage = "8-ball pocketed too early or illegally.";
             }
@@ -354,7 +354,8 @@ const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain,
             const distToPocketCenter = Math.sqrt(dx * dx + dy * dy);
             if (distToPocketCenter < LOGICAL_POCKET_RADIUS - ball.radius / 2) { 
                 if (ball.type === 'cue') {
-                    setNotifications(prev => ["Cue ball scratched!", ...prev.slice(0, 19)]);
+                    setNotifications(prev => ["Cue ball scratched! -10 points", ...prev.slice(0, 19)]);
+                    handlePointsGain(-10);
                     setTimeout(() => {
                         setBallsState(bs => bs.map(b => b.id === 'cue' ? {...initialBallsSetup().find(ib => ib.id === 'cue')!, isPocketed: false} : b));
                     }, 1000);
@@ -424,7 +425,7 @@ const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain,
                  const cueBallData = ballsRef.current.find(b => b.id === 'cue');
                 let subMessage = "";
                 if (currentGameOver === 'lose') {
-                    if (cueBallData?.isPocketed) subMessage = "Cue ball scratched!";
+                    if (cueBallData?.isPocketed) subMessage = "Cue ball scratched! (-10 points)";
                     else subMessage = "8-ball pocketed too early or illegally.";
                 }
                 if (subMessage) {
@@ -452,18 +453,18 @@ const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain,
     };
   }, [gameLoop, drawTable, drawBall, drawAimingLine]);
 
-  const getLogicalPos = useCallback((e: React.MouseEvent | React.TouchEvent): { x: number; y: number } => {
+  const getLogicalPos = useCallback((e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent): { x: number; y: number } => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     
     let clientX, clientY;
-    if ('touches' in e) {
+    if ('touches' in e && e.touches.length > 0) {
         clientX = e.touches[0].clientX;
         clientY = e.touches[0].clientY;
     } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
+        clientX = (e as MouseEvent | React.MouseEvent).clientX;
+        clientY = (e as MouseEvent | React.MouseEvent).clientY;
     }
     
     const physicalX = clientX - rect.left;
@@ -489,61 +490,71 @@ const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain,
         return;
     }
     
-    const pos = getLogicalPos(e);
     setIsAimingState(true);
-    setAimStartState(pos); 
-    setAimEndState(pos);   
+    setAimStartState(getLogicalPos(e)); 
+    setAimEndState(getLogicalPos(e));   
     if (!animationFrameIdRef.current) { 
         animationFrameIdRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [getLogicalPos, setNotifications, gameLoop]);
 
-  const handleInteractionMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    if (!isAimingRef.current || gameOverRef.current) return;
-    setAimEndState(getLogicalPos(e));
-  }, [getLogicalPos]);
+    const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+        if (!isAimingRef.current) return;
+        setAimEndState(getLogicalPos(moveEvent));
+    };
 
-  const handleInteractionEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    if (!isAimingRef.current || !aimStartRef.current || !aimEndRef.current || gameOverRef.current) return;
-    
-    const currentBalls = ballsRef.current;
-    const cueBall = currentBalls.find(b => b.id === 'cue');
-    if (!cueBall || cueBall.isPocketed) {
-      setIsAimingState(false);
-      return;
-    }
+    const handleEnd = () => {
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleEnd);
+        window.removeEventListener('touchmove', handleMove);
+        window.removeEventListener('touchend', handleEnd);
 
-    const dx = cueBall.x - aimEndRef.current.x; 
-    const dy = cueBall.y - aimEndRef.current.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+        if (!isAimingRef.current || !aimStartRef.current || !aimEndRef.current || gameOverRef.current) {
+            setIsAimingState(false); // Clean up
+            return;
+        }
 
-    if (dist < 5) { 
-      setIsAimingState(false);
-      setAimStartState(null);
-      setAimEndState(null);
-      return;
-    }
+        const currentCueBall = ballsRef.current.find(b => b.id === 'cue');
+        if (!currentCueBall || currentCueBall.isPocketed) {
+          setIsAimingState(false);
+          return;
+        }
 
-    const MAX_POWER = 15;
-    const powerRatio = Math.min(1, dist / 150); 
-    const power = powerRatio * MAX_POWER;
+        const dx = currentCueBall.x - aimEndRef.current.x; 
+        const dy = currentCueBall.y - aimEndRef.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-    const newVx = (dx / dist) * power;
-    const newVy = (dy / dist) * power;
+        if (dist < 5) { 
+          setIsAimingState(false);
+          setAimStartState(null);
+          setAimEndState(null);
+          return;
+        }
 
-    setBallsState(prevBalls =>
-      prevBalls.map(b => (b.id === 'cue' ? { ...b, vx: newVx, vy: newVy } : b))
-    );
+        const MAX_POWER = 15;
+        const powerRatio = Math.min(1, dist / 150); 
+        const power = powerRatio * MAX_POWER;
 
-    setIsAimingState(false);
-    setAimStartState(null);
-    setAimEndState(null);
-    if (!animationFrameIdRef.current) { 
-        animationFrameIdRef.current = requestAnimationFrame(gameLoop);
-    }
-  }, [gameLoop]);
+        const newVx = (dx / dist) * power;
+        const newVy = (dy / dist) * power;
+
+        setBallsState(prevBalls =>
+          prevBalls.map(b => (b.id === 'cue' ? { ...b, vx: newVx, vy: newVy } : b))
+        );
+
+        setIsAimingState(false);
+        setAimStartState(null);
+        setAimEndState(null);
+        if (!animationFrameIdRef.current) { 
+            animationFrameIdRef.current = requestAnimationFrame(gameLoop);
+        }
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleEnd);
+
+  }, [getLogicalPos, gameLoop, setNotifications]);
   
   const handleResetBalls = useCallback(() => {
     setBallsState(initialBallsSetup());
@@ -562,12 +573,7 @@ const EightBallPoolGame: React.FC<EightBallPoolGameProps> = ({ handlePointsGain,
       <canvas
         ref={canvasRef}
         onMouseDown={handleInteractionStart}
-        onMouseMove={handleInteractionMove}
-        onMouseUp={handleInteractionEnd}
-        onMouseLeave={isAimingState ? handleInteractionEnd : undefined}
         onTouchStart={handleInteractionStart}
-        onTouchMove={handleInteractionMove}
-        onTouchEnd={handleInteractionEnd}
         className="border-2 border-yellow-700 dark:border-yellow-400 rounded-sm shadow-lg cursor-crosshair"
         style={{ maxWidth: '100%', height: 'auto' }}
         aria-label="8-Ball Pool game table"
