@@ -65,6 +65,8 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
 
 
         console.log("Table 'users' is ready.");
@@ -119,6 +121,17 @@ async function isUserPro(email) {
     }
     
     return isPro;
+}
+
+// Invalidate user pro status cache
+async function invalidateUserProCache(email) {
+    if (isRedisConfigured && email) {
+        try {
+            await redis.del(`user-pro-status:${email}`);
+        } catch (e) {
+            console.error("Redis cache invalidation error:", e);
+        }
+    }
 }
 
 
@@ -304,7 +317,7 @@ export default async function handler(req, res) {
 
                     // Fetch the complete, updated profile from the database
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points FROM users WHERE email = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner FROM users WHERE email = $1;`,
                         [user.email]
                     );
                     
@@ -321,6 +334,8 @@ export default async function handler(req, res) {
                             level: dbUser.level,
                             exp: dbUser.exp,
                             points: dbUser.points,
+                            hasPermanentNameColor: dbUser.has_permanent_name_color,
+                            hasSakuraBanner: dbUser.has_sakura_banner,
                         };
                         return res.status(200).json({ success: true, user: fullUserProfile });
                     }
@@ -400,6 +415,86 @@ export default async function handler(req, res) {
                 } catch (dbError) {
                     console.error("Database error during points update:", dbError);
                     return res.status(500).json({ error: 'Database operation failed.' });
+                }
+                break;
+            }
+
+            case 'awardPrize': {
+                const { prizeId } = payload;
+                if (!userEmail || !prizeId) {
+                    return res.status(400).json({ error: 'User and prizeId are required.' });
+                }
+                await logAction(userEmail, `won prize ${prizeId} from lucky wheel`);
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+                    
+                    const userResult = await client.query('SELECT id, level, exp FROM users WHERE email = $1 FOR UPDATE;', [userEmail]);
+                    if (userResult.rows.length === 0) throw new Error('User not found.');
+                    let { id, level, exp } = userResult.rows[0];
+
+                    let expToAdd = 0;
+                    switch (prizeId) {
+                        case 'exp_5': expToAdd = 5; break;
+                        case 'exp_10': expToAdd = 10; break;
+                        case 'exp_15': expToAdd = 15; break;
+                        case 'exp_50': expToAdd = 50; break;
+                        case 'exp_100': expToAdd = 100; break;
+                        case 'exp_500': expToAdd = 500; break;
+                        case 'premium_1m':
+                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '30 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
+                            await invalidateUserProCache(userEmail);
+                            break;
+                        case 'premium_2m':
+                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '60 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
+                            await invalidateUserProCache(userEmail);
+                            break;
+                        case 'premium_1y':
+                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '365 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
+                            await invalidateUserProCache(userEmail);
+                            break;
+                        case 'name_color':
+                            await client.query('UPDATE users SET has_permanent_name_color = true, updated_at = NOW() WHERE id = $1;', [id]);
+                            break;
+                        case 'sakura_banner':
+                            await client.query('UPDATE users SET has_sakura_banner = true, updated_at = NOW() WHERE id = $1;', [id]);
+                            break;
+                        case 'lose': break;
+                        default: throw new Error('Invalid prizeId');
+                    }
+            
+                    if (expToAdd > 0) {
+                        exp += expToAdd;
+                        let expToNextLevel = getExpForLevel(level);
+                        while (level < 100 && exp >= expToNextLevel) {
+                            exp -= expToNextLevel;
+                            level++;
+                            expToNextLevel = getExpForLevel(level);
+                        }
+                        if (level >= 100) exp = 0;
+                        await client.query('UPDATE users SET level = $1, exp = $2, updated_at = NOW() WHERE id = $3;', [level, exp, id]);
+                    }
+                    
+                    await client.query('COMMIT');
+
+                    const { rows } = await pool.query(
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner FROM users WHERE id = $1;`,
+                        [id]
+                    );
+                    const dbUser = rows[0];
+                    const fullUserProfile = {
+                        id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                        subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                        isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
+                        hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                    };
+                    result = { success: true, user: fullUserProfile };
+                } catch (dbError) {
+                    await client.query('ROLLBACK');
+                    throw dbError;
+                } finally {
+                    client.release();
                 }
                 break;
             }
