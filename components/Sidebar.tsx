@@ -77,6 +77,10 @@ const UserProfileSection: React.FC<{
     const progress = level >= 100 ? 100 : Math.round((exp / expNeeded) * 100);
     const levelInfo = getLevelInfo(level);
     
+    const hasCustomColor = userProfile.hasPermanentNameColor;
+    const customColorClass = 'bg-gradient-to-r from-sky-400 to-purple-500 bg-clip-text text-transparent';
+    const nameClass = hasCustomColor ? customColorClass : levelInfo.className;
+
     const UserNameContent = (
       <>
         <span>{userProfile.name}</span>
@@ -85,14 +89,14 @@ const UserProfileSection: React.FC<{
     );
 
     const UserNameDisplay = (
-        <p className={`font-semibold flex items-center gap-2 ${levelInfo.className} ${!levelInfo.isMarquee && 'truncate'}`}>
+        <p className={`font-semibold flex items-center gap-2 ${nameClass} ${!levelInfo.isMarquee && 'truncate'}`}>
             {UserNameContent}
         </p>
     );
 
     const MarqueeUserNameDisplay = (
        <div className="w-full overflow-hidden whitespace-nowrap">
-            <p className={`font-semibold inline-flex items-center gap-2 ${levelInfo.className}`}>
+            <p className={`font-semibold inline-flex items-center gap-2 ${nameClass}`}>
                 {UserNameContent}
             </p>
        </div>
@@ -100,11 +104,16 @@ const UserProfileSection: React.FC<{
 
     return (
         <div className="flex flex-col items-center w-full">
-            <button onClick={onProfileClick} className="flex items-center p-2 rounded-md hover:bg-[#2d2d40] transition-colors text-left w-full">
-                <img src={userProfile.imageUrl} alt={userProfile.name} className="w-8 h-8 rounded-full mr-3 flex-shrink-0" />
-                <div className="flex-grow min-w-0">
-                    {levelInfo.isMarquee ? MarqueeUserNameDisplay : UserNameDisplay}
-                    <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
+            <button 
+                onClick={onProfileClick} 
+                className={`relative p-2 rounded-md hover:bg-[#2d2d40] transition-colors text-left w-full ${userProfile.hasSakuraBanner ? 'sakura-banner' : ''}`}
+            >
+                <div className="flex items-center">
+                    <img src={userProfile.imageUrl} alt={userProfile.name} className="w-8 h-8 rounded-full mr-3 flex-shrink-0" />
+                    <div className="flex-grow min-w-0">
+                        {levelInfo.isMarquee ? MarqueeUserNameDisplay : UserNameDisplay}
+                        <p className="text-xs text-slate-400 truncate">{userProfile.email}</p>
+                    </div>
                 </div>
             </button>
 
@@ -341,6 +350,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
         }
         .level-ascendant {
             animation: marquee-ascendant 10s linear infinite;
+        }
+        .sakura-banner::before {
+            content: '';
+            position: absolute;
+            top: -10%;
+            right: -10%;
+            width: 60%;
+            height: 60%;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 0 C 40 20, 20 20, 20 40 C 20 60, 40 70, 50 100 C 60 70, 80 60, 80 40 C 80 20, 60 20, 50 0 Z" fill="%23FFC0CB" opacity="0.8"/><path d="M50 10 C 45 25, 30 25, 30 40 C 30 55, 45 65, 50 90 C 55 65, 70 55, 70 40 C 70 25, 55 25, 50 10 Z" fill="%23FFFFFF" opacity="0.9"/><circle cx="50" cy="45" r="5" fill="%23FFDF00"/></svg>');
+            background-repeat: no-repeat;
+            background-position: top right;
+            background-size: contain;
+            opacity: 0.15;
+            pointer-events: none;
+            transform: rotate(15deg);
         }
       `}</style>
     </>
