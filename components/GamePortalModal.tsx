@@ -95,7 +95,7 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 className="text-2xl font-bold flex items-center gap-2">
             {activeGame === 'lobby' ? <PuzzlePieceIcon className="w-7 h-7 text-indigo-500" /> : <button onClick={() => setActiveGame('lobby')} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full"><ArrowUturnLeftIcon className="w-6 h-6 text-indigo-500"/></button>}
-            Cổng Game
+            Cổng Game v1.0
           </h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close Game Portal">
             <CloseIcon className="w-7 h-7" />
@@ -152,4 +152,5 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
     </div>
   );
 };
+
 
