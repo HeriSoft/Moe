@@ -64,6 +64,7 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
 
 
         console.log("Table 'users' is ready.");
@@ -303,7 +304,7 @@ export default async function handler(req, res) {
 
                     // Fetch the complete, updated profile from the database
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp FROM users WHERE email = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points FROM users WHERE email = $1;`,
                         [user.email]
                     );
                     
@@ -319,6 +320,7 @@ export default async function handler(req, res) {
                             isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                             level: dbUser.level,
                             exp: dbUser.exp,
+                            points: dbUser.points,
                         };
                         return res.status(200).json({ success: true, user: fullUserProfile });
                     }
@@ -375,6 +377,29 @@ export default async function handler(req, res) {
                     return res.status(500).json({ error: 'Database operation failed.' });
                 } finally {
                     client.release();
+                }
+                break;
+            }
+            
+            case 'add_points': {
+                const { amount } = payload;
+                const email = userEmail;
+                 if (!email) {
+                    return res.status(400).json({ error: 'User is required.' });
+                }
+
+                try {
+                    const { rows } = await pool.query(
+                        `UPDATE users SET points = GREATEST(0, points + $1), updated_at = NOW() WHERE email = $2 RETURNING points;`,
+                        [amount, email]
+                    );
+                    if (rows.length === 0) {
+                        throw new Error('User not found.');
+                    }
+                    result = { success: true, user: { points: rows[0].points } };
+                } catch (dbError) {
+                    console.error("Database error during points update:", dbError);
+                    return res.status(500).json({ error: 'Database operation failed.' });
                 }
                 break;
             }
