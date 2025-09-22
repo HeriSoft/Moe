@@ -464,8 +464,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                 >
                     <BellIcon className="w-6 h-6" />
                     {notifications.length > 0 && (
-                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
-                            {notifications.length}
+                        <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs text-white">
+                            {notifications.length > 9 ? '9+' : notifications.length}
                         </span>
                     )}
                 </button>
