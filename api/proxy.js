@@ -96,11 +96,15 @@ async function isUserPro(email) {
         }
     }
 
-    // 2. If not in cache, check database using both methods for compatibility
+    // 2. If not in cache, check database
     let isPro = false;
     try {
+        // FIX: The query now relies solely on a future expiration date.
+        // The previous logic (`subscription_status = 'active' OR ...`) was flawed,
+        // as a user's status might not be updated immediately upon expiration,
+        // incorrectly granting them continued access to Pro features.
         const { rows } = await pool.query(
-            `SELECT id FROM users WHERE email = $1 AND (subscription_status = 'active' OR (subscription_expires_at IS NOT NULL AND subscription_expires_at > NOW()));`,
+            `SELECT id FROM users WHERE email = $1 AND subscription_expires_at IS NOT NULL AND subscription_expires_at > NOW();`,
             [email]
         );
         isPro = rows.length > 0;
