@@ -27,13 +27,40 @@ if (process.env.REDIS_URL) {
 // --- Pro User Check ---
 async function isUserPro(email) {
     if (!email) return false;
+    // 1. Check cache first
     if (redis) {
-        const cachedStatus = await redis.get(`user-pro-status:${email}`);
-        if (cachedStatus !== null) return cachedStatus === 'true';
+        try {
+            const cachedStatus = await redis.get(`user-pro-status:${email}`);
+            if (cachedStatus !== null) return cachedStatus === 'true';
+        } catch (e) {
+            console.error("Redis cache check error:", e);
+        }
     }
-    const { rows } = await pool.query("SELECT subscription_status FROM users WHERE email = $1 AND subscription_status = 'active';", [email]);
-    const isPro = rows.length > 0;
-    if (redis) await redis.set(`user-pro-status:${email}`, isPro, 'EX', 300);
+    
+    // 2. If not in cache, check database
+    let isPro = false;
+    try {
+        // FIX: Replaced the flawed, status-only check with a strict, date-based query.
+        // This ensures that only users with an active, unexpired subscription are considered Pro,
+        // aligning this endpoint's security with the rest of the application.
+        const { rows } = await pool.query(
+            "SELECT id FROM users WHERE email = $1 AND subscription_expires_at IS NOT NULL AND subscription_expires_at > NOW();",
+            [email]
+        );
+        isPro = rows.length > 0;
+    } catch (e) {
+        console.error("Database check error:", e.message);
+        return false; // Fail closed for security
+    }
+
+    // 3. Store result in cache
+    if (redis) {
+        try {
+            await redis.set(`user-pro-status:${email}`, isPro, 'EX', 300); // Cache for 5 minutes
+        } catch(e) {
+            console.error("Redis cache set error:", e);
+        }
+    }
     return isPro;
 }
 
