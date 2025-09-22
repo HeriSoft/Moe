@@ -9,7 +9,7 @@ const prizes = [
   { label: '500 EXP', prizeId: 'exp_500', color: { inner: '#ef9a9a', outer: '#f44336' } },
   { label: '1 Month Pro', prizeId: 'premium_1m', color: { inner: '#dcedc8', outer: '#8bc34a' } },
   { label: 'Name Color', prizeId: 'name_color', color: { inner: '#9fa8da', outer: '#3f51b5' } },
-  { label: '2 Months Pro', prizeId: 'premium_2m', color: { inner: '#fff59d', outer: '#ffeb3b' } },
+  { label: '2000 EXP', prizeId: 'exp_2000', color: { inner: '#fff59d', outer: '#ffeb3b' } },
   { label: 'Sakura Banner', prizeId: 'sakura_banner', color: { inner: '#f06292', outer: '#e91e63' } },
   { label: '1 Year Pro', prizeId: 'premium_1y', color: { inner: '#ffd700', outer: '#ff4d4d' } },
   { label: 'Try Again', prizeId: 'lose', color: { inner: '#e0e0e0', outer: '#757575' } },
