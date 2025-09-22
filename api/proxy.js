@@ -464,8 +464,8 @@ export default async function handler(req, res) {
                             await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '365 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
                             await invalidateUserProCache(userEmail);
                             break;
-                        case 'name_color':
-                            await client.query('UPDATE users SET has_permanent_name_color = true, updated_at = NOW() WHERE id = $1;', [id]);
+                        case 'ticket_1':
+                            await client.query('UPDATE users SET points = points + 1000, updated_at = NOW() WHERE id = $1;', [id]);
                             break;
                         case 'sakura_banner':
                             await client.query('UPDATE users SET has_sakura_banner = true, updated_at = NOW() WHERE id = $1;', [id]);
