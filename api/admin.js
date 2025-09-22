@@ -201,6 +201,29 @@ export default async function handler(req, res) {
                     return res.status(403).json({ error: 'Forbidden', details: 'You do not have permission to access this resource.' });
                 }
                 
+                if (action === 'reset_cosmetics') {
+                    if (email !== ADMIN_EMAIL) {
+                        return res.status(403).json({ error: 'Forbidden', details: 'This action can only be performed by the admin on their own account.' });
+                    }
+                    const { rows } = await pool.query(
+                        `UPDATE users SET has_permanent_name_color = false, has_sakura_banner = false, updated_at = NOW() WHERE email = $1 RETURNING *;`,
+                        [email]
+                    );
+                    if (rows.length === 0) throw new Error('Admin user not found for cosmetic reset.');
+
+                    const dbUser = rows[0];
+                    const fullUserProfile = {
+                        id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                        subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                        isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
+                        hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                    };
+
+                    await logAction(ADMIN_EMAIL, `reset their own cosmetic items.`);
+                    return res.status(200).json({ success: true, user: fullUserProfile });
+                }
+                
                 if (action === 'save_site_settings') {
                     if (logoDriveId) {
                         await redis.set('site_settings', JSON.stringify({ logoDriveId }));
