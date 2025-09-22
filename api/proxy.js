@@ -455,12 +455,9 @@ export default async function handler(req, res) {
                         case 'exp_50': expToAdd = 50; break;
                         case 'exp_100': expToAdd = 100; break;
                         case 'exp_500': expToAdd = 500; break;
+                        case 'exp_2000': expToAdd = 2000; break;
                         case 'premium_1m':
                             await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '30 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
-                            await invalidateUserProCache(userEmail);
-                            break;
-                        case 'premium_2m':
-                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '60 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
                             await invalidateUserProCache(userEmail);
                             break;
                         case 'premium_1y':
