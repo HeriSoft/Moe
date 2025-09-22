@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon, PlusIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon, PlusIcon, ArrowUturnLeftIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -9,6 +9,8 @@ type AdminUser = UserProfile & {
     isModerator?: boolean;
     isPro?: boolean;
     points?: number;
+    hasPermanentNameColor?: boolean;
+    hasSakuraBanner?: boolean;
 };
 
 
@@ -336,6 +338,29 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
         }
     };
     
+    const handleResetCosmetics = async (email: string) => {
+        if (email !== userProfile.email) return;
+        setIsSubmitting(email + '_cosmetics');
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'reset_cosmetics', email }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Failed to reset cosmetics.');
+            
+            // Update main app state for the admin
+            setUserProfile(result.user);
+            // Refresh the list in the admin panel
+            onUpdate();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
+    
     const handleAddPoints = async (email: string) => {
         const amount = parseInt(pointsToAdd[email] || '0', 10);
         if (!amount) return;
@@ -401,6 +426,16 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
                             </button>
                         </div>
                         <div className="h-8 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                        {user.email === userProfile.email && (user.hasPermanentNameColor || user.hasSakuraBanner) && (
+                            <button
+                                onClick={() => handleResetCosmetics(user.email)}
+                                disabled={isSubmitting?.startsWith(user.email)}
+                                className="p-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 disabled:opacity-50"
+                                title="Reset your special cosmetics (Name Color / Banner)"
+                            >
+                                <ArrowUturnLeftIcon className="w-4 h-4"/>
+                            </button>
+                        )}
                         <span className="text-sm font-semibold">MOD</span>
                         <label className="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" checked={!!user.isModerator} onChange={() => handleToggleMod(user.email, !!user.isModerator)} disabled={isSubmitting?.startsWith(user.email)} className="sr-only peer" />
@@ -453,6 +488,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 isPro: user.isPro,
                 subscriptionExpiresAt: user.subscriptionExpiresAt,
                 isModerator: user.isModerator,
+                hasPermanentNameColor: user.hasPermanentNameColor,
+                hasSakuraBanner: user.hasSakuraBanner,
             }));
             setAllUsers(mappedUsers);
         }
