@@ -1,9 +1,25 @@
-// FIX: Add a triple-slash directive to include Vite's client types, which defines `import.meta.env`.
-/// <reference types="vite/client" />
-
-import { initializeApp, FirebaseApp } from "firebase/app";
-import { getDatabase, ref, onValue, push, serverTimestamp, onDisconnect, set, get, child, Database, Unsubscribe, off, serverTimestamp as dbServerTimestamp } from "firebase/database";
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import {
+  getDatabase,
+  ref,
+  onValue,
+  onDisconnect,
+  set,
+  serverTimestamp,
+  goOnline,
+  goOffline,
+  push,
+  query,
+  limitToLast,
+  Database,
+  Unsubscribe,
+  off,
+  update
+} from 'firebase/database';
 import type { UserProfile, ChatRoomMessage, OnlineUser } from '../types';
+
+// FIX: Removed the conflicting global declaration.
+// The merged declaration is now in `googleDriveService.ts` and will apply globally.
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,169 +31,109 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase ONCE and export the app instance.
 let app: FirebaseApp;
-let database: Database | null;
+let db: Database;
 
 try {
-  // Check if all config keys are present before initializing
-  let configComplete = true;
-  for (const key in firebaseConfig) {
-      if (!firebaseConfig[key as keyof typeof firebaseConfig]) {
-          console.error(`Firebase config is missing key: ${key}. Initialization aborted.`);
-          configComplete = false;
-          break;
-      }
-  }
-  if (configComplete) {
-      app = initializeApp(firebaseConfig);
-      database = getDatabase(app);
-  } else {
-      app = null as any; // Explicitly set to a falsy value
-      database = null;
-  }
+  app = initializeApp(firebaseConfig);
+  db = getDatabase(app);
 } catch (error) {
   console.error("Firebase initialization error:", error);
-  app = null as any;
-  database = null;
 }
 
-export const firebaseApp = app;
+// Store user status
+export const setupPresence = (user: UserProfile): Unsubscribe => {
+  if (!db || !user) return () => {};
 
-// Function to get the database instance.
-const getDb = (): Database | null => {
-    return database;
-};
-
-
-// --- PRESENCE SYSTEM ---
-export const setupPresence = (user: UserProfile) => {
-  const db = getDb();
-  if (!db || !user || !user.id) return; // Added check for user.id
-
-  // Use user.id which is now the Firebase UID
-  const myConnectionsRef = ref(db, `users/${user.id}/connections`);
-  const lastOnlineRef = ref(db, `users/${user.id}/lastOnline`);
-  const connectedRef = ref(db, '.info/connected');
-  
-  // Set user profile data, but only non-sensitive parts for presence
-  const userStatusRef = ref(db, `users/${user.id}`);
-  const presenceData = {
-    name: user.name,
-    imageUrl: user.imageUrl,
-    email: user.email, // Storing email can be useful for lookups
-    aboutMe: user.aboutMe || '',
-    // Connections and lastOnline will be handled by the presence logic
+  const userStatusDatabaseRef = ref(db, `/status/${user.id}`);
+  const isOfflineForDatabase = {
+    isOnline: false,
+    lastOnline: serverTimestamp(),
   };
-  set(userStatusRef, presenceData); // Overwrites with fresh data on connect
 
-  onValue(connectedRef, (snap) => {
-    if (snap.val() === true) {
-      const con = push(myConnectionsRef);
-      onDisconnect(con).remove();
-      set(con, true);
-      onDisconnect(lastOnlineRef).set(serverTimestamp());
+  const userForPresence = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    imageUrl: user.imageUrl,
+    isPro: user.isPro,
+    isModerator: user.isModerator,
+    level: user.level,
+    hasPermanentNameColor: user.hasPermanentNameColor,
+    hasSakuraBanner: user.hasSakuraBanner,
+    aboutMe: user.aboutMe || '',
+    isOnline: true,
+    lastOnline: serverTimestamp(),
+  };
+
+  const connectedRef = ref(db, '.info/connected');
+  const unsubscribe = onValue(connectedRef, (snapshot) => {
+    if (snapshot.val() === false) {
+      return;
     }
+    onDisconnect(userStatusDatabaseRef).update(isOfflineForDatabase).then(() => {
+      update(userStatusDatabaseRef, userForPresence);
+    });
   });
+
+  goOnline(db);
+
+  return () => {
+    goOffline(db);
+    update(userStatusDatabaseRef, isOfflineForDatabase);
+    unsubscribe(); // Unsubscribe from .info/connected
+  };
 };
 
 export const onUsersStatusChange = (callback: (users: { [key: string]: OnlineUser }) => void): Unsubscribe => {
-    const db = getDb();
-    if (!db) {
-        console.error("Firebase not available for onUsersStatusChange.");
-        return () => {}; // Return a no-op function
-    }
-    const usersRef = ref(db, 'users');
-    const listener = onValue(usersRef, (snapshot) => {
-        const usersData = snapshot.val() || {};
-        const onlineUsers: { [key: string]: OnlineUser } = {};
-        Object.keys(usersData).forEach(userId => {
-            onlineUsers[userId] = {
-                ...usersData[userId],
-                id: userId,
-                isOnline: !!usersData[userId].connections,
-            };
-        });
-        callback(onlineUsers);
-    });
-    return () => off(usersRef, 'value', listener);
+  if (!db) return () => {};
+  const usersRef = ref(db, '/status');
+  const unsubscribe = onValue(usersRef, (snapshot) => {
+    const usersData = snapshot.val() || {};
+    callback(usersData);
+  });
+  return unsubscribe;
 };
 
-// --- CHAT MESSAGES ---
-export const sendMessage = (text: string, user: UserProfile) => {
-    const db = getDb();
-    if (!db || !text.trim() || !user || !user.id) return; // Added check for user.id
-    const messagesRef = ref(db, 'chat-messages');
-    push(messagesRef, {
-        text: text.trim(),
-        timestamp: serverTimestamp(),
-        user: {
-            id: user.id, // This is the Firebase UID
-            name: user.name,
-            imageUrl: user.imageUrl,
-            level: user.level,
-            isPro: user.isPro,
-            isModerator: user.isModerator,
-            hasPermanentNameColor: user.hasPermanentNameColor,
-            hasSakuraBanner: user.hasSakuraBanner,
-        }
-    });
-};
+export const onNewMessage = (callback: React.Dispatch<React.SetStateAction<ChatRoomMessage[]>>): Unsubscribe => {
+    if (!db) return () => {};
+    const messagesRef = ref(db, '/chat_messages');
+    const messagesQuery = query(messagesRef, limitToLast(100));
 
-export const onNewMessage = (callback: (messages: ChatRoomMessage[]) => void): Unsubscribe => {
-    const db = getDb();
-    if (!db) {
-        console.error("Firebase not available for onNewMessage.");
-        return () => {}; // Return a no-op function
-    }
-    const messagesRef = ref(db, 'chat-messages');
-    const listener = onValue(messagesRef, (snapshot) => {
+    const unsubscribe = onValue(messagesQuery, (snapshot) => {
         const messagesData = snapshot.val() || {};
         const messagesList: ChatRoomMessage[] = Object.keys(messagesData).map(key => ({
             id: key,
             ...messagesData[key]
-        })).sort((a, b) => a.timestamp - b.timestamp);
+        }));
         callback(messagesList);
     });
-    return () => off(messagesRef, 'value', listener);
+    return unsubscribe;
 };
 
-// --- USER PROFILE ---
-export const fetchAllUsers = async (currentUserEmail: string): Promise<OnlineUser[]> => {
-    if (!getDb()) return [];
-    try {
-        const response = await fetch('/api/admin?action=get_all_chat_users', {
-             headers: { 'X-User-Email': currentUserEmail } 
-        });
-        if (!response.ok) throw new Error("Failed to fetch user list from server");
-        const data = await response.json();
-        return data.users || [];
-    } catch (error) {
-        console.error("Error fetching all users:", error);
-        return [];
-    }
+
+export const sendMessage = (text: string, user: UserProfile) => {
+  if (!db || !user) return;
+  const messagesRef = ref(db, '/chat_messages');
+  const newMessage = {
+    text,
+    timestamp: serverTimestamp(),
+    user: {
+      id: user.id,
+      name: user.name,
+      imageUrl: user.imageUrl,
+      level: user.level,
+      isPro: user.isPro,
+      isModerator: user.isModerator,
+      hasPermanentNameColor: user.hasPermanentNameColor,
+      hasSakuraBanner: user.hasSakuraBanner,
+    },
+  };
+  push(messagesRef, newMessage);
 };
 
-export const updateAboutMe = async (user: UserProfile, aboutMe: string): Promise<string> => {
-    const response = await fetch('/api/admin', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-User-Email': user.email, // Authenticates the request
-        },
-        body: JSON.stringify({ action: 'update_profile', aboutMe })
-    });
-    const result = await response.json();
-    if (!response.ok) {
-        throw new Error(result.details || "Failed to update profile.");
-    }
-
-    // Also update Firebase in real-time
-    const db = getDb();
-    if (db && user.id) {
-        const userRef = ref(db, `users/${user.id}/aboutMe`);
-        await set(userRef, aboutMe);
-    }
-    
-    return result.aboutMe;
+export const updateAboutMe = async (user: UserProfile, aboutMe: string) => {
+  if (!db || !user) return;
+  const userStatusRef = ref(db, `/status/${user.id}`);
+  await update(userStatusRef, { aboutMe });
 };
