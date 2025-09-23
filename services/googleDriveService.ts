@@ -1,19 +1,5 @@
-// FIX: Add type definitions for Vite environment variables to resolve TypeScript errors
-// related to `import.meta.env` and missing `vite/client` types.
-interface ImportMetaEnv {
-  readonly VITE_GOOGLE_CLIENT_ID: string;
-  readonly VITE_FIREBASE_API_KEY: string;
-  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
-  readonly VITE_FIREBASE_DATABASE_URL: string;
-  readonly VITE_FIREBASE_PROJECT_ID: string;
-  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
-  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
-  readonly VITE_FIREBASE_APP_ID: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+// FIX: Add a triple-slash directive to include Vite's client types, which defines `import.meta.env`.
+/// <reference types="vite/client" />
 
 import type { ChatSession, UserProfile } from '../types';
 import { fetchUserProfileAndLogLogin } from './geminiService';
@@ -33,6 +19,8 @@ import {
 
 // Use Vite's import.meta.env to access environment variables on the client-side
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+// FIX: Add Firebase API key for GAPI initialization.
+const FIREBASE_API_KEY = firebaseApp ? firebaseApp.options.apiKey : undefined;
 
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
@@ -126,8 +114,10 @@ export async function initClient(
         await new Promise<void>((resolve, reject) => {
             gapi.load('client', async () => {
                 try {
-                    // FIX: Removed the conflicting apiKey. The client will rely solely on the OAuth token.
+                    // FIX: Provided the Firebase API key to ensure the GAPI client is correctly associated
+                    // with the Google Cloud project during initialization. This can resolve "API not enabled" errors.
                     await gapi.client.init({
+                        apiKey: FIREBASE_API_KEY,
                         discoveryDocs: DISCOVERY_DOCS,
                     });
                     resolve();
