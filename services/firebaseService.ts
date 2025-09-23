@@ -5,10 +5,11 @@ import 'firebase/compat/database';
 
 import { 
     getAuth, 
-    signInWithCredential, 
     GoogleAuthProvider, 
     signOut as firebaseSignOut, 
-    Auth 
+    Auth,
+    signInWithPopup,
+    UserCredential
 } from 'firebase/auth';
 import { 
     getDatabase, 
@@ -55,17 +56,26 @@ try {
   console.error("Firebase initialization error:", error);
 }
 
-// Function to sign in to Firebase using a Google ID token
-export const signInToFirebase = async (idToken: string) => {
+// New sign-in function using Firebase's popup flow, which also requests Drive scopes
+export const signInWithGoogle = async (): Promise<{ user: UserCredential['user'], accessToken: string }> => {
     if (!auth) throw new Error("Firebase Auth not initialized.");
-    try {
-        const credential = GoogleAuthProvider.credential(idToken);
-        await signInWithCredential(auth, credential);
-        console.log("Successfully signed in to Firebase.");
-    } catch (error) {
-        console.error("Firebase sign-in error:", error);
-        // Don't throw, as the app might still function with Drive access
+    
+    const provider = new GoogleAuthProvider();
+    // Request all necessary scopes for both Firebase profile and Google Drive API
+    provider.addScope('https://www.googleapis.com/auth/drive.appdata');
+    provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+    provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+    provider.addScope('https://www.googleapis.com/auth/drive');
+
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken = credential?.accessToken;
+
+    if (!accessToken) {
+        throw new Error("Could not retrieve Google Access Token after sign-in.");
     }
+
+    return { user: result.user, accessToken };
 };
 
 // Export a unified sign-out function
