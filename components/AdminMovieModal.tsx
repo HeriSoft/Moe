@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CloseIcon, RefreshIcon, FilmIcon, TrashIcon, PlusIcon, EyeIcon, EditIcon } from './icons';
 import type { UserProfile, Movie, MovieEpisode } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
@@ -230,7 +231,7 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
                   {isLoading && movies.length === 0 && <p>Loading...</p>}
                   {movies.map((movie: Movie) => (
                       <div key={movie.id} className="group relative">
-                          <img src={googleDriveService.getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="aspect-[2/3] w-full object-cover rounded-lg"/>
+                          <DriveImage fileId={movie.thumbnail_drive_id} alt={movie.title} className="aspect-[2/3] w-full object-cover rounded-lg"/>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex flex-col justify-end">
                               <h4 className="text-white font-bold text-sm leading-tight line-clamp-2">{movie.title}</h4>
                           </div>
@@ -286,6 +287,7 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
               </div>
 
               <div className="flex justify-end pt-4">
+                  {/* FIX: Corrected variable name from 'editingFile' to 'editingMovie'. */}
                   <button type="submit" disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
                     {isLoading ? (editingMovie ? 'Updating...' : 'Uploading...') : (editingMovie ? 'Update Movie' : 'Upload Movie')}
                   </button>

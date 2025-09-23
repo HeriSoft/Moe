@@ -3,6 +3,7 @@ import type { ChatSession, UserProfile } from '../types';
 import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, MusicalNoteIcon } from './icons';
 import * as googleDriveService from '../services/googleDriveService';
 import { getLevelInfo, VipTag } from './uiUtils';
+import { DriveImage } from './DriveImage';
 
 // --- NEW EXP SYSTEM HELPERS ---
 
@@ -198,8 +199,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#171725] text-white flex flex-col p-4 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-6 h-10 flex items-center">
             {siteSettings?.logoDriveId ? (
-                <img 
-                    src={googleDriveService.getDriveFilePublicUrl(siteSettings.logoDriveId)}
+                <DriveImage 
+                    fileId={siteSettings.logoDriveId}
                     alt="Moe Chat Logo"
                     className="max-h-full w-auto"
                 />

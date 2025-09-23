@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon, PlusIcon, ArrowUturnLeftIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 // Extend UserProfile for admin-specific data
 type AdminUser = UserProfile & {
@@ -118,7 +119,7 @@ const SiteSettings: React.FC<{ userProfile: UserProfile | undefined, onSettingsC
                 <label className="font-semibold">Site Logo</label>
                 <p className="text-xs text-slate-500 mb-2">This logo will replace the "Moe Chat" text in the sidebar.</p>
                 <div className="h-24 w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center p-2">
-                    {logoDriveId ? <img src={googleDriveService.getDriveFilePublicUrl(logoDriveId)} alt="Site Logo Preview" className="max-h-full max-w-full object-contain"/> : <span className="text-slate-400">No Logo Set</span>}
+                    {logoDriveId ? <DriveImage fileId={logoDriveId} alt="Site Logo Preview" className="max-h-full max-w-full object-contain"/> : <span className="text-slate-400">No Logo Set</span>}
                 </div>
                 <div className="flex gap-2 mt-2">
                     <button onClick={handleSelectLogo} className="flex-1 py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Logo from Drive</button>
@@ -209,14 +210,14 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
                 <div className="space-y-2">
                     <label className="font-semibold">Bank QR Code</label>
                     <div className="aspect-square w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
-                        {bankQrId ? <img src={googleDriveService.getDriveFilePublicUrl(bankQrId)} alt="Bank QR Preview" className="w-full h-full object-contain rounded-lg"/> : <PhotoIcon className="w-16 h-16 text-slate-400"/>}
+                        {bankQrId ? <DriveImage fileId={bankQrId} alt="Bank QR Preview" className="w-full h-full object-contain rounded-lg"/> : <PhotoIcon className="w-16 h-16 text-slate-400"/>}
                     </div>
                     <button onClick={() => handleSelectImage(setBankQrId)} className="w-full py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Image from Drive</button>
                 </div>
                  <div className="space-y-2">
                     <label className="font-semibold">Momo QR Code</label>
                     <div className="aspect-square w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
-                        {momoQrId ? <img src={googleDriveService.getDriveFilePublicUrl(momoQrId)} alt="Momo QR Preview" className="w-full h-full object-contain rounded-lg"/> : <PhotoIcon className="w-16 h-16 text-slate-400"/>}
+                        {momoQrId ? <DriveImage fileId={momoQrId} alt="Momo QR Preview" className="w-full h-full object-contain rounded-lg"/> : <PhotoIcon className="w-16 h-16 text-slate-400"/>}
                     </div>
                     <button onClick={() => handleSelectImage(setMomoQrId)} className="w-full py-2 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 text-sm font-semibold">Select Image from Drive</button>
                 </div>

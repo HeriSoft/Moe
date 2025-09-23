@@ -3,7 +3,7 @@ import type { ChatSession, Attachment, Message, UserProfile, Song } from '../typ
 import { MessageComponent } from './Message';
 import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon, ChatBubbleIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
-import { getDriveFilePublicUrl } from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 
 // Add SpeechRecognition types to window for TypeScript
@@ -557,8 +557,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
               className="p-2 rounded-full bg-pink-600 text-white shadow-lg transition-all duration-300 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 dark:focus:ring-offset-[#171725]"
             >
               {musicBoxState !== 'closed' && currentSong?.avatar_drive_id ? (
-                <img 
-                  src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} 
+                <DriveImage 
+                  fileId={currentSong.avatar_drive_id} 
                   alt="Now Playing" 
                   className={`w-6 h-6 rounded-full object-cover ${isPlaying ? 'animate-spin-slow' : ''}`}
                 />

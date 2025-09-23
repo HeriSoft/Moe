@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, FilmIcon } from './icons';
 import type { UserProfile, Movie, MovieEpisode } from '../types';
-import { getDriveFilePublicUrl } from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
@@ -146,7 +146,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                  {selectedMovie ? (
                     <>
                         <div className="flex flex-row gap-3 sm:gap-4 mb-3 sm:mb-4 flex-shrink-0">
-                            <img src={getDriveFilePublicUrl(selectedMovie.thumbnail_drive_id)} alt={selectedMovie.title} 
+                            <DriveImage fileId={selectedMovie.thumbnail_drive_id} alt={selectedMovie.title} 
                                 className="w-24 sm:w-32 h-auto object-cover rounded-md sm:rounded-lg flex-shrink-0"/>
                             <div className="flex-grow min-w-0">
                                 <h3 className="text-lg sm:text-xl font-bold dark:text-white line-clamp-2">{selectedMovie.title}</h3>
@@ -213,7 +213,7 @@ export const VideoCinemaModal: React.FC<VideoCinemaModalProps> = ({ isOpen, onCl
                         <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4">
                             {movies.map(movie => (
                                 <button key={movie.id} onClick={() => handleSelectMovie(movie)} className="group relative aspect-[2/3] block rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-[#2d2d40]">
-                                    <img src={getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
+                                    <DriveImage fileId={movie.thumbnail_drive_id} alt={movie.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"/>
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 sm:p-2 flex flex-col justify-end">
                                         <h4 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2">{movie.title}</h4>
                                     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, DownloadIcon, PuzzlePieceIcon, WrenchScrewdriverIcon, ArchiveBoxIcon, DocumentIcon, ClockIcon } from './icons';
 import type { UserProfile, FileItem, FilePart } from '../types';
-import { getDriveFilePublicUrl } from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 const FILES_API_ENDPOINT = '/api/files';
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
@@ -262,7 +262,7 @@ export const FilesLibraryModal: React.FC<FilesLibraryModalProps> = ({ isOpen, on
                     <div key={file.id} className="bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-4 flex flex-col">
                         <div className="flex gap-4">
                             <div className="w-16 h-16 flex-shrink-0 bg-white dark:bg-slate-700 rounded-md p-2">
-                                {file.icon_drive_id ? <img src={getDriveFilePublicUrl(file.icon_drive_id)} alt={file.name} className="w-full h-full object-contain" /> : getFileIcon(file.tags)}
+                                {file.icon_drive_id ? <DriveImage fileId={file.icon_drive_id} alt={file.name} className="w-full h-full object-contain" /> : getFileIcon(file.tags)}
                             </div>
                             <div className="flex-grow min-w-0">
                                 <h3 className="font-bold truncate text-slate-800 dark:text-white">{file.name}</h3>

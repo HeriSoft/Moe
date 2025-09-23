@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CloseIcon } from './icons';
 import type { UserProfile, PaymentHistoryItem } from '../types';
-import { getDriveFilePublicUrl } from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 // --- TYPE DEFINITIONS ---
 interface MembershipManagementModalProps {
@@ -128,8 +128,8 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
             <div className="text-center">
                 <h3 className="text-xl font-semibold mb-4">Quét mã QR để thanh toán</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {paymentSettings?.bankQrId && <img src={getDriveFilePublicUrl(paymentSettings.bankQrId)} alt="Bank QR" className="w-full h-auto object-contain rounded-lg"/>}
-                    {paymentSettings?.momoQrId && <img src={getDriveFilePublicUrl(paymentSettings.momoQrId)} alt="Momo QR" className="w-full h-auto object-contain rounded-lg"/>}
+                    {paymentSettings?.bankQrId && <DriveImage fileId={paymentSettings.bankQrId} alt="Bank QR" className="w-full h-auto object-contain rounded-lg"/>}
+                    {paymentSettings?.momoQrId && <DriveImage fileId={paymentSettings.momoQrId} alt="Momo QR" className="w-full h-auto object-contain rounded-lg"/>}
                 </div>
                 <div className="mt-4 space-y-2 text-sm">
                     <p>Số tiền: <strong className="text-lg">{renewalPlan.price.toLocaleString('vi-VN')} VNĐ</strong></p>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CloseIcon, MagnifyingGlassIcon, RefreshIcon, PlayIcon, PauseIcon, ForwardIcon, BackwardIcon, StopIcon, MusicalNoteIcon, MinusIcon, StarIcon } from './icons';
 import type { UserProfile, Song } from '../types';
-import { getDriveFilePublicUrl } from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
+import { getDriveImageAsDataUrl } from '../services/googleDriveService';
 
 const GENRES = ['Pop', 'Hip-Hop', 'Rap', 'Indie', 'Acoustic'];
 const SONGS_PER_PAGE = 5;
@@ -29,6 +30,30 @@ interface MusicBoxModalProps {
 export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, onMinimize, userProfile, songs, currentSong, isPlaying, isLoading, onSetCurrentSong, onTogglePlay, onNext, onPrev, onToggleFavorite, activeGenre, setActiveGenre, searchTerm, setSearchTerm }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [error, setError] = useState<string | null>(null);
+    const [backgroundImageUrl, setBackgroundImageUrl] = useState<string>('');
+
+
+    useEffect(() => {
+        let isMounted = true;
+        if (currentSong?.background_drive_id) {
+            getDriveImageAsDataUrl(currentSong.background_drive_id)
+                .then(url => {
+                    if (isMounted) {
+                        setBackgroundImageUrl(url);
+                    }
+                })
+                .catch(err => {
+                    console.error("Failed to load background image:", err);
+                    if (isMounted) {
+                        setBackgroundImageUrl(''); // Clear on error
+                    }
+                });
+        } else {
+            setBackgroundImageUrl(''); // Clear if no song or no background
+        }
+        return () => { isMounted = false; };
+    }, [currentSong?.background_drive_id]);
+
 
     const handleGenreChange = (genre: string) => {
         setActiveGenre(genre);
@@ -136,8 +161,6 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
 
     if (!isOpen) return null;
 
-    const backgroundImageUrl = currentSong?.background_drive_id ? getDriveFilePublicUrl(currentSong.background_drive_id) : '';
-
     return (
         <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
             <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col p-4 sm:p-6 m-4" onClick={e => e.stopPropagation()}>
@@ -206,8 +229,8 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                     </div>
                     {/* Right: Player */}
                     <div 
-                        className="w-full md:w-1/2 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-2 sm:p-4 flex flex-col justify-center items-center text-center relative overflow-hidden bg-cover bg-center"
-                        style={{ backgroundImage: `url(${backgroundImageUrl})` }}
+                        className="w-full md:w-1/2 bg-slate-100 dark:bg-[#2d2d40] rounded-lg p-2 sm:p-4 flex flex-col justify-center items-center text-center relative overflow-hidden bg-cover bg-center transition-all duration-500"
+                        style={{ backgroundImage: backgroundImageUrl ? `url(${backgroundImageUrl})` : 'none' }}
                     >
                         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
 
@@ -216,7 +239,7 @@ export const MusicBoxModal: React.FC<MusicBoxModalProps> = ({ isOpen, onClose, o
                             <div className="flex-shrink-0 w-24 h-24 bg-slate-800/50 rounded-full flex items-center justify-center shadow-lg border-4 border-white/10">
                                 <div className={`relative w-full h-full p-2 ${isPlaying ? 'animate-spin-slow' : ''}`}>
                                     {currentSong?.avatar_drive_id ? (
-                                        <img src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} alt="avatar" className="w-full h-full object-cover rounded-full" />
+                                        <DriveImage fileId={currentSong.avatar_drive_id} alt="avatar" className="w-full h-full object-cover rounded-full" />
                                     ) : (
                                         <MusicalNoteIcon className="w-12 h-12 text-slate-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"/>
                                     )}

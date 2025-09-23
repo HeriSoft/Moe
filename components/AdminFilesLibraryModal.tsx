@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CloseIcon, TrashIcon, PlusIcon, DownloadIcon, PhotoIcon, EditIcon } from './icons';
 import type { UserProfile, FileItem, FilePart } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 const FILES_API_ENDPOINT = '/api/files';
 
@@ -212,7 +213,7 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
                 {files.map((file: FileItem) => (
                     <div key={file.id} className="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
                         <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 flex-shrink-0">{file.icon_drive_id ? <img src={googleDriveService.getDriveFilePublicUrl(file.icon_drive_id)} alt=""/> : <PhotoIcon/>}</div>
+                            <div className="w-8 h-8 flex-shrink-0">{file.icon_drive_id ? <DriveImage fileId={file.icon_drive_id} alt={file.name}/> : <PhotoIcon/>}</div>
                             <span className="truncate">{file.name}</span>
                             {file.is_vip && <span className="vip-tag-shine">VIP</span>}
                         </div>

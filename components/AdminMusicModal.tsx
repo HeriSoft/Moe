@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CloseIcon, TrashIcon, PlusIcon, MusicalNoteIcon, EditIcon, PhotoIcon } from './icons';
 import type { UserProfile, Song } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
+import { DriveImage } from './DriveImage';
 
 const MUSIC_API_ENDPOINT = '/api/music';
 const GENRES = ['Pop', 'Hip-Hop', 'Rap', 'Indie', 'Acoustic', 'EDM', 'Rock', 'Ballad'];
@@ -197,7 +198,7 @@ export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClos
                     <div key={song.id} className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 rounded-md">
                         <div className="min-w-0 flex items-center gap-3">
                            {song.avatar_drive_id ? (
-                             <img src={googleDriveService.getDriveFilePublicUrl(song.avatar_drive_id)} alt="avatar" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                             <DriveImage fileId={song.avatar_drive_id} alt="avatar" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                            ) : (
                              <div className="w-10 h-10 rounded-full bg-slate-300 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
                                <MusicalNoteIcon className="w-5 h-5" />
@@ -240,14 +241,14 @@ export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClos
                   <div>
                       <label className="label-style mb-1">Avatar (for Disc)</label>
                       <div className="aspect-square w-full bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center">
-                          {avatar ? <img src={googleDriveService.getDriveFilePublicUrl(avatar.id)} alt="Avatar Preview" className="w-full h-full object-cover rounded-full"/> : <PhotoIcon className="w-10 h-10 text-slate-400"/>}
+                          {avatar ? <DriveImage fileId={avatar.id} alt="Avatar Preview" className="w-full h-full object-cover rounded-full"/> : <PhotoIcon className="w-10 h-10 text-slate-400"/>}
                       </div>
                       <button type="button" onClick={() => handleSelectImage(setAvatar)} className="mt-2 w-full text-sm p-2 bg-slate-200 dark:bg-slate-600 rounded-md">Select from Drive</button>
                   </div>
                    <div>
                       <label className="label-style mb-1">Background Image</label>
                       <div className="aspect-square w-full bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
-                          {background ? <img src={googleDriveService.getDriveFilePublicUrl(background.id)} alt="Background Preview" className="w-full h-full object-cover rounded-lg"/> : <PhotoIcon className="w-10 h-10 text-slate-400"/>}
+                          {background ? <DriveImage fileId={background.id} alt="Background Preview" className="w-full h-full object-cover rounded-lg"/> : <PhotoIcon className="w-10 h-10 text-slate-400"/>}
                       </div>
                       <button type="button" onClick={() => handleSelectImage(setBackground)} className="mt-2 w-full text-sm p-2 bg-slate-200 dark:bg-slate-600 rounded-md">Select from Drive</button>
                   </div>
