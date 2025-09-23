@@ -5,8 +5,6 @@ import { auth, signInWithGoogle, signOut as firebaseSignOut } from './firebaseSe
 import { onAuthStateChanged, User } from 'firebase/auth';
 
 
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
-
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
 const APP_FOLDER_NAME = 'Moe Chat Data';
 
@@ -97,7 +95,6 @@ export async function initClient(
         await new Promise<void>((resolve) => {
             gapi.load('client', async () => {
                 await gapi.client.init({
-                    apiKey: GOOGLE_API_KEY,
                     discoveryDocs: DISCOVERY_DOCS,
                 });
                 gapiInitialized = true;
@@ -237,10 +234,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
         binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
-}
-
-export function getDriveFilePublicUrl(fileId: string): string {
-    return `https://drive.google.com/thumbnail?id=${fileId}&key=${GOOGLE_API_KEY}`;
 }
 
 export async function getDriveImageAsDataUrl(fileId: string): Promise<string> {
