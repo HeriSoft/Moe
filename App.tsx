@@ -1014,7 +1014,7 @@ const App: React.FC = () => {
         onMembershipClick={handleMembershipClick}
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
-        onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
+        onSignOut={() => googleDriveService.signOutFromApp(() => handleAuthChange(false))}
         isLoggedIn={isLoggedIn}
         userProfile={userProfile}
         siteSettings={siteSettings}
