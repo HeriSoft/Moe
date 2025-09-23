@@ -316,6 +316,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
             pointer-events: none;
             transform: rotate(15deg);
         }
+        @keyframes shine-vip {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .vip-tag-shine {
+            position: relative;
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 0.75rem; /* 12px */
+            font-weight: 700;
+            line-height: 1.2;
+            color: #1e293b; /* slate-800 */
+            background: linear-gradient(110deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
+            border-radius: 0.375rem; /* rounded-md */
+            overflow: hidden;
+            -webkit-mask-image: -webkit-radial-gradient(white, black);
+        }
+        .vip-tag-shine::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
+            animation: shine-vip 3s ease-in-out infinite;
+            animation-delay: 1s;
+        }
       `}</style>
     </>
   );
