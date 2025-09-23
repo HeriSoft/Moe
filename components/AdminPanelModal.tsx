@@ -71,12 +71,16 @@ const SiteSettings: React.FC<{ userProfile: UserProfile | undefined, onSettingsC
         fetchSettings();
     }, []);
 
-    const handleSelectLogo = () => {
-        googleDriveService.showPicker((files) => {
-            if (files && files.length > 0) {
-                setLogoDriveId(files[0].id);
-            }
-        }, { mimeTypes: 'image/png,image/jpeg,image/webp,image/svg+xml' });
+    const handleSelectLogo = async () => {
+        try {
+            await googleDriveService.showPicker((files) => {
+                if (files && files.length > 0) {
+                    setLogoDriveId(files[0].id);
+                }
+            }, { mimeTypes: 'image/png,image/jpeg,image/webp,image/svg+xml' });
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not open file picker.');
+        }
     };
 
     const handleSave = async () => {
@@ -170,12 +174,16 @@ const PaymentSettings: React.FC<{ userProfile: UserProfile | undefined }> = ({ u
         fetchSettings();
     }, []);
 
-    const handleSelectImage = (setter: React.Dispatch<React.SetStateAction<string | null>>) => {
-        googleDriveService.showPicker((files) => {
-            if (files && files.length > 0) {
-                setter(files[0].id);
-            }
-        }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+    const handleSelectImage = async (setter: React.Dispatch<React.SetStateAction<string | null>>) => {
+        try {
+            await googleDriveService.showPicker((files) => {
+                if (files && files.length > 0) {
+                    setter(files[0].id);
+                }
+            }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not open file picker.');
+        }
     };
 
     const handleSave = async () => {
