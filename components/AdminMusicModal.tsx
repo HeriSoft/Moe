@@ -105,12 +105,16 @@ export const AdminMusicModal: React.FC<AdminMusicModalProps> = ({ isOpen, onClos
       }
   }, [editingSong, activeTab, resetForm]);
 
-  const handleSelectImage = (setter: React.Dispatch<React.SetStateAction<{ id: string; name: string } | null>>) => {
-    googleDriveService.showPicker((files) => {
-        if (files && files.length > 0) {
-            setter({ id: files[0].id, name: files[0].name });
-        }
-    }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+  const handleSelectImage = async (setter: React.Dispatch<React.SetStateAction<{ id: string; name: string } | null>>) => {
+    try {
+        await googleDriveService.showPicker((files) => {
+            if (files && files.length > 0) {
+                setter({ id: files[0].id, name: files[0].name });
+            }
+        }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+    } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not open file picker.');
+    }
   };
   
   const handleSubmitSong = async (e: React.FormEvent) => {
