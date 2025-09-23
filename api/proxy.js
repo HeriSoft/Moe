@@ -156,7 +156,6 @@ async function logAction(email, message) {
         console.error("Redis Logging Error:", e);
     }
 }
-// ... (Các hàm helper khác như TEXT_MIME_TYPES, formatHistoryForOpenAI, handleOpenAIStream giữ nguyên) ...
 
 const TEXT_MIME_TYPES = new Set([
     'text/plain', 'text/markdown', 'text/html', 'text/css', 'text/javascript',
@@ -167,11 +166,25 @@ const TEXT_MIME_TYPES = new Set([
 
 function formatHistoryForOpenAI(messages) {
     return messages
-      .filter(msg => (msg.role === 'user' || msg.role === 'model') && !msg.attachments)
-      .map(msg => ({
-        role: msg.role === 'model' ? 'assistant' : 'user',
-        content: msg.text,
-      }));
+      .filter(msg => (msg.role === 'user' || msg.role === 'model') && (msg.text || (msg.attachments && msg.attachments.length > 0)))
+      .map(msg => {
+        const role = msg.role === 'model' ? 'assistant' : 'user';
+        
+        const imageAttachments = msg.attachments?.filter(att => att.mimeType.startsWith('image/'));
+
+        if (imageAttachments && imageAttachments.length > 0) {
+            const contentParts = [{ type: 'text', text: msg.text }];
+            imageAttachments.forEach(att => {
+                contentParts.push({
+                    type: 'image_url',
+                    image_url: { url: `data:${att.mimeType};base64,${att.data}` }
+                });
+            });
+            return { role, content: contentParts };
+        } else {
+            return { role, content: msg.text };
+        }
+      });
 }
 
 async function handleOpenAIStream(res, apiUrl, apiKey, payload, isWebSearchEnabled, isDeepThink) {
@@ -179,16 +192,26 @@ async function handleOpenAIStream(res, apiUrl, apiKey, payload, isWebSearchEnabl
     if (payload.systemInstruction) {
         history.unshift({ role: 'system', content: payload.systemInstruction });
     }
-    const userMessage = { role: 'user', content: payload.newMessage };
-    if (payload.attachment && payload.attachment.mimeType.startsWith('image/')) {
-        userMessage.content = [
-            { type: 'text', text: payload.newMessage },
-            {
-                type: 'image_url',
-                image_url: { url: `data:${payload.attachment.mimeType};base64,${payload.attachment.data}` }
+    
+    const userMessageContent = [{ type: 'text', text: payload.newMessage }];
+    if (payload.attachments && payload.attachments.length > 0) {
+        payload.attachments.forEach(att => {
+            if (att.mimeType.startsWith('image/')) {
+                userMessageContent.push({
+                    type: 'image_url',
+                    image_url: { url: `data:${att.mimeType};base64,${att.data}` }
+                });
             }
-        ];
+        });
     }
+
+    const userMessage = { 
+        role: 'user', 
+        content: (userMessageContent.length === 1 && userMessageContent[0].type === 'text')
+            ? payload.newMessage 
+            : userMessageContent
+    };
+    
     history.push(userMessage);
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -519,7 +542,7 @@ export default async function handler(req, res) {
                 }
                 
                 let finalNewMessage = newMessage;
-                let imageAttachment = null;
+                const imageAttachments = [];
                 const textContents = [];
                 
                 if (attachments && attachments.length > 0) {
@@ -528,7 +551,9 @@ export default async function handler(req, res) {
                         const buffer = Buffer.from(att.data, 'base64');
                         const fileNameLower = att.fileName.toLowerCase();
                         try {
-                            if (att.mimeType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
+                            if (att.mimeType.startsWith('image/') && att.mimeType !== 'image/svg+xml') {
+                                imageAttachments.push(att);
+                            } else if (att.mimeType === 'application/pdf' || fileNameLower.endsWith('.pdf')) {
                                 const data = await pdf(buffer);
                                 textContents.push(`PDF Attachment "${att.fileName}":\n${data.text || '(No text content found)'}`);
                             } else if (att.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileNameLower.endsWith('.docx')) {
@@ -541,8 +566,6 @@ export default async function handler(req, res) {
                             } else if (TEXT_MIME_TYPES.has(att.mimeType) || att.mimeType.startsWith('text/')) {
                                 const fileContent = buffer.toString('utf-8');
                                 textContents.push(`Text Attachment "${att.fileName}":\n${fileContent}`);
-                            } else if (att.mimeType.startsWith('image/') && att.mimeType !== 'image/svg+xml' && !imageAttachment) {
-                                imageAttachment = att;
                             } else {
                                 textContents.push(`Unsupported Attachment: "${att.fileName}"`);
                             }
@@ -556,8 +579,6 @@ export default async function handler(req, res) {
                 if (textContents.length > 0) {
                     finalNewMessage = `${textContents.join('\n\n')}\n\nUser Prompt: ${newMessage}`;
                 }
-
-                const updatedPayload = { ...payload, newMessage: finalNewMessage, attachment: imageAttachment, attachments: null, systemInstruction };
         
                 const openAICompatibleModels = ['gpt-4.1', 'gpt-5-mini', 'gpt-5', 'o3', 'o3-mini'];
 
@@ -571,10 +592,26 @@ export default async function handler(req, res) {
                     if (isWebSearchEnabled) res.write(`data: ${JSON.stringify({ status: "Researching..." })}\n\n`);
                     else if (attachments && attachments.length > 0) res.write(`data: ${JSON.stringify({ status: "Processing files..." })}\n\n`);
                     
-                    let conversationHistory = [ ...history ].filter(m => (m.role === 'user' || m.role === 'model') && m.text?.trim() && !m.attachments);
-                    const sdkHistory = conversationHistory.map(msg => ({ role: msg.role, parts: [{ text: msg.text }] }));
+                    let conversationHistory = [ ...history ].filter(m => (m.role === 'user' || m.role === 'model') && (m.text?.trim() || (m.attachments && m.attachments.length > 0)));
+                    const sdkHistory = conversationHistory.map(msg => {
+                        const parts = [];
+                        if (msg.text) parts.push({ text: msg.text });
+                        if (msg.attachments) {
+                            msg.attachments.forEach(att => {
+                                if (att.mimeType.startsWith('image/')) {
+                                    parts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+                                }
+                            });
+                        }
+                        return { role: msg.role, parts };
+                    });
+
                     const userMessageParts = [{ text: finalNewMessage }];
-                    if (imageAttachment) userMessageParts.unshift({ inlineData: { mimeType: imageAttachment.mimeType, data: imageAttachment.data } });
+                    if (imageAttachments.length > 0) {
+                        imageAttachments.forEach(att => {
+                            userMessageParts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+                        });
+                    }
 
                     const contents = [ ...sdkHistory, { role: 'user', parts: userMessageParts } ];
                     const streamResult = await ai.models.generateContentStream({
@@ -600,10 +637,12 @@ export default async function handler(req, res) {
 
                 } else if (openAICompatibleModels.includes(model)) {
                     if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
+                    const updatedPayload = { ...payload, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
                     await handleOpenAIStream(res, OPENAI_API_URL, OPENAI_API_KEY, updatedPayload, isWebSearchEnabled, false);
                     return;
                 } else if (model.startsWith('deepseek')) {
                     if (!DEEPSEEK_API_KEY) throw new Error("DeepSeek API key not configured.");
+                    const updatedPayload = { ...payload, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
                     await handleOpenAIStream(res, DEEPSEEK_API_URL, DEEPSEEK_API_KEY, updatedPayload, isWebSearchEnabled, isDeepThinkEnabled);
                     return;
                 } else {
@@ -611,7 +650,6 @@ export default async function handler(req, res) {
                 }
             }
             
-            // ... (Các case khác giữ nguyên: generateSpeech, getTranslation, generateImages, editImage)
             case 'generateSpeech': {
                 await logAction(userEmail, 'used Text-to-Speech');
                 if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
@@ -694,7 +732,6 @@ export default async function handler(req, res) {
             }
 
             case 'swapFace': {
-                // ... (Logic của case này không thay đổi, giữ nguyên như file gốc của bạn)
                 await logAction(userEmail, 'played Swapface');
                 const { targetImage, sourceImage } = payload;
                 const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
