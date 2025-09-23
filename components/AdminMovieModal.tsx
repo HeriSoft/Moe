@@ -287,7 +287,6 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
               </div>
 
               <div className="flex justify-end pt-4">
-                  {/* FIX: Corrected variable name from 'editingFile' to 'editingMovie'. */}
                   <button type="submit" disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
                     {isLoading ? (editingMovie ? 'Updating...' : 'Uploading...') : (editingMovie ? 'Update Movie' : 'Upload Movie')}
                   </button>
