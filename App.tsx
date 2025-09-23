@@ -16,6 +16,8 @@ import { FilesLibraryModal } from './components/FilesLibraryModal';
 import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; 
 import { MusicBoxModal } from './components/MusicBoxModal'; 
 import { AdminMusicModal } from './components/AdminMusicModal'; 
+import { ChatRoomModal } from './components/ChatRoomModal';
+import * as firebaseService from './services/firebaseService';
 import {
   streamModelResponse,
   addExp,
@@ -120,6 +122,10 @@ const App: React.FC = () => {
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [musicSearchTerm, setMusicSearchTerm] = useState('');
   const [musicActiveGenre, setMusicActiveGenre] = useState('all');
+
+  // --- NEW Chat Room State ---
+  const [chatRoomState, setChatRoomState] = useState<'closed' | 'open' | 'minimized'>('closed');
+
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -842,6 +848,15 @@ const App: React.FC = () => {
     }
     setMusicBoxState('open');
   };
+  
+  const handleOpenChatRoom = () => {
+    if (!isLoggedIn) {
+        setIsLoginModalOpen(true);
+        setNotifications(prev => ["Please sign in to use the Chat Room.", ...prev.slice(0, 19)]);
+        return;
+    }
+    setChatRoomState('open');
+  };
 
   const handleCloseMusicBox = () => {
     setIsPlaying(false);
@@ -1039,9 +1054,11 @@ const App: React.FC = () => {
           onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)}
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
+          onOpenChatRoom={handleOpenChatRoom}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
           musicBoxState={musicBoxState}
+          chatRoomState={chatRoomState}
           currentSong={currentSong}
           isPlaying={isPlaying}
           handleExpGain={handleExpGain}
@@ -1169,6 +1186,13 @@ const App: React.FC = () => {
         userProfile={userProfile}
         setNotifications={setNotifications}
         onDataChange={fetchSongs}
+      />
+      <ChatRoomModal
+        isOpen={chatRoomState === 'open'}
+        onClose={() => setChatRoomState('closed')}
+        onMinimize={() => setChatRoomState('minimized')}
+        userProfile={userProfile}
+        setUserProfile={setUserProfile}
       />
     </div>
   );
