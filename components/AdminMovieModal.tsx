@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CloseIcon, RefreshIcon, FilmIcon, TrashIcon, PlusIcon, EyeIcon, EditIcon } from './icons';
 import type { UserProfile, Movie, MovieEpisode } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
-import { DriveImage } from './DriveImage';
 
 const MOVIES_API_ENDPOINT = '/api/movies';
 
@@ -111,16 +110,12 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
       }
   }, [editingMovie, activeTab, resetAddForm]);
 
-  const handleSelectThumbnail = async () => {
-    try {
-        await googleDriveService.showPicker((files) => {
-            if (files && files.length > 0) {
-                setThumbnail({ id: files[0].id, name: files[0].name });
-            }
-        }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
-    } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not open file picker.');
-    }
+  const handleSelectThumbnail = () => {
+    googleDriveService.showPicker((files) => {
+        if (files && files.length > 0) {
+            setThumbnail({ id: files[0].id, name: files[0].name });
+        }
+    }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
   };
   
   const handleEpisodeChange = (index: number, field: 'episode_number' | 'title' | 'video_drive_id', value: string | number) => {
@@ -235,7 +230,7 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
                   {isLoading && movies.length === 0 && <p>Loading...</p>}
                   {movies.map((movie: Movie) => (
                       <div key={movie.id} className="group relative">
-                          <DriveImage fileId={movie.thumbnail_drive_id} alt={movie.title} className="aspect-[2/3] w-full object-cover rounded-lg"/>
+                          <img src={googleDriveService.getDriveFilePublicUrl(movie.thumbnail_drive_id)} alt={movie.title} className="aspect-[2/3] w-full object-cover rounded-lg"/>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex flex-col justify-end">
                               <h4 className="text-white font-bold text-sm leading-tight line-clamp-2">{movie.title}</h4>
                           </div>

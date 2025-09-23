@@ -67,7 +67,6 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
-        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS about_me TEXT;');
 
 
         console.log("Table 'users' is ready.");
@@ -322,7 +321,7 @@ export default async function handler(req, res) {
 
                     // Fetch the complete, updated profile from the database
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner, about_me FROM users WHERE email = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner FROM users WHERE email = $1;`,
                         [user.email]
                     );
                     
@@ -341,7 +340,6 @@ export default async function handler(req, res) {
                             points: dbUser.points,
                             hasPermanentNameColor: dbUser.has_permanent_name_color,
                             hasSakuraBanner: dbUser.has_sakura_banner,
-                            aboutMe: dbUser.about_me,
                         };
                         return res.status(200).json({ success: true, user: fullUserProfile });
                     }
@@ -491,7 +489,7 @@ export default async function handler(req, res) {
                     await client.query('COMMIT');
 
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner, about_me FROM users WHERE id = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner FROM users WHERE id = $1;`,
                         [id]
                     );
                     const dbUser = rows[0];
@@ -501,7 +499,6 @@ export default async function handler(req, res) {
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
-                        aboutMe: dbUser.about_me,
                     };
                     result = { success: true, user: fullUserProfile };
                 } catch (dbError) {

@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon, ChatBubbleIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
-import { DriveImage } from './DriveImage';
+import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
 
 // Add SpeechRecognition types to window for TypeScript
@@ -105,12 +105,10 @@ interface ChatViewProps {
   onOpenFilesLibrary: () => void; // For Files Library
   onOpenGamePortal: () => void; // For Game Portal
   onOpenMusicBox: () => void; // For Music Box
-  onOpenChatRoom: () => void; // For Chat Room
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
   // Music Box background state
   musicBoxState: 'closed' | 'open' | 'minimized';
-  chatRoomState: 'closed' | 'open' | 'minimized';
   currentSong: Song | null;
   isPlaying: boolean;
   handleExpGain: (amount: number) => void;
@@ -182,7 +180,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, onOpenChatRoom, userProfile, onProFeatureBlock, musicBoxState, chatRoomState, currentSong, isPlaying, handleExpGain }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -538,13 +536,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         
         <div className="absolute bottom-4 right-4 sm:right-6 z-20 flex flex-col items-center gap-2">
             <button
-              onClick={onOpenChatRoom}
-              aria-label="Open Chat Room"
-              className="p-2 rounded-full bg-teal-600 text-white shadow-lg transition-all duration-300 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-[#171725]"
-            >
-              <ChatBubbleIcon className="w-6 h-6" />
-            </button>
-            <button
               onClick={onOpenGamePortal}
               aria-label="Open Game Portal"
               className="p-2 rounded-full bg-sky-600 text-white shadow-lg transition-all duration-300 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-[#171725]"
@@ -557,8 +548,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
               className="p-2 rounded-full bg-pink-600 text-white shadow-lg transition-all duration-300 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 dark:focus:ring-offset-[#171725]"
             >
               {musicBoxState !== 'closed' && currentSong?.avatar_drive_id ? (
-                <DriveImage 
-                  fileId={currentSong.avatar_drive_id} 
+                <img 
+                  src={getDriveFilePublicUrl(currentSong.avatar_drive_id)} 
                   alt="Now Playing" 
                   className={`w-6 h-6 rounded-full object-cover ${isPlaying ? 'animate-spin-slow' : ''}`}
                 />

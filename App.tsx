@@ -16,8 +16,6 @@ import { FilesLibraryModal } from './components/FilesLibraryModal';
 import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; 
 import { MusicBoxModal } from './components/MusicBoxModal'; 
 import { AdminMusicModal } from './components/AdminMusicModal'; 
-import { ChatRoomModal } from './components/ChatRoomModal';
-import * as firebaseService from './services/firebaseService';
 import {
   streamModelResponse,
   addExp,
@@ -122,11 +120,6 @@ const App: React.FC = () => {
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [musicSearchTerm, setMusicSearchTerm] = useState('');
   const [musicActiveGenre, setMusicActiveGenre] = useState('all');
-  const [mediaSessionArtworkUrl, setMediaSessionArtworkUrl] = useState<string | null>(null);
-
-  // --- NEW Chat Room State ---
-  const [chatRoomState, setChatRoomState] = useState<'closed' | 'open' | 'minimized'>('closed');
-
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
@@ -442,8 +435,7 @@ const App: React.FC = () => {
   
   const toggleDeepThink = () => setIsDeepThinkEnabled(prev => !prev);
 
-  // FIX: Update `handleAttachFromDrive` to be async and handle errors from the now-async `showPicker`.
-  const handleAttachFromDrive = useCallback(async () => {
+  const handleAttachFromDrive = useCallback(() => {
     if (!isLoggedIn) {
         setIsLoginModalOpen(true);
         return;
@@ -476,13 +468,9 @@ const App: React.FC = () => {
         }
     };
 
-    try {
-        await googleDriveService.showPicker(onFilesSelected);
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Could not show file picker.";
-        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
-    }
-  }, [isLoggedIn, attachments.length, setNotifications]);
+    googleDriveService.showPicker(onFilesSelected);
+
+  }, [isLoggedIn, attachments.length]);
 
   const handleSaveToDrive = useCallback(async (message: Message) => {
     if (!message.sourceDriveFileId || !message.sourceDriveFileMimeType) {
@@ -854,15 +842,6 @@ const App: React.FC = () => {
     }
     setMusicBoxState('open');
   };
-  
-  const handleOpenChatRoom = () => {
-    if (!isLoggedIn) {
-        setIsLoginModalOpen(true);
-        setNotifications(prev => ["Please sign in to use the Chat Room.", ...prev.slice(0, 19)]);
-        return;
-    }
-    setChatRoomState('open');
-  };
 
   const handleCloseMusicBox = () => {
     setIsPlaying(false);
@@ -964,24 +943,6 @@ const App: React.FC = () => {
     }
   }, [isPlaying, isPlayerReady, currentSong]);
   
-  // Effect to fetch artwork for Media Session API
-  useEffect(() => {
-      let isMounted = true;
-      if (currentSong?.avatar_drive_id) {
-          googleDriveService.getDriveImageAsDataUrl(currentSong.avatar_drive_id)
-              .then(url => {
-                  if (isMounted) setMediaSessionArtworkUrl(url);
-              })
-              .catch(err => {
-                  console.error("Failed to load media session artwork:", err);
-                  if (isMounted) setMediaSessionArtworkUrl(null);
-              });
-      } else {
-          setMediaSessionArtworkUrl(null);
-      }
-      return () => { isMounted = false; };
-  }, [currentSong?.avatar_drive_id]);
-
   // --- Media Session API for Background Playback ---
   useEffect(() => {
     if ('mediaSession' in navigator) {
@@ -990,8 +951,8 @@ const App: React.FC = () => {
                 title: currentSong.title,
                 artist: currentSong.artist,
                 album: 'Moe Chat Music',
-                artwork: mediaSessionArtworkUrl
-                    ? [{ src: mediaSessionArtworkUrl, sizes: '512x512', type: 'image/png' }]
+                artwork: currentSong.avatar_drive_id
+                    ? [{ src: googleDriveService.getDriveFilePublicUrl(currentSong.avatar_drive_id), sizes: '512x512', type: 'image/png' }]
                     : []
             });
 
@@ -1010,7 +971,7 @@ const App: React.FC = () => {
             navigator.mediaSession.setActionHandler('previoustrack', null);
         }
     }
-  }, [currentSong, isPlaying, handleTogglePlay, handleNextSong, handlePrevSong, mediaSessionArtworkUrl]);
+  }, [currentSong, isPlaying, handleTogglePlay, handleNextSong, handlePrevSong]);
 
 
   return (
@@ -1038,7 +999,7 @@ const App: React.FC = () => {
         onMembershipClick={handleMembershipClick}
         isAdmin={isAdmin}
         onSignIn={() => googleDriveService.signIn()}
-        onSignOut={() => googleDriveService.signOutFromApp(() => handleAuthChange(false))}
+        onSignOut={() => googleDriveService.signOut(() => handleAuthChange(false))}
         isLoggedIn={isLoggedIn}
         userProfile={userProfile}
         siteSettings={siteSettings}
@@ -1078,11 +1039,9 @@ const App: React.FC = () => {
           onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)}
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
-          onOpenChatRoom={handleOpenChatRoom}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
           musicBoxState={musicBoxState}
-          chatRoomState={chatRoomState}
           currentSong={currentSong}
           isPlaying={isPlaying}
           handleExpGain={handleExpGain}
@@ -1210,13 +1169,6 @@ const App: React.FC = () => {
         userProfile={userProfile}
         setNotifications={setNotifications}
         onDataChange={fetchSongs}
-      />
-      <ChatRoomModal
-        isOpen={chatRoomState === 'open'}
-        onClose={() => setChatRoomState('closed')}
-        onMinimize={() => setChatRoomState('minimized')}
-        userProfile={userProfile}
-        setUserProfile={setUserProfile}
       />
     </div>
   );

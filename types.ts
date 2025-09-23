@@ -1,22 +1,3 @@
-// Updated to correctly augment Vite's ImportMetaEnv interface, resolving TS2717 error.
-declare global {
-  interface ImportMetaEnv {
-    readonly VITE_GOOGLE_CLIENT_ID: string;
-    readonly VITE_GOOGLE_API_KEY: string;
-    readonly VITE_FIREBASE_API_KEY: string;
-    readonly VITE_FIREBASE_AUTH_DOMAIN: string;
-    readonly VITE_FIREBASE_DATABASE_URL: string;
-    readonly VITE_FIREBASE_PROJECT_ID: string;
-    readonly VITE_FIREBASE_STORAGE_BUCKET: string;
-    readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
-    readonly VITE_FIREBASE_APP_ID: string;
-  }
-
-  interface ImportMeta {
-    readonly env: ImportMetaEnv;
-  }
-}
-
 export interface Attachment {
   data: string; // base64 encoded data
   mimeType: string;
@@ -68,31 +49,7 @@ export interface UserProfile {
     points?: number; // For game portal points
     hasPermanentNameColor?: boolean; // For lucky wheel reward
     hasSakuraBanner?: boolean; // For lucky wheel reward
-    aboutMe?: string; // For Chat Room user popover
 }
-
-// --- NEW TYPES FOR CHAT ROOM ---
-
-export interface ChatRoomMessage {
-  id: string;
-  text: string;
-  timestamp: number;
-  user: {
-    id: string;
-    name: string;
-    imageUrl: string;
-    level?: number;
-    isPro?: boolean;
-    isModerator?: boolean;
-    hasPermanentNameColor?: boolean;
-    hasSakuraBanner?: boolean;
-  };
-}
-
-export interface OnlineUser extends UserProfile {
-  isOnline: boolean;
-}
-
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
 

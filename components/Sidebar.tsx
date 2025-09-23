@@ -2,8 +2,6 @@ import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
 import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, MusicalNoteIcon } from './icons';
 import * as googleDriveService from '../services/googleDriveService';
-import { getLevelInfo, VipTag } from './uiUtils';
-import { DriveImage } from './DriveImage';
 
 // --- NEW EXP SYSTEM HELPERS ---
 
@@ -13,6 +11,29 @@ const getExpForLevel = (level: number): number => {
     // e.g., L0->1: 100, L10->11: 1100, L50->51: 15100
     return 100 + (level * 50) + (level * level * 5);
 };
+
+const getLevelInfo = (level: number): { name: string; className: string; isMarquee?: boolean } => {
+    if (level <= 5) return { name: 'Newbie', className: 'text-white' };
+    if (level <= 10) return { name: 'Member', className: 'text-cyan-400' };
+    if (level <= 15) return { name: 'Active Member', className: 'text-purple-400' }; // Light Purple
+    if (level <= 20) return { name: 'Enthusiast', className: 'text-purple-500' };
+    if (level <= 25) return { name: 'Contributor', className: 'bg-gradient-to-r from-purple-400 to-white bg-clip-text text-transparent' };
+    if (level <= 30) return { name: 'Pro', className: 'bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent' };
+    if (level <= 35) return { name: 'Veteran', className: 'bg-gradient-to-r from-pink-400 to-red-400 bg-clip-text text-transparent' };
+    if (level <= 40) return { name: 'Expert', className: 'bg-gradient-to-r from-lime-400 to-white bg-clip-text text-transparent' }; // Green/White
+    if (level <= 45) return { name: 'Master', className: 'bg-gradient-to-r from-lime-400 to-yellow-400 bg-clip-text text-transparent' };
+    if (level <= 50) return { name: 'Grandmaster', className: 'bg-gradient-to-r from-purple-400 to-lime-400 bg-clip-text text-transparent' };
+    if (level <= 55) return { name: 'Guardian', className: 'bg-gradient-to-r from-teal-400 to-white bg-clip-text text-transparent' };
+    if (level <= 60) return { name: 'Titan', className: 'bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent' };
+    if (level <= 65) return { name: 'Immortal', className: 'bg-gradient-to-r from-red-500 to-yellow-400 bg-clip-text text-transparent animate-pulse' }; // Red/Yellow Pulse
+    if (level <= 70) return { name: 'Mythic', className: 'bg-gradient-to-r from-red-500 to-blue-500 bg-clip-text text-transparent animate-pulse' }; // Red/Blue Pulse
+    if (level <= 75) return { name: 'Ascendant', className: 'level-ascendant bg-gradient-to-r from-teal-400 to-yellow-400 bg-clip-text text-transparent animate-pulse', isMarquee: true }; // Teal/Yellow Pulse + Marquee
+    return { name: 'Legend', className: 'bg-gradient-to-r from-amber-400 via-red-500 to-purple-500 animate-pulse bg-clip-text text-transparent' };
+};
+
+
+// VIP Tag component
+const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -197,12 +218,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
   return (
     <>
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#171725] text-white flex flex-col p-4 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="mb-6 h-8 flex justify-center items-center">
+        <div className="mb-6 h-10 flex items-center">
             {siteSettings?.logoDriveId ? (
-                <DriveImage 
-                    fileId={siteSettings.logoDriveId}
+                <img 
+                    src={googleDriveService.getDriveFilePublicUrl(siteSettings.logoDriveId)}
                     alt="Moe Chat Logo"
-                    className="h-full w-auto"
+                    className="max-h-full w-auto"
                 />
             ) : (
                 <h1 className="text-2xl font-bold">Moe Chat</h1>
@@ -295,28 +316,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
         </div>
       </aside>
       <style>{`
-        @keyframes marquee-ascendant {
-            0% { transform: translateX(50%); }
-            100% { transform: translateX(-100%); }
-        }
-        .level-ascendant {
-            animation: marquee-ascendant 10s linear infinite;
-        }
-        .sakura-banner::before {
-            content: '';
-            position: absolute;
-            top: -10%;
-            right: -10%;
-            width: 60%;
-            height: 60%;
-            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 0 C 40 20, 20 20, 20 40 C 20 60, 40 70, 50 100 C 60 70, 80 60, 80 40 C 80 20, 60 20, 50 0 Z" fill="%23FFC0CB" opacity="0.8"/><path d="M50 10 C 45 25, 30 25, 30 40 C 30 55, 45 65, 50 90 C 55 65, 70 55, 70 40 C 70 25, 55 25, 50 10 Z" fill="%23FFFFFF" opacity="0.9"/><circle cx="50" cy="45" r="5" fill="%23FFDF00"/></svg>');
-            background-repeat: no-repeat;
-            background-position: top right;
-            background-size: contain;
-            opacity: 0.15;
-            pointer-events: none;
-            transform: rotate(15deg);
-        }
         @keyframes shine-vip {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
@@ -344,6 +343,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
             background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
             animation: shine-vip 3s ease-in-out infinite;
             animation-delay: 1s;
+        }
+        @keyframes marquee-ascendant {
+            0% { transform: translateX(50%); }
+            100% { transform: translateX(-100%); }
+        }
+        .level-ascendant {
+            animation: marquee-ascendant 10s linear infinite;
+        }
+        .sakura-banner::before {
+            content: '';
+            position: absolute;
+            top: -10%;
+            right: -10%;
+            width: 60%;
+            height: 60%;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 0 C 40 20, 20 20, 20 40 C 20 60, 40 70, 50 100 C 60 70, 80 60, 80 40 C 80 20, 60 20, 50 0 Z" fill="%23FFC0CB" opacity="0.8"/><path d="M50 10 C 45 25, 30 25, 30 40 C 30 55, 45 65, 50 90 C 55 65, 70 55, 70 40 C 70 25, 55 25, 50 10 Z" fill="%23FFFFFF" opacity="0.9"/><circle cx="50" cy="45" r="5" fill="%23FFDF00"/></svg>');
+            background-repeat: no-repeat;
+            background-position: top right;
+            background-size: contain;
+            opacity: 0.15;
+            pointer-events: none;
+            transform: rotate(15deg);
         }
       `}</style>
     </>

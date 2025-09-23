@@ -1,9 +1,8 @@
 
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CloseIcon, CheckCircleIcon, SparklesIcon } from './icons';
 import type { UserProfile } from '../types';
-import { DriveImage } from './DriveImage';
+import { getDriveFilePublicUrl } from '../services/googleDriveService';
 import { renderFormattedText } from './utils';
 
 interface MembershipModalProps {
@@ -140,12 +139,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
   
   const renderQrView = (type: 'bank' | 'momo') => {
     const qrId = type === 'bank' ? settings?.bankQrId : settings?.momoQrId;
+    const qrUrl = qrId ? getDriveFilePublicUrl(qrId) : '';
 
     return (
       <div className="text-center">
         <h3 className="text-xl font-semibold mb-4">Quét mã QR để thanh toán</h3>
         <div className="w-48 h-48 mx-auto bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center">
-            {qrId ? <DriveImage fileId={qrId} alt={`${type} QR Code`} className="w-full h-full object-contain rounded-lg"/> : <p className="text-xs p-4">Admin has not set a QR code yet.</p>}
+            {qrUrl ? <img src={qrUrl} alt={`${type} QR Code`} className="w-full h-full object-contain rounded-lg"/> : <p className="text-xs p-4">Admin has not set a QR code yet.</p>}
         </div>
         <div className="mt-4 space-y-2 text-sm">
             <p>Số tiền: <strong className="text-lg">250.000 VNĐ</strong></p>

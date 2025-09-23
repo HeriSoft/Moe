@@ -1,319 +1,512 @@
+// FIX: Augment the global ImportMeta type to include Vite's environment variables.
+// This resolves TypeScript errors about `import.meta.env` when the standard
+// `vite/client` types are not being picked up automatically.
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_GOOGLE_CLIENT_ID: string;
+      readonly VITE_GOOGLE_API_KEY: string;
+    };
+  }
+}
+
 import type { ChatSession, UserProfile } from '../types';
 import { fetchUserProfileAndLogLogin } from './geminiService';
-// NEW: Import Firebase services and types for unified authentication
-import { auth, signInWithGoogle, signOut as firebaseSignOut } from './firebaseService';
-import { onAuthStateChanged, User } from 'firebase/auth';
+
+// Use Vite's import.meta.env to access environment variables on the client-side
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+// FIX: Request full drive scope. The 'drive.file' scope is insufficient for PATCHing
+// arbitrary files selected by the user via the picker, leading to 403 errors.
+// The 'drive' scope allows the app to modify any file the user has granted access to.
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive';
 const APP_FOLDER_NAME = 'Moe Chat Data';
 
 let gapi: any = null;
+let google: any = null;
+let tokenClient: any = null;
 let appFolderId: string | null = null;
-const imageDataCache = new Map<string, string>();
-let onAuthChangeCallback: ((isLoggedIn: boolean, userProfile?: UserProfile) => void) | null = null;
-let gapiInitialized = false; 
 
 /**
  * Inspects a GAPI error object and throws a more user-friendly error.
+ * Specifically checks for the "API not enabled" error.
+ * @param error The raw error object from a GAPI client promise rejection.
+ * @param context A string describing the action that failed (e.g., "saving session").
  */
 const handleGapiError = (error: any, context: string): never => {
     console.error(`GAPI Error during ${context}:`, error);
     const errorDetails = error?.result?.error || error?.data?.error;
+
     if (errorDetails) {
-        if ((errorDetails.status === 'PERMISSION_DENIED' || errorDetails.code === 403) && errorDetails.message?.toLowerCase().includes('drive api has not been used')) {
-            throw new Error("Google Drive API is not enabled. Please visit your Google Cloud Console and enable the 'Google Drive API' for this project.");
+        if (
+            (errorDetails.status === 'PERMISSION_DENIED' || errorDetails.code === 403) &&
+            errorDetails.message?.toLowerCase().includes('drive api has not been used')
+        ) {
+            throw new Error(
+                "Google Drive API is not enabled. Please visit your Google Cloud Console and enable the 'Google Drive API' for this project to save and load chats."
+            );
         }
+        // Throw a more specific message if available
         throw new Error(`Google Drive Error: ${errorDetails.message} (Code: ${errorDetails.code})`);
     }
+
+    // Fallback for unexpected error formats or custom errors from our refresh logic
     throw new Error(error.message || `An unknown error occurred during ${context}.`);
 };
 
-/**
- * Ensures a valid GAPI access token is available, re-authenticating if necessary.
- * This function is the core of the new token management strategy.
- */
-async function ensureGapiToken(): Promise<void> {
-    if (!gapi) throw new Error("GAPI not loaded.");
-
-    const token = gapi.client.getToken();
-    // A simple check for existence is enough; GAPI handles expiry under the hood, but re-auth will fix it if it fails.
-    if (token && token.access_token) {
-        return;
-    }
-
-    console.log("GAPI token missing or invalid, re-authenticating with Firebase...");
-    try {
-        const { accessToken } = await signInWithGoogle();
-        gapi.client.setToken({ access_token: accessToken });
-        console.log("GAPI token refreshed successfully via Firebase popup.");
-    } catch (error) {
-        console.error("Failed to re-authenticate for GAPI token:", error);
-        await signOutFromApp(); // Sign out to clear the bad state
-        throw new Error("Your session has expired. Please sign in again.");
-    }
-}
 
 /**
- * A wrapper for all GAPI calls that ensures authentication is valid before execution.
- */
-async function gapiWithAuthRefresh<T>(apiCall: () => Promise<T>): Promise<T> {
-    try {
-        await ensureGapiToken();
-        return await apiCall();
-    } catch (error) {
-        // Rethrow the error to be handled by the caller, after logging it via handleGapiError
-        handleGapiError(error, 'GAPI call');
-    }
-}
-
-/**
- * Initializes the GAPI client and listens for Firebase authentication state changes.
+ * Initializes the Google API client.
+ * This function now assumes gapi and google scripts are loaded from index.html
+ * @param onAuthChange Callback function to update authentication status in the app.
  */
 export async function initClient(
     onAuthChange: (isLoggedIn: boolean, userProfile?: UserProfile) => void
 ) {
-    onAuthChangeCallback = onAuthChange;
+    console.log("Starting Google Drive service initialization...");
+    try {
+        if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
+            throw new Error("VITE_GOOGLE_CLIENT_ID or VITE_GOOGLE_API_KEY is not set. Please check your environment variables.");
+        }
+        
+        const gapiLoadPromise = new Promise<void>((resolve, reject) => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if ((window as any).gapi) {
+                    clearInterval(interval);
+                    gapi = (window as any).gapi;
+                    console.log("gapi library loaded.");
+                    resolve();
+                } else if (++attempts > 50) {
+                    clearInterval(interval);
+                    reject(new Error("Failed to load Google API (gapi) library. Check script tag in index.html."));
+                }
+            }, 100);
+        });
 
-    const gapiLoadPromise = new Promise<void>((resolve, reject) => {
-        let attempts = 0;
-        const interval = setInterval(() => {
-            if ((window as any).gapi) {
-                clearInterval(interval);
-                gapi = (window as any).gapi;
-                resolve();
-            } else if (++attempts > 50) {
-                clearInterval(interval);
-                reject(new Error("Failed to load Google API (gapi) library."));
-            }
-        }, 100);
-    });
-    
-    await gapiLoadPromise;
+        const gisLoadPromise = new Promise<void>((resolve, reject) => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if ((window as any).google) {
+                    clearInterval(interval);
+                    google = (window as any).google;
+                    console.log("Google Identity Services (gis) library loaded.");
+                    resolve();
+                } else if (++attempts > 50) {
+                    clearInterval(interval);
+                    reject(new Error("Failed to load Google Identity Services (gis) library. Check script tag in index.html."));
+                }
+            }, 100);
+        });
+        
+        await Promise.all([gapiLoadPromise, gisLoadPromise]);
 
-    if (!gapiInitialized) {
-        await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve, reject) => {
             gapi.load('client', async () => {
-                await gapi.client.init({
-                    discoveryDocs: DISCOVERY_DOCS,
-                });
-                gapiInitialized = true;
-                resolve();
+                try {
+                    console.log("Initializing gapi client...");
+                    await gapi.client.init({
+                        apiKey: GOOGLE_API_KEY,
+                        discoveryDocs: DISCOVERY_DOCS,
+                    });
+                    console.log("Gapi client initialized successfully.");
+
+                    const updateUserStatus = async () => {
+                        const token = gapi.client.getToken();
+                        if (token === null || !token.access_token) {
+                            console.log("User is not signed in or token is missing.");
+                            onAuthChange(false);
+                            return;
+                        }
+
+                        console.log("User has a token. Fetching profile via direct fetch...");
+                        try {
+                            const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                                headers: { 'Authorization': `Bearer ${token.access_token}` }
+                            });
+
+                            if (!profileResponse.ok) {
+                                throw new Error(`User info fetch failed with status: ${profileResponse.status}`);
+                            }
+
+                            const googleProfile = await profileResponse.json();
+
+                            if (!googleProfile || !googleProfile.sub) {
+                                console.warn("Token exists but userinfo is empty. Signing out.");
+                                signOut(() => onAuthChange(false));
+                                return;
+                            }
+                            
+                            const basicUserProfile: UserProfile = {
+                                id: googleProfile.sub,
+                                name: googleProfile.name,
+                                email: googleProfile.email,
+                                imageUrl: googleProfile.picture,
+                            };
+                            
+                            // Fetch full profile from our DB to get membership status etc.
+                            const fullProfile = await fetchUserProfileAndLogLogin(basicUserProfile);
+
+                            console.log("Full profile fetched successfully:", fullProfile.name);
+                            onAuthChange(true, fullProfile);
+                        } catch (error) {
+                            console.error("Error fetching user info for existing session, signing out:", error);
+                            signOut(() => onAuthChange(false));
+                        }
+                    };
+                    
+                    console.log("Initializing token client...");
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: GOOGLE_CLIENT_ID,
+                        scope: SCOPES,
+                        callback: (tokenResponse: any) => {
+                            if (tokenResponse.error) {
+                                console.error('Token client error:', tokenResponse);
+                                onAuthChange(false);
+                                return;
+                            }
+                            console.log("Access token received from sign-in flow.");
+                            gapi.client.setToken(tokenResponse);
+                            updateUserStatus();
+                        },
+                    });
+                    console.log("Token client initialized successfully.");
+                    
+                    await updateUserStatus();
+                    
+                    resolve();
+                } catch (error: any) {
+                    if (error && typeof error === 'object' && 'result' in error) {
+                        const errorResult = (error as any).result?.error;
+                        if (errorResult && errorResult.message && errorResult.message.includes('API not found')) {
+                             reject(new Error("API discovery response missing required fields. Ensure 'Google Drive API' and 'Google People API' are enabled in your Google Cloud project."));
+                             return;
+                        }
+                    }
+                    reject(error);
+                }
             });
         });
-    }
 
-    onAuthStateChanged(auth, async (user: User | null) => {
-        if (user) {
-            console.log("Firebase user detected:", user.displayName);
-            const basicUserProfile: UserProfile = {
-                id: user.uid,
-                name: user.displayName || 'User',
-                email: user.email || '',
-                imageUrl: user.photoURL || '',
-            };
-            const fullProfile = await fetchUserProfileAndLogLogin(basicUserProfile);
-            onAuthChangeCallback?.(true, fullProfile);
-        } else {
-            console.log("No Firebase user detected.");
-            if (gapi?.client) gapi.client.setToken('');
+        console.log("Google Drive service initialization complete.");
+
+    } catch (error) {
+        console.error("Fatal error during Google service initialization:", error);
+        onAuthChange(false);
+    }
+}
+
+
+export function signIn() {
+    console.log("signIn function called.");
+    if (!tokenClient) {
+        console.error("Cannot sign in: Google Auth client (tokenClient) is not initialized.");
+        alert("Sign-in service is not ready. Please check the console for errors.");
+        return;
+    }
+    
+    console.log("Requesting access token...");
+    if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({prompt: 'consent'});
+    } else {
+        tokenClient.requestAccessToken({prompt: ''});
+    }
+}
+
+export function signOut(onSignOutComplete: () => void) {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token, () => {
+            gapi.client.setToken('');
             appFolderId = null;
-            imageDataCache.clear();
-            onAuthChangeCallback?.(false);
+            onSignOutComplete();
+            console.log("User signed out and token revoked.");
+        });
+    } else {
+        onSignOutComplete();
+        console.log("No user was signed in.");
+    }
+}
+
+function refreshToken(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (!tokenClient) {
+            return reject(new Error("Token client not initialized."));
         }
+        console.log("Attempting to silently refresh access token...");
+
+        const originalCallback = tokenClient.callback;
+        
+        tokenClient.callback = (tokenResponse: any) => {
+            tokenClient.callback = originalCallback;
+            if (tokenResponse.error) {
+                console.error("Token refresh failed:", tokenResponse);
+                reject(new Error("Session expired. Please sign in again."));
+                return;
+            }
+            console.log("Token refreshed successfully via temporary callback.");
+            gapi.client.setToken(tokenResponse);
+            resolve();
+        };
+        
+        tokenClient.requestAccessToken({ prompt: 'none' });
     });
 }
 
-/**
- * Starts the sign-in process using the Firebase popup.
- */
-export async function signIn() {
+async function gapiWithAuthRefresh<T>(apiCall: () => Promise<T>): Promise<T> {
     try {
-        const { accessToken } = await signInWithGoogle();
-        gapi.client.setToken({ access_token: accessToken });
-        // The onAuthStateChanged listener will handle UI updates.
-    } catch (error) {
-        console.error("Sign-in process failed:", error);
-        onAuthChangeCallback?.(false); // Ensure UI reflects failed login
-    }
-}
-
-/**
- * Signs the user out of Firebase.
- */
-export async function signOutFromApp(onSignOutComplete?: () => void) {
-    try {
-        await firebaseSignOut();
-        console.log("Firebase sign out successful.");
-    } catch (error) {
-        console.error("Firebase sign out error:", error);
-    } finally {
-        if (onSignOutComplete) onSignOutComplete();
+        return await apiCall();
+    } catch (error: any) {
+        if (error?.result?.error?.code === 401 || error?.status === 401) {
+            console.warn("API request failed with 401. Refreshing token and retrying.");
+            try {
+                await refreshToken();
+                return await apiCall();
+            } catch (refreshError) {
+                console.error("Failed to refresh token or retry the request:", refreshError);
+                throw new Error("Your session has expired and could not be renewed. Please sign in again.");
+            }
+        }
+        throw error;
     }
 }
 
 async function getAppFolderId(): Promise<string> {
-    if (appFolderId) return appFolderId;
+    if (appFolderId) {
+        return appFolderId;
+    }
 
-    const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({
-        q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`,
-        spaces: 'appDataFolder',
-        fields: 'files(id, name)',
-    }));
+    try {
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({ // <-- SỬA 1
+            q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`,
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
+        }));
 
-    if (response.result.files && response.result.files.length > 0) {
-        appFolderId = response.result.files[0].id;
-        return appFolderId as string;
-    } else {
-        const fileMetadata = { name: APP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', parents: ['appDataFolder'] };
-        const file: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.create({ resource: fileMetadata, fields: 'id' }));
-        appFolderId = file.result.id;
-        return appFolderId as string;
+        if (response.result.files && response.result.files.length > 0) {
+            appFolderId = response.result.files[0].id;
+            return appFolderId as string;
+        } else {
+            const fileMetadata = {
+                'name': APP_FOLDER_NAME,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': ['appDataFolder']
+            };
+            const file: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.create({ // <-- SỬA 2
+                resource: fileMetadata,
+                fields: 'id'
+            }));
+            appFolderId = file.result.id;
+            return appFolderId as string;
+        }
+    } catch (error) {
+        handleGapiError(error, 'finding or creating app folder');
     }
 }
 
 export async function listSessions(): Promise<ChatSession[]> {
-    const folderId = await getAppFolderId();
-    const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({
-        q: `'${folderId}' in parents and trashed=false`,
-        spaces: 'appDataFolder',
-        fields: 'files(id, name)',
-        pageSize: 1000
-    }));
-    
-    const files = response.result.files || [];
-    const sessionPromises = files.map(async (file: any) => {
-        try {
-            const contentResponse: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({ fileId: file.id, alt: 'media' }));
-            const sessionData = contentResponse.result as ChatSession;
-            sessionData.driveFileId = file.id;
-            return sessionData;
-        } catch (error) {
-            console.error(`Failed to fetch content for file ${file.name} (${file.id}):`, error);
-            return null;
-        }
-    });
+    try {
+        const folderId = await getAppFolderId();
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({ // <-- SỬA 3
+            q: `'${folderId}' in parents and trashed=false`,
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
+            pageSize: 1000
+        }));
+        
+        const files = response.result.files || [];
+        const sessionPromises = files.map(async (file: any) => {
+            try {
+                const contentResponse: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({ // <-- SỬA 4
+                    fileId: file.id,
+                    alt: 'media'
+                }));
+                const sessionData = contentResponse.result as ChatSession;
+                sessionData.driveFileId = file.id;
+                return sessionData;
+            } catch (error) {
+                console.error(`Failed to fetch content for file ${file.name} (${file.id}):`, error);
+                return null;
+            }
+        });
 
-    const sessions = (await Promise.all(sessionPromises)).filter(Boolean) as ChatSession[];
-    return sessions;
+        const sessions = (await Promise.all(sessionPromises)).filter(Boolean) as ChatSession[];
+        return sessions;
+    } catch (error) {
+        handleGapiError(error, 'listing chat sessions');
+    }
 }
 
 export async function saveSession(session: ChatSession): Promise<ChatSession> {
-    const folderId = await getAppFolderId();
-    const fileName = `${session.id}.json`;
-    const sessionToSave = { ...session };
-    const fileId = sessionToSave.driveFileId;
-    delete sessionToSave.driveFileId;
+    try {
+        const folderId = await getAppFolderId();
+        const fileName = `${session.id}.json`;
+        const sessionToSave = { ...session };
+        const fileId = sessionToSave.driveFileId;
+        delete sessionToSave.driveFileId;
 
-    const fileMetadata = { name: fileName, mimeType: 'application/json', ...(fileId ? {} : { parents: [folderId] }) };
+        const fileMetadata = {
+            name: fileName,
+            mimeType: 'application/json',
+            ...(fileId ? {} : { parents: [folderId] })
+        };
 
-    const boundary = '-------314159265358979323846';
-    const multipartRequestBody = `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(fileMetadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(sessionToSave)}\r\n--${boundary}--`;
-      
-    const response: any = await gapiWithAuthRefresh(() => gapi.client.request({
-        path: `/upload/drive/v3/files${fileId ? `/${fileId}` : ''}`,
-        method: fileId ? 'PATCH' : 'POST',
-        params: { uploadType: 'multipart' },
-        headers: { 'Content-Type': `multipart/related; boundary="${boundary}"` },
-        body: multipartRequestBody
-    }));
-    
-    session.driveFileId = response.result.id;
-    return session;
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+
+        const multipartRequestBody =
+          delimiter +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(fileMetadata) +
+          delimiter +
+          'Content-Type: application/json\r\n\r\n' +
+          JSON.stringify(sessionToSave) +
+          close_delim;
+          
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.request({ // <-- SỬA 5
+            path: `/upload/drive/v3/files${fileId ? `/${fileId}` : ''}`,
+            method: fileId ? 'PATCH' : 'POST',
+            params: { uploadType: 'multipart' },
+            headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
+            body: multipartRequestBody
+        }));
+        
+        session.driveFileId = response.result.id;
+        return session;
+    } catch (error) {
+        handleGapiError(error, 'saving chat session');
+    }
 }
 
 export async function deleteSession(driveFileId: string): Promise<void> {
-    if (!driveFileId) throw new Error("driveFileId is required to delete a session.");
-    await gapiWithAuthRefresh(() => gapi.client.drive.files.delete({ fileId: driveFileId }));
+    try {
+        if (!driveFileId) {
+            throw new Error("driveFileId is required to delete a session.");
+        }
+        await gapiWithAuthRefresh(() => gapi.client.drive.files.delete({
+            fileId: driveFileId
+        }));
+    } catch (error) {
+        handleGapiError(error, 'deleting chat session');
+    }
 }
+
+let isPickerApiLoaded = false;
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
     let binary = '';
     const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
         binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
 }
 
-export async function getDriveImageAsDataUrl(fileId: string): Promise<string> {
-    if (imageDataCache.has(fileId)) {
-        return imageDataCache.get(fileId)!;
-    }
-    const metaResponse: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({ fileId: fileId, fields: 'mimeType' }));
-    const mimeType = metaResponse.result.mimeType;
-    if (!mimeType || !mimeType.startsWith('image/')) throw new Error('File is not a valid image type.');
-    const base64Content = await downloadDriveFile(fileId);
-    const dataUrl = `data:${mimeType};base64,${base64Content}`;
-    imageDataCache.set(fileId, dataUrl);
-    return dataUrl;
+export function getDriveFilePublicUrl(fileId: string): string {
+    // FIX: Revert to using the /thumbnail endpoint but now append the API key.
+    // This provides the necessary authentication for Google to serve the thumbnail
+    // to any user, resolving the issue of broken images for non-admin users.
+    // This still requires the underlying file to be publicly shared.
+    return `https://drive.google.com/thumbnail?id=${fileId}&key=${GOOGLE_API_KEY}`;
 }
 
 export async function downloadDriveFile(fileId: string): Promise<string> {
-    const response = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({ fileId: fileId, alt: 'media' }));
-    // GAPI client with fetch doesn't return a buffer directly in the same way.
-    // Assuming response.body is a string for JSON or needs conversion for binary.
-    // For media downloads, the result is typically the raw content.
-    const rawResult = (response as any).body; // The raw response body string
-    // This is tricky because GAPI's response might not be a clean ArrayBuffer.
-    // Let's switch to a direct fetch call within the authorized wrapper for binary data.
-    const token = gapi.client.getToken();
-    if (!token) throw new Error("Not authenticated.");
-    
-    const fetchResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: { 'Authorization': `Bearer ${token.access_token}` }
-    });
-    if (!fetchResponse.ok) throw new Error(`Failed to download file: ${fetchResponse.statusText}`);
-    const buffer = await fetchResponse.arrayBuffer();
-    return arrayBufferToBase64(buffer);
+    const performFetch = async (accessToken: string) => {
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) {
+            const error: any = new Error(`HTTP Status: ${response.status}`);
+            error.status = response.status;
+            try { error.data = await response.json(); } catch (e) { /* Ignore parsing error */ }
+            throw error;
+        }
+        return response;
+    };
+
+    try {
+        let token = gapi.client.getToken();
+        if (!token || !token.access_token) {
+            throw new Error("Cannot download file: User is not authenticated.");
+        }
+
+        try {
+            const response = await performFetch(token.access_token);
+            const buffer = await response.arrayBuffer();
+            return arrayBufferToBase64(buffer);
+        } catch (error: any) {
+            if (error.status === 401) {
+                console.warn("Download fetch failed with 401. Refreshing token and retrying.");
+                await refreshToken();
+                const newToken = gapi.client.getToken();
+                if (!newToken || !newToken.access_token) {
+                    throw new Error("Failed to get new token for download.");
+                }
+                const retryResponse = await performFetch(newToken.access_token);
+                const buffer = await retryResponse.arrayBuffer();
+                return arrayBufferToBase64(buffer);
+            }
+            throw error;
+        }
+    } catch (error) {
+        handleGapiError(error, `downloading file ${fileId}`);
+    }
 }
 
 export async function updateDriveFileContent(fileId: string, newContent: string, mimeType: string): Promise<void> {
-    await gapiWithAuthRefresh(() => gapi.client.request({
-        path: `/upload/drive/v3/files/${fileId}`,
-        method: 'PATCH',
-        params: { uploadType: 'media' },
-        headers: { 'Content-Type': mimeType },
-        body: newContent
-    }));
+    try {
+        await gapiWithAuthRefresh(() => gapi.client.request({
+            path: `/upload/drive/v3/files/${fileId}`,
+            method: 'PATCH',
+            params: { uploadType: 'media' },
+            headers: { 'Content-Type': mimeType },
+            body: newContent
+        }));
+    } catch (error) {
+        handleGapiError(error, `updating file content for ${fileId}`);
+    }
 }
 
-// FIX: Refactored showPicker to be async and throw errors, which allows callers to handle them gracefully.
-// This resolves the "Cannot find name 'setNotifications'" error by decoupling the service from UI state.
-export async function showPicker(onFilesSelected: (files: any[]) => void, viewOptions?: { mimeTypes?: string }): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("gapi.load timed out")), 5000);
+export function showPicker(onFilesSelected: (files: any[]) => void, viewOptions?: { mimeTypes?: string }): void {
+    const show = () => {
+        const token = gapi.client.getToken();
+        if (!token) {
+            console.error("Cannot show picker: user is not signed in.");
+            signIn();
+            return;
+        }
+
+        const view = new google.picker.View(google.picker.ViewId.DOCS);
+        const mimeTypes = viewOptions?.mimeTypes || "image/png,image/jpeg,image/jpg,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        view.setMimeTypes(mimeTypes);
+
+        const picker = new google.picker.PickerBuilder()
+            .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+            .setAppId(GOOGLE_CLIENT_ID.split('-')[0])
+            .setOAuthToken(token.access_token)
+            .addView(view)
+            .addView(new google.picker.DocsUploadView())
+            .setCallback((data: any) => {
+                if (data.action === google.picker.Action.PICKED) {
+                    onFilesSelected(data.docs);
+                }
+            })
+            .build();
+        picker.setVisible(true);
+    };
+
+    if (isPickerApiLoaded) {
+        show();
+    } else {
         gapi.load('picker', () => {
-            clearTimeout(timeout);
-            resolve();
+            isPickerApiLoaded = true;
+            show();
         });
-    });
-
-    const google = (window as any).google;
-    if (!google || !google.picker) {
-        throw new Error("Google Picker API is not available.");
     }
-
-    const token = gapi.client.getToken();
-    if (!token?.access_token) {
-        // Trigger sign-in if token is missing. The user will need to click the button again.
-        signIn();
-        throw new Error("Your session has expired. Please sign in again and retry.");
-    }
-
-    const view = new google.picker.View(google.picker.ViewId.DOCS);
-    view.setMimeTypes(viewOptions?.mimeTypes || "image/png,image/jpeg,application/pdf,text/plain");
-
-    const picker = new google.picker.PickerBuilder()
-        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-        .setOAuthToken(token.access_token)
-        .addView(view)
-        .addView(new google.picker.DocsUploadView())
-        .setCallback((data: any) => {
-            if (data.action === google.picker.Action.PICKED) {
-                onFilesSelected(data.docs);
-            }
-        })
-        .build();
-    picker.setVisible(true);
 }
