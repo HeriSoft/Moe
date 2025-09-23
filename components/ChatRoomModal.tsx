@@ -216,7 +216,51 @@ export const ChatRoomModal: React.FC<ChatRoomModalProps> = ({ isOpen, onClose, o
             </div>
         </div>
         {popover && <UserInfoPopover user={popover.user} onClose={() => setPopover(null)} isCurrentUser={popover.user.id === userProfile?.id} onProfileUpdate={handleProfileUpdate} anchorEl={popover.anchorEl}/>}
-        <style>{`.sakura-banner::before { content: ''; position: absolute; top: -10%; right: -10%; width: 60%; height: 60%; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 0 C 40 20, 20 20, 20 40 C 20 60, 40 70, 50 100 C 60 70, 80 60, 80 40 C 80 20, 60 20, 50 0 Z" fill="%23FFC0CB" opacity="0.8"/><path d="M50 10 C 45 25, 30 25, 30 40 C 30 55, 45 65, 50 90 C 55 65, 70 55, 70 40 C 70 25, 55 25, 50 10 Z" fill="%23FFFFFF" opacity="0.9"/><circle cx="50" cy="45" r="5" fill="%23FFDF00"/></svg>'); background-repeat: no-repeat; background-position: top right; background-size: contain; opacity: 0.15; pointer-events: none; transform: rotate(15deg); }`}</style>
+        <style>{`
+            .sakura-banner::before { 
+                content: ''; 
+                position: absolute; 
+                top: -10%; 
+                right: -10%; 
+                width: 60%; 
+                height: 60%; 
+                background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 0 C 40 20, 20 20, 20 40 C 20 60, 40 70, 50 100 C 60 70, 80 60, 80 40 C 80 20, 60 20, 50 0 Z" fill="%23FFC0CB" opacity="0.8"/><path d="M50 10 C 45 25, 30 25, 30 40 C 30 55, 45 65, 50 90 C 55 65, 70 55, 70 40 C 70 25, 55 25, 50 10 Z" fill="%23FFFFFF" opacity="0.9"/><circle cx="50" cy="45" r="5" fill="%23FFDF00"/></svg>'); 
+                background-repeat: no-repeat; 
+                background-position: top right; 
+                background-size: contain; 
+                opacity: 0.15; 
+                pointer-events: none; 
+                transform: rotate(15deg); 
+            }
+            @keyframes shine-vip {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
+            }
+            .vip-tag-shine {
+                position: relative;
+                display: inline-block;
+                padding: 2px 8px;
+                font-size: 0.75rem;
+                font-weight: 700;
+                line-height: 1.2;
+                color: #1e293b;
+                background: linear-gradient(110deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
+                border-radius: 0.375rem;
+                overflow: hidden;
+                -webkit-mask-image: -webkit-radial-gradient(white, black);
+            }
+            .vip-tag-shine::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
+                animation: shine-vip 3s ease-in-out infinite;
+                animation-delay: 1s;
+            }
+        `}</style>
         </>
     );
 };
