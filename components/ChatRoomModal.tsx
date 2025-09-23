@@ -20,7 +20,7 @@ const UserInfoPopover: React.FC<{
     const handleSaveAboutMe = async () => {
         if (aboutMeText !== user.aboutMe) {
             try {
-                await firebaseService.updateAboutMe(user.email, aboutMeText);
+                await firebaseService.updateAboutMe(user, aboutMeText);
                 onProfileUpdate(aboutMeText);
             } catch (error) {
                 console.error("Failed to update about me:", error);
