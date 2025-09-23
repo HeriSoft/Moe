@@ -22,6 +22,7 @@ import { fetchUserProfileAndLogLogin } from './geminiService';
 import { firebaseApp } from './firebaseService'; // Import the initialized app
 // FIX: Switched to named imports for Firebase v9+ to resolve module errors.
 // This is the standard and most reliable way to import Firebase auth functions.
+// FIX: Changed import path from "firebase/auth" to "@firebase/auth" to resolve module export errors, which can occur if Firebase services are installed as separate, scoped packages.
 import {
   getAuth,
   onAuthStateChanged,
@@ -29,7 +30,7 @@ import {
   signInWithPopup,
   signOut,
   type User
-} from "firebase/auth";
+} from "@firebase/auth";
 
 
 // Use Vite's import.meta.env to access environment variables on the client-side
