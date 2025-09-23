@@ -5,7 +5,7 @@ declare global {
   interface ImportMeta {
     readonly env: {
       readonly VITE_GOOGLE_CLIENT_ID: string;
-      readonly VITE_GOOGLE_API_KEY: string;
+      // VITE_GOOGLE_API_KEY is no longer used for Drive access.
       readonly VITE_FIREBASE_API_KEY: string;
       readonly VITE_FIREBASE_AUTH_DOMAIN: string;
       readonly VITE_FIREBASE_DATABASE_URL: string;
@@ -20,15 +20,20 @@ declare global {
 import type { ChatSession, UserProfile } from '../types';
 import { fetchUserProfileAndLogLogin } from './geminiService';
 import { firebaseApp } from './firebaseService'; // Import the initialized app
-// FIX: Using named imports for Firebase Auth to resolve module resolution errors.
-// This is the standard for Firebase v9+ and ensures functions are correctly imported.
-// FIX: Switched to a namespace import to resolve module resolution errors where named members were not found.
-import * as firebaseAuth from "firebase/auth";
+// FIX: Switched to named imports for Firebase v9+ to resolve module errors.
+// This is the standard and most reliable way to import Firebase auth functions.
+import {
+  getAuth,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  type User
+} from "firebase/auth";
 
 
 // Use Vite's import.meta.env to access environment variables on the client-side
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 
 
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
@@ -42,8 +47,7 @@ let gapiAccessToken: string | null = null;
 
 // Initialize Firebase Auth from the shared app instance
 // FIX: Use named import `getAuth` directly.
-// FIX: Use namespace import to access getAuth.
-const auth = firebaseAuth.getAuth(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 
 /**
@@ -84,8 +88,8 @@ export async function initClient(
 ) {
     console.log("Starting Google Drive service initialization...");
     try {
-        if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
-            throw new Error("VITE_GOOGLE_CLIENT_ID or VITE_GOOGLE_API_KEY is not set. Please check your environment variables.");
+        if (!GOOGLE_CLIENT_ID) {
+            throw new Error("VITE_GOOGLE_CLIENT_ID is not set. Please check your environment variables.");
         }
         
         const gapiLoadPromise = new Promise<void>((resolve, reject) => {
@@ -133,8 +137,7 @@ export async function initClient(
         });
         
         // FIX: Use named import `onAuthStateChanged` directly and `User` type.
-        // FIX: Use namespace import to access onAuthStateChanged and the User type.
-        firebaseAuth.onAuthStateChanged(auth, async (user: firebaseAuth.User | null) => {
+        onAuthStateChanged(auth, async (user: User | null) => {
             if (user) {
                 console.log("Firebase user detected. Fetching profile.");
                 const basicUserProfile: UserProfile = {
@@ -166,16 +169,13 @@ export async function initClient(
 export async function signIn() {
     console.log("signIn function called, initiating Firebase popup.");
     // FIX: Use named import `GoogleAuthProvider` directly.
-    // FIX: Use namespace import to access GoogleAuthProvider.
-    const provider = new firebaseAuth.GoogleAuthProvider();
+    const provider = new GoogleAuthProvider();
     provider.addScope(SCOPES); // Request Drive scope along with standard scopes
     try {
         // FIX: Use named import `signInWithPopup` directly.
-        // FIX: Use namespace import to access signInWithPopup.
-        const result = await firebaseAuth.signInWithPopup(auth, provider);
+        const result = await signInWithPopup(auth, provider);
         // FIX: Use named import `GoogleAuthProvider` directly.
-        // FIX: Use namespace import to access GoogleAuthProvider.
-        const credential = firebaseAuth.GoogleAuthProvider.credentialFromResult(result);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
         if (credential?.accessToken) {
             console.log("Successfully signed in with Firebase and got access token for Drive.");
             gapiAccessToken = credential.accessToken;
@@ -193,8 +193,8 @@ export async function signIn() {
 // Renamed to avoid conflict with the imported 'signOut' from firebase/auth.
 export function signOutFromApp(onSignOutComplete: () => void) {
     // This now correctly calls the imported Firebase signOut function.
-    // FIX: Use namespace import to access signOut.
-    firebaseAuth.signOut(auth).then(() => {
+    // FIX: Use named import `signOut` directly.
+    signOut(auth).then(() => {
         console.log("Firebase user signed out.");
         onSignOutComplete();
         // onAuthStateChanged will handle the rest of the cleanup.
@@ -356,9 +356,45 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return window.btoa(binary);
 }
 
-export function getDriveFilePublicUrl(fileId: string): string {
-    return `https://drive.google.com/thumbnail?id=${fileId}&key=${GOOGLE_API_KEY}`;
+// FIX: New function to securely fetch image data as a data URL using OAuth.
+// Includes in-memory caching to prevent redundant API calls.
+const imageCache = new Map<string, string>();
+export async function getDriveImageAsDataUrl(fileId: string): Promise<string> {
+    if (!fileId) return Promise.reject("fileId is required");
+    if (imageCache.has(fileId)) {
+        return Promise.resolve(imageCache.get(fileId)!);
+    }
+
+    const performFetch = async (accessToken: string) => {
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        if (!response.ok) {
+            const error: any = new Error(`HTTP Status: ${response.status}`);
+            error.status = response.status;
+            try { error.data = await response.json(); } catch (e) { /* Ignore parsing error */ }
+            throw error;
+        }
+        return response;
+    };
+
+    try {
+        const response = await gapiWithAuthRefresh(async () => {
+             if (!gapiAccessToken) throw new Error("Access token not available for download.");
+             return performFetch(gapiAccessToken);
+        });
+        const buffer = await response.arrayBuffer();
+        const mimeType = response.headers.get('Content-Type') || 'image/png';
+        const base64Data = arrayBufferToBase64(buffer);
+        const dataUrl = `data:${mimeType};base64,${base64Data}`;
+        
+        imageCache.set(fileId, dataUrl); // Cache the result
+        return dataUrl;
+    } catch (error) {
+        handleGapiError(error, `downloading image ${fileId}`);
+    }
 }
+
 
 export async function downloadDriveFile(fileId: string): Promise<string> {
     const performFetch = async (accessToken: string) => {
