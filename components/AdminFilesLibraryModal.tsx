@@ -106,10 +106,14 @@ export const AdminFilesLibraryModal: React.FC<AdminFilesLibraryModalProps> = ({ 
     }
   }, [editingFile, activeTab, resetForm]);
   
-  const handleSelectIcon = () => {
-    googleDriveService.showPicker((files) => {
-        if (files && files.length > 0) setIcon({ id: files[0].id, name: files[0].name });
-    }, { mimeTypes: 'image/png,image/jpeg,image/webp,image/vnd.microsoft.icon' });
+  const handleSelectIcon = async () => {
+    try {
+        await googleDriveService.showPicker((files) => {
+            if (files && files.length > 0) setIcon({ id: files[0].id, name: files[0].name });
+        }, { mimeTypes: 'image/png,image/jpeg,image/webp,image/vnd.microsoft.icon' });
+    } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not open file picker.');
+    }
   };
   
   const handlePartChange = (index: number, field: 'part_name' | 'download_url', value: string) => {
