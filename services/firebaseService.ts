@@ -12,22 +12,43 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp;
-let database: Database;
+let app: FirebaseApp | null = null;
+let database: Database | null = null;
 
-try {
-  app = initializeApp(firebaseConfig);
-  database = getDatabase(app);
-} catch (error) {
-  console.error("Firebase initialization error:", error);
-}
+// Function to get the database instance, initializing if necessary.
+const getDb = (): Database | null => {
+    if (database) {
+        return database;
+    }
+    if (!app) {
+        try {
+            // Check if all config keys are present before initializing
+            for (const key in firebaseConfig) {
+                if (!firebaseConfig[key as keyof typeof firebaseConfig]) {
+                    console.error(`Firebase config is missing key: ${key}. Initialization aborted.`);
+                    return null;
+                }
+            }
+            app = initializeApp(firebaseConfig);
+            database = getDatabase(app);
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+            app = null;
+            database = null;
+        }
+    }
+    return database;
+};
+
 
 // --- PRESENCE SYSTEM ---
 export const setupPresence = (user: UserProfile) => {
-  if (!database || !user) return;
-  const myConnectionsRef = ref(database, `users/${user.id}/connections`);
-  const lastOnlineRef = ref(database, `users/${user.id}/lastOnline`);
-  const connectedRef = ref(database, '.info/connected');
+  const db = getDb();
+  if (!db || !user) return;
+
+  const myConnectionsRef = ref(db, `users/${user.id}/connections`);
+  const lastOnlineRef = ref(db, `users/${user.id}/lastOnline`);
+  const connectedRef = ref(db, '.info/connected');
 
   onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
@@ -40,7 +61,12 @@ export const setupPresence = (user: UserProfile) => {
 };
 
 export const onUsersStatusChange = (callback: (users: { [key: string]: OnlineUser }) => void): Unsubscribe => {
-    const usersRef = ref(database, 'users');
+    const db = getDb();
+    if (!db) {
+        console.error("Firebase not available for onUsersStatusChange.");
+        return () => {}; // Return a no-op function
+    }
+    const usersRef = ref(db, 'users');
     const listener = onValue(usersRef, (snapshot) => {
         const usersData = snapshot.val() || {};
         const onlineUsers: { [key: string]: OnlineUser } = {};
@@ -58,8 +84,9 @@ export const onUsersStatusChange = (callback: (users: { [key: string]: OnlineUse
 
 // --- CHAT MESSAGES ---
 export const sendMessage = (text: string, user: UserProfile) => {
-    if (!database || !text.trim() || !user) return;
-    const messagesRef = ref(database, 'chat-messages');
+    const db = getDb();
+    if (!db || !text.trim() || !user) return;
+    const messagesRef = ref(db, 'chat-messages');
     push(messagesRef, {
         text: text.trim(),
         timestamp: serverTimestamp(),
@@ -77,7 +104,12 @@ export const sendMessage = (text: string, user: UserProfile) => {
 };
 
 export const onNewMessage = (callback: (messages: ChatRoomMessage[]) => void): Unsubscribe => {
-    const messagesRef = ref(database, 'chat-messages');
+    const db = getDb();
+    if (!db) {
+        console.error("Firebase not available for onNewMessage.");
+        return () => {}; // Return a no-op function
+    }
+    const messagesRef = ref(db, 'chat-messages');
     const listener = onValue(messagesRef, (snapshot) => {
         const messagesData = snapshot.val() || {};
         const messagesList: ChatRoomMessage[] = Object.keys(messagesData).map(key => ({
@@ -91,7 +123,7 @@ export const onNewMessage = (callback: (messages: ChatRoomMessage[]) => void): U
 
 // --- USER PROFILE ---
 export const fetchAllUsers = async (): Promise<OnlineUser[]> => {
-    if (!database) return [];
+    if (!getDb()) return [];
     try {
         const response = await fetch('/api/admin?action=get_all_chat_users', {
              headers: { 'X-User-Email': 'dummy@email.com' } // Placeholder, as this needs to be a logged-in action
@@ -105,12 +137,12 @@ export const fetchAllUsers = async (): Promise<OnlineUser[]> => {
     }
 };
 
-export const updateAboutMe = async (userEmail: string, aboutMe: string): Promise<string> => {
+export const updateAboutMe = async (user: UserProfile, aboutMe: string): Promise<string> => {
     const response = await fetch('/api/admin', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-User-Email': userEmail, // Authenticates the request
+            'X-User-Email': user.email, // Authenticates the request
         },
         body: JSON.stringify({ action: 'update_profile', aboutMe })
     });
@@ -120,8 +152,9 @@ export const updateAboutMe = async (userEmail: string, aboutMe: string): Promise
     }
 
     // Also update Firebase
-    if (database) {
-        const userRef = ref(database, `users/${result.userId}/aboutMe`); // Assuming API returns userId
+    const db = getDb();
+    if (db && user.id) {
+        const userRef = ref(db, `users/${user.id}/aboutMe`);
         await set(userRef, aboutMe);
     }
     
