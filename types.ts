@@ -49,7 +49,31 @@ export interface UserProfile {
     points?: number; // For game portal points
     hasPermanentNameColor?: boolean; // For lucky wheel reward
     hasSakuraBanner?: boolean; // For lucky wheel reward
+    aboutMe?: string; // For Chat Room user popover
 }
+
+// --- NEW TYPES FOR CHAT ROOM ---
+
+export interface ChatRoomMessage {
+  id: string;
+  text: string;
+  timestamp: number;
+  user: {
+    id: string;
+    name: string;
+    imageUrl: string;
+    level?: number;
+    isPro?: boolean;
+    isModerator?: boolean;
+    hasPermanentNameColor?: boolean;
+    hasSakuraBanner?: boolean;
+  };
+}
+
+export interface OnlineUser extends UserProfile {
+  isOnline: boolean;
+}
+
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
 
