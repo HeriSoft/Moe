@@ -20,9 +20,9 @@ declare global {
 import type { ChatSession, UserProfile } from '../types';
 import { fetchUserProfileAndLogLogin } from './geminiService';
 import { firebaseApp } from './firebaseService'; // Import the initialized app
-// FIX: Using a namespace import for Firebase Auth to resolve module resolution errors.
-// This can help in environments where named exports from 'firebase/auth' are not correctly recognized.
-import * as fbAuth from "firebase/auth";
+// FIX: Using named imports for Firebase Auth to resolve module resolution errors.
+// This is the standard for Firebase v9+ and ensures functions are correctly imported.
+import { getAuth, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 
 
 // Use Vite's import.meta.env to access environment variables on the client-side
@@ -40,7 +40,8 @@ let appFolderId: string | null = null;
 let gapiAccessToken: string | null = null;
 
 // Initialize Firebase Auth from the shared app instance
-const auth = fbAuth.getAuth(firebaseApp);
+// FIX: Use named import `getAuth` directly.
+const auth = getAuth(firebaseApp);
 
 
 /**
@@ -120,8 +121,8 @@ export async function initClient(
         await new Promise<void>((resolve, reject) => {
             gapi.load('client', async () => {
                 try {
+                    // FIX: Removed the conflicting apiKey. The client will rely solely on the OAuth token.
                     await gapi.client.init({
-                        apiKey: GOOGLE_API_KEY,
                         discoveryDocs: DISCOVERY_DOCS,
                     });
                     resolve();
@@ -129,7 +130,8 @@ export async function initClient(
             });
         });
         
-        fbAuth.onAuthStateChanged(auth, async (user: fbAuth.User | null) => {
+        // FIX: Use named import `onAuthStateChanged` directly and `User` type.
+        onAuthStateChanged(auth, async (user: User | null) => {
             if (user) {
                 console.log("Firebase user detected. Fetching profile.");
                 const basicUserProfile: UserProfile = {
@@ -160,11 +162,14 @@ export async function initClient(
 
 export async function signIn() {
     console.log("signIn function called, initiating Firebase popup.");
-    const provider = new fbAuth.GoogleAuthProvider();
+    // FIX: Use named import `GoogleAuthProvider` directly.
+    const provider = new GoogleAuthProvider();
     provider.addScope(SCOPES); // Request Drive scope along with standard scopes
     try {
-        const result = await fbAuth.signInWithPopup(auth, provider);
-        const credential = fbAuth.GoogleAuthProvider.credentialFromResult(result);
+        // FIX: Use named import `signInWithPopup` directly.
+        const result = await signInWithPopup(auth, provider);
+        // FIX: Use named import `GoogleAuthProvider` directly.
+        const credential = GoogleAuthProvider.credentialFromResult(result);
         if (credential?.accessToken) {
             console.log("Successfully signed in with Firebase and got access token for Drive.");
             gapiAccessToken = credential.accessToken;
@@ -180,7 +185,8 @@ export async function signIn() {
 }
 
 export function signOut(onSignOutComplete: () => void) {
-    fbAuth.signOut(auth).then(() => {
+    // FIX: Use named import `signOut` directly.
+    signOut(auth).then(() => {
         console.log("Firebase user signed out.");
         onSignOutComplete();
         // onAuthStateChanged will handle the rest of the cleanup.
