@@ -1,5 +1,7 @@
 // FIX: Use modular imports for Firebase SDK v9+ to resolve type and function errors.
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+// FIX: Changed import path to use scoped package to resolve module export errors.
+import { initializeApp, type FirebaseApp } from '@firebase/app';
+// FIX: Changed import path to use scoped package to resolve module export errors.
 import {
   getDatabase,
   ref,
@@ -16,11 +18,8 @@ import {
   Unsubscribe,
   off,
   update
-} from 'firebase/database';
+} from '@firebase/database';
 import type { UserProfile, ChatRoomMessage, OnlineUser } from '../types';
-
-// FIX: Removed the conflicting global declaration.
-// The merged declaration is now in `googleDriveService.ts` and will apply globally.
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
