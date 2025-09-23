@@ -22,7 +22,8 @@ import { fetchUserProfileAndLogLogin } from './geminiService';
 import { firebaseApp } from './firebaseService'; // Import the initialized app
 // FIX: Using named imports for Firebase Auth to resolve module resolution errors.
 // This is the standard for Firebase v9+ and ensures functions are correctly imported.
-import { getAuth, onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+// FIX: Switched to a namespace import to resolve module resolution errors where named members were not found.
+import * as firebaseAuth from "firebase/auth";
 
 
 // Use Vite's import.meta.env to access environment variables on the client-side
@@ -41,7 +42,8 @@ let gapiAccessToken: string | null = null;
 
 // Initialize Firebase Auth from the shared app instance
 // FIX: Use named import `getAuth` directly.
-const auth = getAuth(firebaseApp);
+// FIX: Use namespace import to access getAuth.
+const auth = firebaseAuth.getAuth(firebaseApp);
 
 
 /**
@@ -131,7 +133,8 @@ export async function initClient(
         });
         
         // FIX: Use named import `onAuthStateChanged` directly and `User` type.
-        onAuthStateChanged(auth, async (user: User | null) => {
+        // FIX: Use namespace import to access onAuthStateChanged and the User type.
+        firebaseAuth.onAuthStateChanged(auth, async (user: firebaseAuth.User | null) => {
             if (user) {
                 console.log("Firebase user detected. Fetching profile.");
                 const basicUserProfile: UserProfile = {
@@ -163,13 +166,16 @@ export async function initClient(
 export async function signIn() {
     console.log("signIn function called, initiating Firebase popup.");
     // FIX: Use named import `GoogleAuthProvider` directly.
-    const provider = new GoogleAuthProvider();
+    // FIX: Use namespace import to access GoogleAuthProvider.
+    const provider = new firebaseAuth.GoogleAuthProvider();
     provider.addScope(SCOPES); // Request Drive scope along with standard scopes
     try {
         // FIX: Use named import `signInWithPopup` directly.
-        const result = await signInWithPopup(auth, provider);
+        // FIX: Use namespace import to access signInWithPopup.
+        const result = await firebaseAuth.signInWithPopup(auth, provider);
         // FIX: Use named import `GoogleAuthProvider` directly.
-        const credential = GoogleAuthProvider.credentialFromResult(result);
+        // FIX: Use namespace import to access GoogleAuthProvider.
+        const credential = firebaseAuth.GoogleAuthProvider.credentialFromResult(result);
         if (credential?.accessToken) {
             console.log("Successfully signed in with Firebase and got access token for Drive.");
             gapiAccessToken = credential.accessToken;
@@ -184,9 +190,11 @@ export async function signIn() {
     }
 }
 
-export function signOut(onSignOutComplete: () => void) {
-    // FIX: Use named import `signOut` directly.
-    signOut(auth).then(() => {
+// Renamed to avoid conflict with the imported 'signOut' from firebase/auth.
+export function signOutFromApp(onSignOutComplete: () => void) {
+    // This now correctly calls the imported Firebase signOut function.
+    // FIX: Use namespace import to access signOut.
+    firebaseAuth.signOut(auth).then(() => {
         console.log("Firebase user signed out.");
         onSignOutComplete();
         // onAuthStateChanged will handle the rest of the cleanup.
