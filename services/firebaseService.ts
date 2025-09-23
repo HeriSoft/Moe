@@ -1,4 +1,5 @@
-import * as firebase from 'firebase/app';
+// FIX: Use modular imports for Firebase SDK v9+ to resolve type and function errors.
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   getDatabase,
   ref,
@@ -31,11 +32,13 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-let app: firebase.FirebaseApp;
+// FIX: Correctly type the Firebase app instance.
+let app: FirebaseApp;
 let db: Database;
 
 try {
-  app = firebase.initializeApp(firebaseConfig);
+  // FIX: Use the imported initializeApp function directly.
+  app = initializeApp(firebaseConfig);
   db = getDatabase(app);
 } catch (error) {
   console.error("Firebase initialization error:", error);
