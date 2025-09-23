@@ -19,6 +19,8 @@ import {
   off,
   update
 } from '@firebase/database';
+// NEW: Import Firebase Auth modules
+import { getAuth, signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut, type Auth } from '@firebase/auth';
 import type { UserProfile, ChatRoomMessage, OnlineUser } from '../types';
 
 const firebaseConfig = {
@@ -34,14 +36,40 @@ const firebaseConfig = {
 // FIX: Correctly type the Firebase app instance.
 let app: FirebaseApp;
 let db: Database;
+// NEW: Add Auth instance
+export let auth: Auth;
 
 try {
   // FIX: Use the imported initializeApp function directly.
   app = initializeApp(firebaseConfig);
   db = getDatabase(app);
+  // NEW: Initialize Firebase Auth
+  auth = getAuth(app);
 } catch (error) {
   console.error("Firebase initialization error:", error);
 }
+
+// NEW: Function to sign in to Firebase using a Google ID token
+export const signInToFirebase = async (idToken: string) => {
+    if (!auth) throw new Error("Firebase Auth not initialized.");
+    try {
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+        console.log("Successfully signed in to Firebase.");
+    } catch (error) {
+        console.error("Firebase sign-in error:", error);
+        // Don't throw, as the app might still function with Drive access
+    }
+};
+
+// NEW: Export a unified sign-out function
+export const signOut = () => {
+    if (auth) {
+        return firebaseSignOut(auth);
+    }
+    return Promise.resolve();
+};
+
 
 // Store user status
 export const setupPresence = (user: UserProfile): Unsubscribe => {
