@@ -12,31 +12,37 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp | null = null;
-let database: Database | null = null;
+// Initialize Firebase ONCE and export the app instance.
+let app: FirebaseApp;
+let database: Database | null;
 
-// Function to get the database instance, initializing if necessary.
+try {
+  // Check if all config keys are present before initializing
+  let configComplete = true;
+  for (const key in firebaseConfig) {
+      if (!firebaseConfig[key as keyof typeof firebaseConfig]) {
+          console.error(`Firebase config is missing key: ${key}. Initialization aborted.`);
+          configComplete = false;
+          break;
+      }
+  }
+  if (configComplete) {
+      app = initializeApp(firebaseConfig);
+      database = getDatabase(app);
+  } else {
+      app = null as any; // Explicitly set to a falsy value
+      database = null;
+  }
+} catch (error) {
+  console.error("Firebase initialization error:", error);
+  app = null as any;
+  database = null;
+}
+
+export const firebaseApp = app;
+
+// Function to get the database instance.
 const getDb = (): Database | null => {
-    if (database) {
-        return database;
-    }
-    if (!app) {
-        try {
-            // Check if all config keys are present before initializing
-            for (const key in firebaseConfig) {
-                if (!firebaseConfig[key as keyof typeof firebaseConfig]) {
-                    console.error(`Firebase config is missing key: ${key}. Initialization aborted.`);
-                    return null;
-                }
-            }
-            app = initializeApp(firebaseConfig);
-            database = getDatabase(app);
-        } catch (error) {
-            console.error("Firebase initialization error:", error);
-            app = null;
-            database = null;
-        }
-    }
     return database;
 };
 
@@ -44,11 +50,23 @@ const getDb = (): Database | null => {
 // --- PRESENCE SYSTEM ---
 export const setupPresence = (user: UserProfile) => {
   const db = getDb();
-  if (!db || !user) return;
+  if (!db || !user || !user.id) return; // Added check for user.id
 
+  // Use user.id which is now the Firebase UID
   const myConnectionsRef = ref(db, `users/${user.id}/connections`);
   const lastOnlineRef = ref(db, `users/${user.id}/lastOnline`);
   const connectedRef = ref(db, '.info/connected');
+  
+  // Set user profile data, but only non-sensitive parts for presence
+  const userStatusRef = ref(db, `users/${user.id}`);
+  const presenceData = {
+    name: user.name,
+    imageUrl: user.imageUrl,
+    email: user.email, // Storing email can be useful for lookups
+    aboutMe: user.aboutMe || '',
+    // Connections and lastOnline will be handled by the presence logic
+  };
+  set(userStatusRef, presenceData); // Overwrites with fresh data on connect
 
   onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
@@ -85,13 +103,13 @@ export const onUsersStatusChange = (callback: (users: { [key: string]: OnlineUse
 // --- CHAT MESSAGES ---
 export const sendMessage = (text: string, user: UserProfile) => {
     const db = getDb();
-    if (!db || !text.trim() || !user) return;
+    if (!db || !text.trim() || !user || !user.id) return; // Added check for user.id
     const messagesRef = ref(db, 'chat-messages');
     push(messagesRef, {
         text: text.trim(),
         timestamp: serverTimestamp(),
         user: {
-            id: user.id,
+            id: user.id, // This is the Firebase UID
             name: user.name,
             imageUrl: user.imageUrl,
             level: user.level,
@@ -122,11 +140,11 @@ export const onNewMessage = (callback: (messages: ChatRoomMessage[]) => void): U
 };
 
 // --- USER PROFILE ---
-export const fetchAllUsers = async (): Promise<OnlineUser[]> => {
+export const fetchAllUsers = async (currentUserEmail: string): Promise<OnlineUser[]> => {
     if (!getDb()) return [];
     try {
         const response = await fetch('/api/admin?action=get_all_chat_users', {
-             headers: { 'X-User-Email': 'dummy@email.com' } // Placeholder, as this needs to be a logged-in action
+             headers: { 'X-User-Email': currentUserEmail } 
         });
         if (!response.ok) throw new Error("Failed to fetch user list from server");
         const data = await response.json();
@@ -151,7 +169,7 @@ export const updateAboutMe = async (user: UserProfile, aboutMe: string): Promise
         throw new Error(result.details || "Failed to update profile.");
     }
 
-    // Also update Firebase
+    // Also update Firebase in real-time
     const db = getDb();
     if (db && user.id) {
         const userRef = ref(db, `users/${user.id}/aboutMe`);
