@@ -537,15 +537,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         </main>
         
         <div className="absolute bottom-4 right-4 sm:right-6 z-20 flex flex-col items-center gap-2">
-            {chatRoomState === 'minimized' && (
-                <button
-                onClick={onOpenChatRoom}
-                aria-label="Open Chat Room"
-                className="p-2 rounded-full bg-teal-600 text-white shadow-lg transition-all duration-300 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-[#171725]"
-                >
-                <ChatBubbleIcon className="w-6 h-6" />
-                </button>
-            )}
+            <button
+              onClick={onOpenChatRoom}
+              aria-label="Open Chat Room"
+              className="p-2 rounded-full bg-teal-600 text-white shadow-lg transition-all duration-300 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-[#171725]"
+            >
+              <ChatBubbleIcon className="w-6 h-6" />
+            </button>
             <button
               onClick={onOpenGamePortal}
               aria-label="Open Game Portal"
@@ -649,9 +647,6 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                 </button>
                 </form>
                 <div className="flex items-center justify-start flex-wrap gap-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1">
-                    <button title={"Chat Room"} aria-label="Open Chat Room" onClick={onOpenChatRoom} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${chatRoomState !== 'closed' ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
-                        <ChatBubbleIcon className="w-5 h-5" />
-                    </button>
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="*/*" multiple />
                     <button title={"Attach file from computer"} aria-label="Attach file from computer" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
                         <AttachmentIcon className="w-5 h-5" />
