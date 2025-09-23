@@ -3,6 +3,9 @@
 
 import type { ChatSession, UserProfile } from '../types';
 import { fetchUserProfileAndLogLogin } from './geminiService';
+// NEW: Import Firebase sign-in and sign-out functions
+import { signInToFirebase, signOut as firebaseSignOut } from './firebaseService';
+
 
 // Use Vite's import.meta.env to access environment variables on the client-side
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -96,6 +99,19 @@ export async function initClient(
         
         await Promise.all([gapiLoadPromise, gisLoadPromise]);
 
+        // NEW: Initialize Google ID services for Firebase Authentication
+        if (google) {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: async (response: any) => {
+                    console.log("Google ID credential response received for Firebase.");
+                    if (response.credential) {
+                        await signInToFirebase(response.credential);
+                    }
+                },
+            });
+        }
+
         await new Promise<void>((resolve, reject) => {
             gapi.load('client', async () => {
                 try {
@@ -111,6 +127,8 @@ export async function initClient(
                         if (token === null || !token.access_token) {
                             console.log("User is not signed in or token is missing.");
                             onAuthChange(false);
+                            // NEW: Prompt for sign-in if they aren't signed in for Firebase
+                            if (google) google.accounts.id.prompt();
                             return;
                         }
 
@@ -144,6 +162,9 @@ export async function initClient(
 
                             console.log("Full profile fetched successfully:", fullProfile.name);
                             onAuthChange(true, fullProfile);
+                            // NEW: After successful Drive login, ensure Firebase is also logged in.
+                            // The One Tap UI will show if needed, otherwise it does nothing.
+                            if (google) google.accounts.id.prompt();
                         } catch (error) {
                             console.error("Error fetching user info for existing session, signing out:", error);
                             signOutFromApp(() => onAuthChange(false));
@@ -209,6 +230,9 @@ export function signIn() {
 }
 
 export function signOutFromApp(onSignOutComplete: () => void) {
+    // NEW: Also sign out from firebase to clear the session completely.
+    firebaseSignOut().catch(err => console.error("Firebase sign out error:", err));
+
     const token = gapi.client.getToken();
     if (token !== null) {
         google.accounts.oauth2.revoke(token.access_token, () => {
