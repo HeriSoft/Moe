@@ -203,6 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
                     fileId={siteSettings.logoDriveId}
                     alt="Moe Chat Logo"
                     className="max-h-full w-auto"
+                    isPublic={true}
                 />
             ) : (
                 <h1 className="text-2xl font-bold">Moe Chat</h1>
