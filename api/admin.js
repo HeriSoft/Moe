@@ -68,6 +68,7 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS about_me TEXT;');
 
 
         console.log("Table 'users' is ready.");
@@ -140,6 +141,20 @@ export default async function handler(req, res) {
                         expiresAt: userData.subscription_expires_at,
                     });
                 }
+                
+                // Public endpoint for Chat Room to get all user profiles
+                if (actionQuery === 'get_all_chat_users') {
+                    if (!userEmail) return res.status(403).json({ error: 'Forbidden', details: 'Authentication required for chat.' });
+                    const { rows } = await pool.query(
+                        `SELECT id, name, email, image_url, level, is_moderator, has_permanent_name_color, has_sakura_banner, about_me, subscription_expires_at FROM users ORDER BY name;`
+                    );
+                    const users = rows.map(user => ({
+                        ...user,
+                        isPro: user.subscription_expires_at && new Date(user.subscription_expires_at) > new Date()
+                    }));
+                    return res.status(200).json({ users });
+                }
+
 
                 // --- Admin-only actions below ---
                 if (!isAdmin) {
@@ -167,7 +182,7 @@ export default async function handler(req, res) {
                 }
                 if (actionQuery === 'get_all_users') {
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points FROM users ORDER BY name;`
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points, about_me FROM users ORDER BY name;`
                     );
                     const users = rows.map(user => ({
                         ...user,
@@ -183,7 +198,23 @@ export default async function handler(req, res) {
             }
 
             case 'POST': {
-                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360, logoDriveId, amount } = req.body;
+                const { action, ip, email, bankQrId, momoQrId, memoFormat, days, isModerator, price30, price90, price360, logoDriveId, amount, aboutMe } = req.body;
+                
+                // Public endpoint for users to update their own profile
+                if (action === 'update_profile') {
+                    if (!userEmail) return res.status(403).json({ error: 'Forbidden' });
+                    // Currently only allows updating 'about_me'. Can be expanded.
+                    if (typeof aboutMe !== 'string') return res.status(400).json({ error: 'Invalid aboutMe text provided.' });
+
+                    const { rows } = await pool.query(
+                        `UPDATE users SET about_me = $1, updated_at = NOW() WHERE email = $2 RETURNING about_me;`,
+                        [aboutMe, userEmail]
+                    );
+
+                    if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
+                    return res.status(200).json({ success: true, aboutMe: rows[0].about_me });
+                }
+
 
                 if (action === 'cancel_subscription_user') {
                      if (!userEmail) return res.status(403).json({ error: 'Forbidden' });
@@ -218,6 +249,7 @@ export default async function handler(req, res) {
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        aboutMe: dbUser.about_me,
                     };
 
                     await logAction(ADMIN_EMAIL, `reset their own cosmetic items.`);
@@ -311,6 +343,7 @@ export default async function handler(req, res) {
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        aboutMe: dbUser.about_me,
                     };
 
                     await logAction(ADMIN_EMAIL, `added ${amountNum} points to ${email}.`);
