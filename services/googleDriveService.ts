@@ -1,22 +1,5 @@
-// FIX: Augment the global ImportMeta type to include Vite's environment variables.
-// This resolves TypeScript errors about `import.meta.env` when the standard
-// `vite/client` types are not being picked up automatically.
-// This declaration is merged with the one from firebaseService.ts to avoid conflicts.
-declare global {
-  interface ImportMeta {
-    readonly env: {
-      readonly VITE_GOOGLE_CLIENT_ID: string;
-      readonly VITE_GOOGLE_API_KEY: string;
-      readonly VITE_FIREBASE_API_KEY: string;
-      readonly VITE_FIREBASE_AUTH_DOMAIN: string;
-      readonly VITE_FIREBASE_DATABASE_URL: string;
-      readonly VITE_FIREBASE_PROJECT_ID: string;
-      readonly VITE_FIREBASE_STORAGE_BUCKET: string;
-      readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
-      readonly VITE_FIREBASE_APP_ID: string;
-    };
-  }
-}
+// The global type augmentation has been moved to types.ts to serve as a single
+// source of truth and resolve conflicts with Vite's built-in types.
 
 import type { ChatSession, UserProfile } from '../types';
 import { fetchUserProfileAndLogLogin } from './geminiService';
