@@ -122,6 +122,7 @@ const App: React.FC = () => {
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [musicSearchTerm, setMusicSearchTerm] = useState('');
   const [musicActiveGenre, setMusicActiveGenre] = useState('all');
+  const [mediaSessionArtworkUrl, setMediaSessionArtworkUrl] = useState<string | null>(null);
 
   // --- NEW Chat Room State ---
   const [chatRoomState, setChatRoomState] = useState<'closed' | 'open' | 'minimized'>('closed');
@@ -958,6 +959,24 @@ const App: React.FC = () => {
     }
   }, [isPlaying, isPlayerReady, currentSong]);
   
+  // Effect to fetch artwork for Media Session API
+  useEffect(() => {
+      let isMounted = true;
+      if (currentSong?.avatar_drive_id) {
+          googleDriveService.getDriveImageAsDataUrl(currentSong.avatar_drive_id)
+              .then(url => {
+                  if (isMounted) setMediaSessionArtworkUrl(url);
+              })
+              .catch(err => {
+                  console.error("Failed to load media session artwork:", err);
+                  if (isMounted) setMediaSessionArtworkUrl(null);
+              });
+      } else {
+          setMediaSessionArtworkUrl(null);
+      }
+      return () => { isMounted = false; };
+  }, [currentSong?.avatar_drive_id]);
+
   // --- Media Session API for Background Playback ---
   useEffect(() => {
     if ('mediaSession' in navigator) {
@@ -966,8 +985,8 @@ const App: React.FC = () => {
                 title: currentSong.title,
                 artist: currentSong.artist,
                 album: 'Moe Chat Music',
-                artwork: currentSong.avatar_drive_id
-                    ? [{ src: googleDriveService.getDriveFilePublicUrl(currentSong.avatar_drive_id), sizes: '512x512', type: 'image/png' }]
+                artwork: mediaSessionArtworkUrl
+                    ? [{ src: mediaSessionArtworkUrl, sizes: '512x512', type: 'image/png' }]
                     : []
             });
 
@@ -986,7 +1005,7 @@ const App: React.FC = () => {
             navigator.mediaSession.setActionHandler('previoustrack', null);
         }
     }
-  }, [currentSong, isPlaying, handleTogglePlay, handleNextSong, handlePrevSong]);
+  }, [currentSong, isPlaying, handleTogglePlay, handleNextSong, handlePrevSong, mediaSessionArtworkUrl]);
 
 
   return (
