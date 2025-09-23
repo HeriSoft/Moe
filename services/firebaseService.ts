@@ -1,19 +1,5 @@
-// FIX: Add type definitions for Vite environment variables to resolve TypeScript errors
-// related to `import.meta.env`.
-interface ImportMetaEnv {
-  readonly VITE_GOOGLE_CLIENT_ID: string;
-  readonly VITE_FIREBASE_API_KEY: string;
-  readonly VITE_FIREBASE_AUTH_DOMAIN: string;
-  readonly VITE_FIREBASE_DATABASE_URL: string;
-  readonly VITE_FIREBASE_PROJECT_ID: string;
-  readonly VITE_FIREBASE_STORAGE_BUCKET: string;
-  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
-  readonly VITE_FIREBASE_APP_ID: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+// FIX: Add a triple-slash directive to include Vite's client types, which defines `import.meta.env`.
+/// <reference types="vite/client" />
 
 import { initializeApp, FirebaseApp } from "firebase/app";
 import { getDatabase, ref, onValue, push, serverTimestamp, onDisconnect, set, get, child, Database, Unsubscribe, off, serverTimestamp as dbServerTimestamp } from "firebase/database";
