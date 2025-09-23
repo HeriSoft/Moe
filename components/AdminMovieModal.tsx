@@ -111,12 +111,16 @@ export const AdminMovieModal: React.FC<AdminMovieModalProps> = ({ isOpen, onClos
       }
   }, [editingMovie, activeTab, resetAddForm]);
 
-  const handleSelectThumbnail = () => {
-    googleDriveService.showPicker((files) => {
-        if (files && files.length > 0) {
-            setThumbnail({ id: files[0].id, name: files[0].name });
-        }
-    }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+  const handleSelectThumbnail = async () => {
+    try {
+        await googleDriveService.showPicker((files) => {
+            if (files && files.length > 0) {
+                setThumbnail({ id: files[0].id, name: files[0].name });
+            }
+        }, { mimeTypes: 'image/png,image/jpeg,image/webp' });
+    } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not open file picker.');
+    }
   };
   
   const handleEpisodeChange = (index: number, field: 'episode_number' | 'title' | 'video_drive_id', value: string | number) => {
