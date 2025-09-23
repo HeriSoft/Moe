@@ -442,7 +442,8 @@ const App: React.FC = () => {
   
   const toggleDeepThink = () => setIsDeepThinkEnabled(prev => !prev);
 
-  const handleAttachFromDrive = useCallback(() => {
+  // FIX: Update `handleAttachFromDrive` to be async and handle errors from the now-async `showPicker`.
+  const handleAttachFromDrive = useCallback(async () => {
     if (!isLoggedIn) {
         setIsLoginModalOpen(true);
         return;
@@ -475,9 +476,13 @@ const App: React.FC = () => {
         }
     };
 
-    googleDriveService.showPicker(onFilesSelected);
-
-  }, [isLoggedIn, attachments.length]);
+    try {
+        await googleDriveService.showPicker(onFilesSelected);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Could not show file picker.";
+        setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
+    }
+  }, [isLoggedIn, attachments.length, setNotifications]);
 
   const handleSaveToDrive = useCallback(async (message: Message) => {
     if (!message.sourceDriveFileId || !message.sourceDriveFileMimeType) {
