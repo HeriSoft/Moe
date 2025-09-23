@@ -1,4 +1,4 @@
-import { initializeApp, FirebaseApp } from 'firebase/app';
+import * as firebase from 'firebase/app';
 import {
   getDatabase,
   ref,
@@ -31,11 +31,11 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-let app: FirebaseApp;
+let app: firebase.FirebaseApp;
 let db: Database;
 
 try {
-  app = initializeApp(firebaseConfig);
+  app = firebase.initializeApp(firebaseConfig);
   db = getDatabase(app);
 } catch (error) {
   console.error("Firebase initialization error:", error);
