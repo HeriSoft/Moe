@@ -2,6 +2,7 @@ import React from 'react';
 import type { ChatSession, UserProfile } from '../types';
 import { PlusIcon, UserIcon, TrashIcon, StarIcon, MagnifyingGlassIcon, ShieldCheckIcon, TicketIcon, DownloadIcon, MusicalNoteIcon } from './icons';
 import * as googleDriveService from '../services/googleDriveService';
+import { getLevelInfo, VipTag } from './uiUtils';
 
 // --- NEW EXP SYSTEM HELPERS ---
 
@@ -11,29 +12,6 @@ const getExpForLevel = (level: number): number => {
     // e.g., L0->1: 100, L10->11: 1100, L50->51: 15100
     return 100 + (level * 50) + (level * level * 5);
 };
-
-const getLevelInfo = (level: number): { name: string; className: string; isMarquee?: boolean } => {
-    if (level <= 5) return { name: 'Newbie', className: 'text-white' };
-    if (level <= 10) return { name: 'Member', className: 'text-cyan-400' };
-    if (level <= 15) return { name: 'Active Member', className: 'text-purple-400' }; // Light Purple
-    if (level <= 20) return { name: 'Enthusiast', className: 'text-purple-500' };
-    if (level <= 25) return { name: 'Contributor', className: 'bg-gradient-to-r from-purple-400 to-white bg-clip-text text-transparent' };
-    if (level <= 30) return { name: 'Pro', className: 'bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent' };
-    if (level <= 35) return { name: 'Veteran', className: 'bg-gradient-to-r from-pink-400 to-red-400 bg-clip-text text-transparent' };
-    if (level <= 40) return { name: 'Expert', className: 'bg-gradient-to-r from-lime-400 to-white bg-clip-text text-transparent' }; // Green/White
-    if (level <= 45) return { name: 'Master', className: 'bg-gradient-to-r from-lime-400 to-yellow-400 bg-clip-text text-transparent' };
-    if (level <= 50) return { name: 'Grandmaster', className: 'bg-gradient-to-r from-purple-400 to-lime-400 bg-clip-text text-transparent' };
-    if (level <= 55) return { name: 'Guardian', className: 'bg-gradient-to-r from-teal-400 to-white bg-clip-text text-transparent' };
-    if (level <= 60) return { name: 'Titan', className: 'bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent' };
-    if (level <= 65) return { name: 'Immortal', className: 'bg-gradient-to-r from-red-500 to-yellow-400 bg-clip-text text-transparent animate-pulse' }; // Red/Yellow Pulse
-    if (level <= 70) return { name: 'Mythic', className: 'bg-gradient-to-r from-red-500 to-blue-500 bg-clip-text text-transparent animate-pulse' }; // Red/Blue Pulse
-    if (level <= 75) return { name: 'Ascendant', className: 'level-ascendant bg-gradient-to-r from-teal-400 to-yellow-400 bg-clip-text text-transparent animate-pulse', isMarquee: true }; // Teal/Yellow Pulse + Marquee
-    return { name: 'Legend', className: 'bg-gradient-to-r from-amber-400 via-red-500 to-purple-500 animate-pulse bg-clip-text text-transparent' };
-};
-
-
-// VIP Tag component
-const VipTag: React.FC = () => <span className="vip-tag-shine">VIP</span>;
 
 interface SidebarProps {
   chatSessions: ChatSession[];
@@ -316,34 +294,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ chatSessions, activeChatId, st
         </div>
       </aside>
       <style>{`
-        @keyframes shine-vip {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-        .vip-tag-shine {
-            position: relative;
-            display: inline-block;
-            padding: 2px 8px;
-            font-size: 0.75rem; /* 12px */
-            font-weight: 700;
-            line-height: 1.2;
-            color: #1e293b; /* slate-800 */
-            background: linear-gradient(110deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
-            border-radius: 0.375rem; /* rounded-md */
-            overflow: hidden;
-            -webkit-mask-image: -webkit-radial-gradient(white, black);
-        }
-        .vip-tag-shine::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
-            animation: shine-vip 3s ease-in-out infinite;
-            animation-delay: 1s;
-        }
         @keyframes marquee-ascendant {
             0% { transform: translateX(50%); }
             100% { transform: translateX(-100%); }
