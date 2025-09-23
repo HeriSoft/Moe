@@ -1,27 +1,16 @@
-// FIX: Use modular imports for Firebase SDK v9+ to resolve type and function errors.
-// FIX: Changed import path to use scoped package to resolve module export errors.
-import { initializeApp, type FirebaseApp } from '@firebase/app';
-// FIX: Changed import path to use scoped package to resolve module export errors.
-import {
-  getDatabase,
-  ref,
-  onValue,
-  onDisconnect,
-  set,
-  serverTimestamp,
-  goOnline,
-  goOffline,
-  push,
-  query,
-  limitToLast,
-  Database,
-  Unsubscribe,
-  off,
-  update
-} from '@firebase/database';
-// NEW: Import Firebase Auth modules
-import { getAuth, signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut, type Auth } from '@firebase/auth';
+// FIX: Refactored to Firebase v8 (namespaced) API to resolve module import errors.
+// This indicates the project is likely using Firebase v8, not v9+.
+import firebase from 'firebase/app';
+import 'firebase/auth';
+import 'firebase/database';
+
 import type { UserProfile, ChatRoomMessage, OnlineUser } from '../types';
+
+// v8 Type Definitions
+type FirebaseApp = firebase.app.App;
+type Database = firebase.database.Database;
+type Auth = firebase.auth.Auth;
+type Unsubscribe = () => void;
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -33,28 +22,28 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// FIX: Correctly type the Firebase app instance.
 let app: FirebaseApp;
 let db: Database;
-// NEW: Add Auth instance
 export let auth: Auth;
 
 try {
-  // FIX: Use the imported initializeApp function directly.
-  app = initializeApp(firebaseConfig);
-  db = getDatabase(app);
-  // NEW: Initialize Firebase Auth
-  auth = getAuth(app);
+  if (!firebase.apps.length) {
+    app = firebase.initializeApp(firebaseConfig);
+  } else {
+    app = firebase.app();
+  }
+  db = firebase.database(app);
+  auth = firebase.auth(app);
 } catch (error) {
   console.error("Firebase initialization error:", error);
 }
 
-// NEW: Function to sign in to Firebase using a Google ID token
+// Function to sign in to Firebase using a Google ID token
 export const signInToFirebase = async (idToken: string) => {
     if (!auth) throw new Error("Firebase Auth not initialized.");
     try {
-        const credential = GoogleAuthProvider.credential(idToken);
-        await signInWithCredential(auth, credential);
+        const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
+        await auth.signInWithCredential(credential);
         console.log("Successfully signed in to Firebase.");
     } catch (error) {
         console.error("Firebase sign-in error:", error);
@@ -62,10 +51,10 @@ export const signInToFirebase = async (idToken: string) => {
     }
 };
 
-// NEW: Export a unified sign-out function
+// Export a unified sign-out function
 export const signOut = () => {
     if (auth) {
-        return firebaseSignOut(auth);
+        return auth.signOut();
     }
     return Promise.resolve();
 };
@@ -75,10 +64,10 @@ export const signOut = () => {
 export const setupPresence = (user: UserProfile): Unsubscribe => {
   if (!db || !user) return () => {};
 
-  const userStatusDatabaseRef = ref(db, `/status/${user.id}`);
+  const userStatusDatabaseRef = db.ref(`/status/${user.id}`);
   const isOfflineForDatabase = {
     isOnline: false,
-    lastOnline: serverTimestamp(),
+    lastOnline: firebase.database.ServerValue.TIMESTAMP,
   };
 
   const userForPresence = {
@@ -93,44 +82,44 @@ export const setupPresence = (user: UserProfile): Unsubscribe => {
     hasSakuraBanner: user.hasSakuraBanner,
     aboutMe: user.aboutMe || '',
     isOnline: true,
-    lastOnline: serverTimestamp(),
+    lastOnline: firebase.database.ServerValue.TIMESTAMP,
   };
 
-  const connectedRef = ref(db, '.info/connected');
-  const unsubscribe = onValue(connectedRef, (snapshot) => {
+  const connectedRef = db.ref('.info/connected');
+  const listener = connectedRef.on('value', (snapshot) => {
     if (snapshot.val() === false) {
       return;
     }
-    onDisconnect(userStatusDatabaseRef).update(isOfflineForDatabase).then(() => {
-      update(userStatusDatabaseRef, userForPresence);
+    userStatusDatabaseRef.onDisconnect().update(isOfflineForDatabase).then(() => {
+      userStatusDatabaseRef.update(userForPresence);
     });
   });
 
-  goOnline(db);
+  firebase.database().goOnline();
 
   return () => {
-    goOffline(db);
-    update(userStatusDatabaseRef, isOfflineForDatabase);
-    unsubscribe(); // Unsubscribe from .info/connected
+    firebase.database().goOffline();
+    userStatusDatabaseRef.update(isOfflineForDatabase);
+    connectedRef.off('value', listener); // Unsubscribe from .info/connected
   };
 };
 
 export const onUsersStatusChange = (callback: (users: { [key: string]: OnlineUser }) => void): Unsubscribe => {
   if (!db) return () => {};
-  const usersRef = ref(db, '/status');
-  const unsubscribe = onValue(usersRef, (snapshot) => {
+  const usersRef = db.ref('/status');
+  const listener = usersRef.on('value', (snapshot) => {
     const usersData = snapshot.val() || {};
     callback(usersData);
   });
-  return unsubscribe;
+  return () => usersRef.off('value', listener);
 };
 
 export const onNewMessage = (callback: React.Dispatch<React.SetStateAction<ChatRoomMessage[]>>): Unsubscribe => {
     if (!db) return () => {};
-    const messagesRef = ref(db, '/chat_messages');
-    const messagesQuery = query(messagesRef, limitToLast(100));
+    const messagesRef = db.ref('/chat_messages');
+    const messagesQuery = messagesRef.limitToLast(100);
 
-    const unsubscribe = onValue(messagesQuery, (snapshot) => {
+    const listener = messagesQuery.on('value', (snapshot) => {
         const messagesData = snapshot.val() || {};
         const messagesList: ChatRoomMessage[] = Object.keys(messagesData).map(key => ({
             id: key,
@@ -138,16 +127,16 @@ export const onNewMessage = (callback: React.Dispatch<React.SetStateAction<ChatR
         }));
         callback(messagesList);
     });
-    return unsubscribe;
+    return () => messagesQuery.off('value', listener);
 };
 
 
 export const sendMessage = (text: string, user: UserProfile) => {
   if (!db || !user) return;
-  const messagesRef = ref(db, '/chat_messages');
+  const messagesRef = db.ref('/chat_messages');
   const newMessage = {
     text,
-    timestamp: serverTimestamp(),
+    timestamp: firebase.database.ServerValue.TIMESTAMP,
     user: {
       id: user.id,
       name: user.name,
@@ -159,11 +148,11 @@ export const sendMessage = (text: string, user: UserProfile) => {
       hasSakuraBanner: user.hasSakuraBanner,
     },
   };
-  push(messagesRef, newMessage);
+  messagesRef.push(newMessage);
 };
 
 export const updateAboutMe = async (user: UserProfile, aboutMe: string) => {
   if (!db || !user) return;
-  const userStatusRef = ref(db, `/status/${user.id}`);
-  await update(userStatusRef, { aboutMe });
+  const userStatusRef = db.ref(`/status/${user.id}`);
+  await userStatusRef.update({ aboutMe });
 };
