@@ -267,45 +267,119 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
             <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col sm:flex-row p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={e => e.stopPropagation()}>
+                {/* Left Column: Settings */}
                 <div className="w-full sm:w-[40%] md:w-1/3 sm:pr-6 border-b sm:border-b-0 sm:border-r border-slate-200 dark:border-slate-700 pb-4 sm:pb-0 mb-4 sm:mb-0 flex-shrink-0 sm:overflow-y-auto pr-2 -mr-2">
-                    <div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-bold flex items-center gap-2"><SparklesIcon className="w-7 h-7"/> Creative Tools</h2><button onClick={onClose} className="sm:hidden text-slate-500"><CloseIcon className="w-7 h-7" /></button></div>
-                    <div className="mb-4"><label htmlFor="creative-mode-select" className="label-style mb-1">Tool</label><select id="creative-mode-select" value={activeMode} onChange={(e) => setActiveMode(e.target.value as CreativeMode)} className="w-full input-style"><option value="image">Image Generation</option><option value="edit">Image Editing</option><option value="faceSwap">Face Swap</option><option value="video" disabled>Video Generation</option></select></div>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-2xl font-bold flex items-center gap-2"><SparklesIcon className="w-7 h-7"/> Creative Tools</h2>
+                        <button onClick={onClose} className="sm:hidden text-slate-500"><CloseIcon className="w-7 h-7" /></button>
+                    </div>
+                    <div className="mb-4">
+                        <label htmlFor="creative-mode-select" className="label-style mb-1">Tool</label>
+                        <select id="creative-mode-select" value={activeMode} onChange={(e) => setActiveMode(e.target.value as CreativeMode)} className="w-full input-style">
+                            <option value="image">Image Generation</option>
+                            <option value="edit">Image Editing</option>
+                            <option value="faceSwap">Face Swap</option>
+                            <option value="video" disabled>Video Generation</option>
+                        </select>
+                    </div>
                     
-                    {activeMode === 'image' && <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4"><h3 className="font-semibold text-lg">Model Settings</h3><div><label className="label-style mb-1">Model</label><select value={genSettings.model} onChange={(e) => setGenSettings(s => ({ ...s, model: e.target.value as ImageGenerationSettings['model'] }))} className="w-full input-style"><option value="imagen-4.0-generate-001">Imagen 4 (Google)</option><option value="dall-e-3">DALL·E 3 (OpenAI)</option></select></div><Slider label="Number of Images" value={genSettings.numImages} min={1} max={4} step={1} onChange={v => setGenSettings(s => ({ ...s, numImages: v }))} /><div><label className="label-style mb-1">Aspect Ratio</label><select value={genSettings.aspectRatio} onChange={e => setGenSettings(s => ({ ...s, aspectRatio: e.target.value }))} className="w-full input-style">{availableRatios.map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}</select></div>{isDalle && <><div><label className="label-style mb-1">Quality</label><select value={genSettings.quality} onChange={e => setGenSettings(s => ({ ...s, quality: e.target.value as 'standard' | 'hd' }))} className="w-full input-style"><option value="standard">Standard</option><option value="hd">HD</option></select></div><div><label className="label-style mb-1">Style</label><select value={genSettings.style} onChange={e => setGenSettings(s => ({ ...s, style: e.target.value as 'vivid' | 'natural' }))} className="w-full input-style"><option value="vivid">Vivid</option><option value="natural">Natural</option></select></div></>}</div>}
-                    {activeMode === 'edit' && <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4"><h3 className="font-semibold text-lg">Model Settings</h3><div><label className="label-style mb-1">Model</label><select value={editSettings.model} onChange={(e) => setEditSettings(s => ({ ...s, model: e.target.value as ImageEditingSettings['model'] }))} className="w-full input-style"><option value="gemini-2.5-flash-image-preview">Gemini 2.5 Flash</option></select></div></div>}
-                    {activeMode === 'faceSwap' && <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg"><h3 className="font-semibold text-lg">Face Swap Info</h3><p className="text-sm text-slate-500 dark:text-slate-400">Upload a target image and an image with the source face. The model will swap the face from the source onto the target.</p></div>}
+                    {activeMode === 'image' && (
+                        <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
+                            <h3 className="font-semibold text-lg">Model Settings</h3>
+                            <div>
+                                <label className="label-style mb-1">Model</label>
+                                <select value={genSettings.model} onChange={(e) => setGenSettings(s => ({ ...s, model: e.target.value as ImageGenerationSettings['model'] }))} className="w-full input-style">
+                                    <option value="imagen-4.0-generate-001">Imagen 4 (Google)</option>
+                                    <option value="dall-e-3">DALL·E 3 (OpenAI)</option>
+                                </select>
+                            </div>
+                            <Slider label="Number of Images" value={genSettings.numImages} min={1} max={4} step={1} onChange={v => setGenSettings(s => ({ ...s, numImages: v }))} />
+                            <div>
+                                <label className="label-style mb-1">Aspect Ratio</label>
+                                <select value={genSettings.aspectRatio} onChange={e => setGenSettings(s => ({ ...s, aspectRatio: e.target.value }))} className="w-full input-style">
+                                    {availableRatios.map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
+                                </select>
+                            </div>
+                            {isDalle && (
+                                <>
+                                    <div>
+                                        <label className="label-style mb-1">Quality</label>
+                                        <select value={genSettings.quality} onChange={e => setGenSettings(s => ({ ...s, quality: e.target.value as 'standard' | 'hd' }))} className="w-full input-style">
+                                            <option value="standard">Standard</option>
+                                            <option value="hd">HD</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="label-style mb-1">Style</label>
+                                        <select value={genSettings.style} onChange={e => setGenSettings(s => ({ ...s, style: e.target.value as 'vivid' | 'natural' }))} className="w-full input-style">
+                                            <option value="vivid">Vivid</option>
+                                            <option value="natural">Natural</option>
+                                        </select>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                    {activeMode === 'edit' && (
+                        <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
+                            <h3 className="font-semibold text-lg">Model Settings</h3>
+                            <div>
+                                <label className="label-style mb-1">Model</label>
+                                <select value={editSettings.model} onChange={(e) => setEditSettings(s => ({ ...s, model: e.target.value as ImageEditingSettings['model'] }))} className="w-full input-style">
+                                    <option value="gemini-2.5-flash-image-preview">Gemini 2.5 Flash</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
+                    {activeMode === 'faceSwap' && (
+                        <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg">
+                            <h3 className="font-semibold text-lg">Face Swap Info</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Upload a target image and an image with the source face. The model will swap the face from the source onto the target.</p>
+                        </div>
+                    )}
                 </div>
 
+                {/* Right Column: Main Content */}
                 <div className="w-full sm:w-[60%] md:w-2/3 sm:pl-6 flex flex-col flex-grow min-h-0 overflow-hidden">
-                    <div className="flex-grow flex flex-col lg:grid lg:grid-cols-2 gap-6 py-4 min-h-0 overflow-y-auto">
+                    <div className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 min-h-0 overflow-y-auto">
+                        
+                        {/* Input Column */}
                         <div className="flex flex-col gap-4">
-                            <label className="text-lg font-semibold">Input</label>
+                            <h3 className="text-lg font-semibold">Input</h3>
                             {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
                             {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Image to Edit" textSize="text-sm" />}
                             {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
-                            {activeMode === 'edit' && <div className="flex items-center justify-between"><label htmlFor="adv-toggle" className="font-semibold text-slate-600 dark:text-slate-300">Advanced Style</label><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="adv-toggle" checked={isAdvancedStyle} onChange={e => setIsAdvancedStyle(e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></label></div>}
-                            {activeMode === 'edit' && !isAdvancedStyle && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your editing prompt (e.g., 'add a hat')..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
-                            {activeMode === 'edit' && isAdvancedStyle && (
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div className="col-span-2"><h4 className="font-semibold mb-2">Pose</h4><div className="flex items-center gap-2 mb-2"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>{isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/> : <div className="grid grid-cols-4 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}</div>
-                                    <div className="col-span-2"><h4 className="font-semibold mb-2">Outfit</h4><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix Outfits (Max 2)</label></div></div><div className="grid grid-cols-3 gap-2">{[...Array(5)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div></div>
-                                    <div className="col-span-2 sm:col-span-1"><h4 className="font-semibold mb-2">Expression</h4><div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleExpressionClick(e.prompt)} title={e.label} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center ${selectedExpression === e.prompt ? 'ring-2 ring-indigo-500' : ''}`}><e.Icon className="w-5 h-5"/></button>)}</div></div>
-                                    <div className="col-span-2 sm:col-span-1"><h4 className="font-semibold mb-2">Background</h4><input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/></div>
-                                </div>
+                            
+                            {activeMode === 'edit' && (
+                                <>
+                                <div className="flex items-center justify-between"><label htmlFor="adv-toggle" className="font-semibold text-slate-600 dark:text-slate-300">Advanced Style</label><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="adv-toggle" checked={isAdvancedStyle} onChange={e => setIsAdvancedStyle(e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></label></div>
+                                
+                                {!isAdvancedStyle && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your editing prompt (e.g., 'add a hat')..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
+
+                                {isAdvancedStyle && (
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div className="col-span-2"><h4 className="font-semibold mb-2">Pose</h4><div className="flex items-center gap-2 mb-2"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>{isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/> : <div className="grid grid-cols-4 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}</div>
+                                        <div className="col-span-2"><h4 className="font-semibold mb-2">Outfit</h4><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix Outfits (Max 2)</label></div></div><div className="grid grid-cols-3 gap-2">{[...Array(5)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div></div>
+                                        <div className="col-span-2 sm:col-span-1"><h4 className="font-semibold mb-2">Expression</h4><div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleExpressionClick(e.prompt)} title={e.label} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center ${selectedExpression === e.prompt ? 'ring-2 ring-indigo-500' : ''}`}><e.Icon className="w-5 h-5"/></button>)}</div></div>
+                                        <div className="col-span-2 sm:col-span-1"><h4 className="font-semibold mb-2">Background</h4><input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/></div>
+                                    </div>
+                                )}
+                                </>
                             )}
                         </div>
+                        
+                        {/* Output Column */}
                         <div className="flex flex-col gap-4">
                             <h3 className="text-lg font-semibold">Output</h3>
-                            <div className="flex flex-col">
-                                <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
-                                    {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
-                                    {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
-                                    {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
-                                    {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
-                                </div>
-                                {activeMode === 'edit' && output.length > 0 && <h4 className="font-semibold mt-2 text-slate-600 dark:text-slate-300 text-center text-sm">Photo result edited</h4>}
+                            <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
+                                {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
+                                {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
+                                {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
+                                {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
                             </div>
+                            {activeMode === 'edit' && output.length > 0 && <h4 className="font-semibold mt-2 text-slate-600 dark:text-slate-300 text-center text-sm">Photo result edited</h4>}
                         </div>
+
                     </div>
                     <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
                         {activeMode === 'edit' && isAdvancedStyle ? (
