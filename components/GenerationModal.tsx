@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 // FIX: Add missing ArrowUpTrayIcon import
 import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon } from './icons';
 import { generateImage, editImage, swapFace } from '../services/geminiService';
@@ -98,6 +98,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [customPosePrompt, setCustomPosePrompt] = useState('');
     const [isCustomPose, setIsCustomPose] = useState(false);
     const [backgroundPrompt, setBackgroundPrompt] = useState('');
+    const [selectedPose, setSelectedPose] = useState<string | null>(null);
+    const [selectedExpression, setSelectedExpression] = useState<string | null>(null);
     
     // Load outfits from localStorage
     useEffect(() => {
@@ -116,6 +118,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setPrompt(''); setInputImage1(null); setInputImage2(null); setOutput([]);
             setIsLoading(false); setError(null); setActiveMode('image');
             setIsAdvancedStyle(false); setSelectedOutfits([]); setIsMixOutfit(false);
+            setSelectedPose(null); setSelectedExpression(null); setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
         } else {
             document.body.style.overflow = 'auto';
         }
@@ -162,40 +165,44 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         } finally { setIsLoading(false); }
     };
 
-    const handleAdvancedAction = async (type: 'pose' | 'outfit' | 'expression' | 'background', payload: any) => {
+    const handleApplyAdvancedStyles = async () => {
         if (!inputImage1) { setError("Please upload an image to edit first."); return; }
-        setIsLoading(true); setError(null); setOutput([]);
 
-        let constructedPrompt = '';
+        const promptParts: string[] = [];
         const additionalImages: Attachment[] = [];
 
+        if (selectedPose) promptParts.push(`Change the person's pose to: ${selectedPose}.`);
+        else if (isCustomPose && customPosePrompt) promptParts.push(`Change the person's pose to: ${customPosePrompt}.`);
+        
+        if (selectedExpression) promptParts.push(`Change the person's facial expression to: ${selectedExpression}.`);
+        
+        const outfitsToApply = userOutfits.filter(o => selectedOutfits.includes(o.fileName));
+        if (outfitsToApply.length > 0) {
+            if (isMixOutfit && outfitsToApply.length > 1) promptParts.push("Change the person's outfit by mixing the styles from these images.");
+            else promptParts.push("Change the person's outfit to match this image.");
+            additionalImages.push(...outfitsToApply);
+        }
+        
+        if (backgroundPrompt) promptParts.push(`Change the background to: ${backgroundPrompt}.`);
+        
+        if (promptParts.length === 0) { setError("Please select at least one style to apply."); return; }
+        const constructedPrompt = promptParts.join(' ');
+        
+        setIsLoading(true); setError(null); setOutput([]);
+        
         try {
-            switch (type) {
-                case 'pose': constructedPrompt = `Change the person's pose to: ${payload}`; break;
-                case 'outfit':
-                    if (isMixOutfit && Array.isArray(payload) && payload.length > 0) {
-                        constructedPrompt = "Change the person's outfit by mixing the styles from these images.";
-                        additionalImages.push(...payload);
-                    } else if (!isMixOutfit && payload) {
-                        constructedPrompt = "Change the person's outfit to match this image.";
-                        additionalImages.push(payload);
-                    } else { throw new Error("Outfit selection is invalid."); }
-                    break;
-                case 'expression': constructedPrompt = `Change the person's facial expression to: ${payload}`; break;
-                case 'background': constructedPrompt = `Change the background to: ${payload}`; break;
-            }
-            
             const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], editSettings, userProfile);
             setOutput(attachments);
             handleExpGain(50);
+            setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
+            setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-            if (errorMessage.includes('This is a Pro feature')) {
-                onProFeatureBlock(); onClose();
-            } else { setError(errorMessage); }
+            if (errorMessage.includes('This is a Pro feature')) { onProFeatureBlock(); onClose(); } 
+            else { setError(errorMessage); }
         } finally { setIsLoading(false); }
     };
-    
+
     const saveOutfits = (newOutfits: Attachment[]) => {
         if (!userProfile) return;
         setUserOutfits(newOutfits);
@@ -228,26 +235,14 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     
     const handleOutfitClick = (outfit: Attachment) => {
         if (isMixOutfit) {
-            setSelectedOutfits(prev => {
-                if (prev.includes(outfit.fileName)) {
-                    return prev.filter(name => name !== outfit.fileName);
-                }
-                if (prev.length < 2) {
-                    return [...prev, outfit.fileName];
-                }
-                return prev; // Max 2 selected
-            });
+            setSelectedOutfits(prev => prev.includes(outfit.fileName) ? prev.filter(name => name !== outfit.fileName) : (prev.length < 2 ? [...prev, outfit.fileName] : prev));
         } else {
-            handleAdvancedAction('outfit', outfit);
+            setSelectedOutfits(prev => (prev.includes(outfit.fileName) ? [] : [outfit.fileName]));
         }
     };
-    
-    const handleMixOutfitApply = () => {
-        const outfitsToMix = userOutfits.filter(o => selectedOutfits.includes(o.fileName));
-        if(outfitsToMix.length > 0) {
-            handleAdvancedAction('outfit', outfitsToMix);
-        }
-    };
+
+    const handlePoseClick = (posePrompt: string) => setSelectedPose(prev => (prev === posePrompt ? null : posePrompt));
+    const handleExpressionClick = (expressionPrompt: string) => setSelectedExpression(prev => (prev === expressionPrompt ? null : expressionPrompt));
     
     const handleDownload = (attachment: Attachment) => {
         const link = document.createElement('a');
@@ -266,8 +261,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const dalleRatios = ["1:1", "16:9", "9:16"];
     const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
-    
     const getAspectRatioClass = () => activeMode !== 'image' ? 'aspect-square' : `aspect-[${genSettings.aspectRatio.replace(':', '/')}]`;
+    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
 
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
@@ -282,53 +277,48 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                 </div>
 
                 <div className="w-full sm:w-[60%] md:w-2/3 sm:pl-6 flex flex-col flex-grow min-h-0 overflow-hidden">
-                    <div className="flex-grow flex flex-col lg:flex-row gap-6 py-4 min-h-0 overflow-y-auto">
-                        <div className="w-full lg:w-1/2 flex flex-col gap-4">
+                    <div className="flex-grow flex flex-col lg:grid lg:grid-cols-2 gap-6 py-4 min-h-0 overflow-y-auto">
+                        <div className="flex flex-col gap-4">
                             <label className="text-lg font-semibold">Input</label>
                             {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
                             {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Image to Edit" textSize="text-sm" />}
                             {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
                             {activeMode === 'edit' && <div className="flex items-center justify-between"><label htmlFor="adv-toggle" className="font-semibold text-slate-600 dark:text-slate-300">Advanced Style</label><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="adv-toggle" checked={isAdvancedStyle} onChange={e => setIsAdvancedStyle(e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></label></div>}
                             {activeMode === 'edit' && !isAdvancedStyle && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your editing prompt (e.g., 'add a hat')..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
-                            {activeMode === 'edit' && isAdvancedStyle && <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                    <h4 className="font-semibold mb-2">Pose</h4>
-                                    <div className="flex items-center gap-2 mb-2"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>
-                                    {isCustomPose ? <div className="flex gap-2"><input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/><button onClick={() => handleAdvancedAction('pose', customPosePrompt)} className="px-3 bg-indigo-500 text-white rounded-md text-xs">Apply</button></div> : <div className="grid grid-cols-3 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handleAdvancedAction('pose', p.prompt)} className="p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50">{p.label}</button>)}</div>}
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-2">Outfit</h4>
-                                    <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix Outfit</label></div>{isMixOutfit && selectedOutfits.length > 0 && <button onClick={handleMixOutfitApply} className="px-2 py-1 bg-indigo-500 text-white rounded-md text-xs">Apply Mix ({selectedOutfits.length})</button>}</div>
-                                    <div className="grid grid-cols-3 gap-2">{[...Array(5)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div>
-                                </div>
-                            </div>}
+                            {activeMode === 'edit' && isAdvancedStyle && <div className="grid grid-cols-2 gap-4 text-sm"><div className="col-span-2"><h4 className="font-semibold mb-2">Pose</h4><div className="flex items-center gap-2 mb-2"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>{isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/> : <div className="grid grid-cols-4 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}</div><div className="col-span-2"><h4 className="font-semibold mb-2">Outfit</h4><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix Outfits (Max 2)</label></div></div><div className="grid grid-cols-3 gap-2">{[...Array(5)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div></div></div>}
                         </div>
-                        <div className="w-full lg:w-1/2 flex flex-col gap-4">
+                        <div className="flex flex-col gap-4">
                             <h3 className="text-lg font-semibold">Output</h3>
-                            <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
-                                {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
-                                {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
-                                {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
-                                {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                            <div className="flex flex-col">
+                                <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
+                                    {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
+                                    {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
+                                    {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
+                                    {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                                </div>
+                                {activeMode === 'edit' && <h4 className="font-semibold mt-2 text-slate-600 dark:text-slate-300 text-center text-sm">Photo result edited</h4>}
                             </div>
                             {activeMode === 'edit' && isAdvancedStyle && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-auto pt-4 border-t border-slate-200 dark:border-slate-700">
                                     <div>
                                         <h4 className="font-semibold mb-2">Expression</h4>
-                                        <div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleAdvancedAction('expression', e.prompt)} title={e.label} className="p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center"><e.Icon className="w-5 h-5"/></button>)}</div>
+                                        <div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleExpressionClick(e.prompt)} title={e.label} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center ${selectedExpression === e.prompt ? 'ring-2 ring-indigo-500' : ''}`}><e.Icon className="w-5 h-5"/></button>)}</div>
                                     </div>
-                                    <div>
-                                        <h4 className="font-semibold mb-2">Background</h4>
-                                        <div className="flex gap-2"><input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/><button onClick={() => handleAdvancedAction('background', backgroundPrompt)} className="px-3 bg-indigo-500 text-white rounded-md text-xs">Apply</button></div>
-                                    </div>
+                                    <div><h4 className="font-semibold mb-2">Background</h4><input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/></div>
                                 </div>
                             )}
                         </div>
                     </div>
                     <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
-                        <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
-                            {isLoading ? 'Generating...' : 'Generate'}
-                        </button>
+                        {activeMode === 'edit' && isAdvancedStyle ? (
+                             <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
+                                {isLoading ? 'Applying...' : 'Apply Advanced Styles'}
+                            </button>
+                        ) : (
+                            <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
+                                {isLoading ? 'Generating...' : 'Generate'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
