@@ -299,11 +299,15 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         </div>
                         <div className="w-full lg:w-1/2 flex flex-col gap-4">
                             <h3 className="text-lg font-semibold">Output</h3>
-                            <div className="bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2 min-h-[250px] lg:min-h-0 lg:flex-grow">
+                            <div className="bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                 {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
                                 {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
                                 {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
-                                {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                                {!isLoading && !error && output.length === 0 && (
+                                    <div className="w-full aspect-square flex items-center justify-center">
+                                        <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
