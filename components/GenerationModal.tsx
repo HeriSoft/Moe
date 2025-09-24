@@ -129,6 +129,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
       setIsAdvancedStyle(false);
     }, [activeMode]);
     
+    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
+
     const handleSetImage = (setter: React.Dispatch<React.SetStateAction<Attachment | null>>) => (file: File) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -262,8 +264,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
     const getAspectRatioClass = () => activeMode !== 'image' ? 'aspect-square' : `aspect-[${genSettings.aspectRatio.replace(':', '/')}]`;
-    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
-
+    
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
             <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col sm:flex-row p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={e => e.stopPropagation()}>
