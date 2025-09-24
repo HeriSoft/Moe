@@ -313,6 +313,66 @@ export const FaceSwapIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => 
   </svg>
 );
 
+// --- NEW ICONS for Face Expressions ---
+export const FaceSmileIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h.01M15 9h.01" />
+  </svg>
+);
+
+export const FaceFrownIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 15s1.5-2 4-2 4 2 4 2" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h.01M15 9h.01" />
+  </svg>
+);
+
+export const FaceSadTearIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 15s1.5-2 4-2 4 2 4 2" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h.01M15 9h.01" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12a.5.5 0 00-1 0v1a.5.5 0 001 0v-1z" />
+  </svg>
+);
+
+export const FaceLaughIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 14c1.5 2.5 6.5 2.5 8 0" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L8 8M15 9l1-1" />
+  </svg>
+);
+
+export const FacePoutingIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 10h.01M15 10h.01" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10 14c.333.667 1.333 1 2 1s1.667-.333 2-1" />
+    </svg>
+);
+
+export const FaceAngryIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 15s1.5-2 4-2 4 2 4 2" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 9l2 1M17 9l-2 1" />
+    </svg>
+);
+
+export const FaceGrinStarsIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9.5l-1-1 1-1 1 1-1 1z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 9.5l-1-1 1-1 1 1-1 1z" />
+  </svg>
+);
+
+
 // --- NEW ICONS for Admin Panel & Files ---
 export const DocumentIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
