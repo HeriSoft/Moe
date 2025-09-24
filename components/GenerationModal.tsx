@@ -346,9 +346,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         
                         {/* Input Column */}
                         <div className="flex flex-col gap-4">
-                            <h3 className="text-lg font-semibold">Input</h3>
+                            <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
                             {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
-                            {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Image to Edit" textSize="text-sm" />}
+                            {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" />}
                             {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
                             
                             {activeMode === 'edit' && (
@@ -366,7 +366,17 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                                 <div className="flex items-center gap-2 mb-2"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>
                                                 {isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/> : <div className="grid grid-cols-4 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}
                                             </div>
-                                             <div>
+                                        </div>
+                                        {/* Right Column of Advanced */}
+                                        <div className="space-y-4">
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                     <h4 className="text-sm font-semibold">Outfit</h4>
+                                                    <div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix (Max 2)</label></div>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">{[...Array(6)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div>
+                                            </div>
+                                            <div>
                                                 <h4 className="text-sm font-semibold mb-2">Expression</h4>
                                                 <div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleExpressionClick(e.prompt)} title={e.label} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center ${selectedExpression === e.prompt ? 'ring-2 ring-indigo-500' : ''}`}><e.Icon className="w-5 h-5"/></button>)}</div>
                                             </div>
@@ -374,14 +384,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                                 <h4 className="text-sm font-semibold mb-2">Background</h4>
                                                 <input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/>
                                             </div>
-                                        </div>
-                                        {/* Right Column of Advanced */}
-                                        <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                                 <h4 className="text-sm font-semibold">Outfit</h4>
-                                                <div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix (Max 2)</label></div>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-2">{[...Array(6)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div>
                                         </div>
                                     </div>
                                 )}
@@ -391,14 +393,13 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         
                         {/* Output Column */}
                         <div className="flex flex-col gap-4">
-                            <h3 className="text-lg font-semibold">Output</h3>
+                            <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Edit Result' : 'Output'}</h3>
                             <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                 {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
                                 {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
                                 {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
                                 {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
                             </div>
-                            {activeMode === 'edit' && output.length > 0 && <h4 className="font-semibold mt-2 text-slate-600 dark:text-slate-300 text-center text-sm">Photo result edited</h4>}
                         </div>
 
                     </div>
