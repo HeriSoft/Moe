@@ -323,14 +323,29 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         <button onClick={onClose} className="sm:hidden text-slate-500"><CloseIcon className="w-7 h-7" /></button>
                     </div>
                     <div className="mb-4">
-                        <label htmlFor="creative-mode-select" className="label-style mb-1">Tool</label>
-                        <select id="creative-mode-select" value={activeMode} onChange={(e) => setActiveMode(e.target.value as CreativeMode)} className="w-full input-style">
-                            <option value="image">Image Generation</option>
-                            <option value="edit">Image Editing</option>
-                            <option value="faceSwap">Face Swap</option>
-                            <option value="pixshop">Studio Pixshop</option>
-                            <option value="video" disabled className="text-slate-500">Video Generation</option>
-                        </select>
+                        <label className="label-style mb-1">Tool</label>
+                        <div className="grid grid-cols-2 gap-2 text-sm font-semibold">
+                            {[
+                                { id: 'image', label: 'Image Generation', icon: ImageIcon },
+                                { id: 'edit', label: 'Image Editing', icon: EditIcon },
+                                { id: 'faceSwap', label: 'Face Swap', icon: FaceSwapIcon },
+                                { id: 'pixshop', label: 'Studio Pixshop', icon: PaintBrushIcon },
+                                { id: 'video', label: 'Video Generation', icon: VideoIcon, disabled: true },
+                            ].map(tool => (
+                                <button
+                                    key={tool.id}
+                                    onClick={() => !tool.disabled && setActiveMode(tool.id as CreativeMode)}
+                                    disabled={tool.disabled}
+                                    className={`p-3 rounded-lg flex flex-col items-center justify-center gap-2 transition-colors
+                                        ${activeMode === tool.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-[#2d2d40] hover:bg-slate-200 dark:hover:bg-slate-800'}
+                                        ${tool.disabled ? 'opacity-50 cursor-not-allowed text-slate-500' : (activeMode !== tool.id ? 'text-slate-800 dark:text-slate-200' : '')}
+                                    `}
+                                >
+                                    <tool.icon className="w-6 h-6"/>
+                                    <span>{tool.label}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     
                     {activeMode === 'image' && (
@@ -431,9 +446,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             
                             {activeMode === 'pixshop' && (
                                 <div className="space-y-6">
-                                     <ImageUploader image={pixshopImage} onImageSet={handleSetImage(setPixshopImage)} title="Upload Image" />
+                                     <ImageUploader image={pixshopImage} onImageSet={handleSetImage(setPixshopImage)} title="" />
                                      
-                                     {/* Quick Edits */}
                                      <div className="space-y-3">
                                         <h4 className="font-semibold text-slate-600 dark:text-slate-300">Quick Edits</h4>
                                         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -449,20 +463,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                             {pixshopColorFilters.map(f => <button key={f.name} onClick={() => handlePixshopEdit(f.prompt)} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}
                                         </div>
                                      </div>
-
-                                     {/* Adjustments */}
-                                     <div className="space-y-3">
-                                         <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><AdjustmentsVerticalIcon className="w-5 h-5"/> Adjustments</h4>
-                                         <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg space-y-3">
-                                             <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
-                                             <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
-                                             <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
-                                             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
-                                             <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading} className="w-full p-2 text-sm bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
-                                         </div>
-                                     </div>
-
-                                     {/* Advanced */}
+                                     
                                      <div className="space-y-3">
                                          <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><SparklesIcon className="w-5 h-5"/> Advanced Tools</h4>
                                          <div className="grid grid-cols-2 gap-2 text-sm">
@@ -503,6 +504,19 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 )}
                                 {!isLoading && !error && output.length === 0 && !pixshopOutput && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
                             </div>
+                            
+                             {activeMode === 'pixshop' && (
+                                <div className="space-y-3">
+                                     <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><AdjustmentsVerticalIcon className="w-5 h-5"/> Adjustments</h4>
+                                     <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg space-y-3">
+                                         <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
+                                         <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
+                                         <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
+                                         <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
+                                         <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading} className="w-full p-2 text-sm bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
+                                     </div>
+                                 </div>
+                            )}
 
                             {activeMode === 'edit' && isAdvancedStyle && (
                                 <div className="space-y-4 text-sm">
