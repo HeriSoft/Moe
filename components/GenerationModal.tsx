@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // FIX: Add missing ArrowUpTrayIcon import
-import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon } from './icons';
+import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon } from './icons';
 import { generateImage, editImage, swapFace } from '../services/geminiService';
 import type { Attachment, UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
@@ -18,15 +18,16 @@ export interface ImageEditingSettings {
     model: 'gemini-2.5-flash-image-preview';
 }
 
-const Slider: React.FC<{ label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; }> = ({ label, value, min, max, step, onChange }) => (
+const Slider: React.FC<{ label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; disabled?: boolean; }> = ({ label, value, min, max, step, onChange, disabled }) => (
   <div>
-    <label className="flex justify-between text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+    <label className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
       <span>{label}</span>
-      <span>{value}</span>
+      <span>{value > 0 ? '+' : ''}{value}</span>
     </label>
-    <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"/>
+    <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50" disabled={disabled} />
   </div>
 );
+
 
 const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: File) => void; title: string; textSize?: string }> = ({ image, onImageSet, title, textSize = 'text-sm' }) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +47,7 @@ const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: Fil
   );
 };
 
-type CreativeMode = 'image' | 'edit' | 'faceSwap' | 'video';
+type CreativeMode = 'image' | 'edit' | 'faceSwap' | 'video' | 'pixshop';
 
 interface GenerationModalProps {
   isOpen: boolean;
@@ -101,6 +102,11 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [selectedPose, setSelectedPose] = useState<string | null>(null);
     const [selectedExpression, setSelectedExpression] = useState<string | null>(null);
     
+    // --- NEW: Studio Pixshop State ---
+    const [pixshopImage, setPixshopImage] = useState<Attachment | null>(null);
+    const [pixshopOutput, setPixshopOutput] = useState<Attachment | null>(null);
+    const [pixshopAdjustments, setPixshopAdjustments] = useState({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
+
     // Load outfits from localStorage
     useEffect(() => {
         if (!userProfile) return;
@@ -119,6 +125,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setIsLoading(false); setError(null); setActiveMode('image');
             setIsAdvancedStyle(false); setSelectedOutfits([]); setIsMixOutfit(false);
             setSelectedPose(null); setSelectedExpression(null); setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
+            setPixshopImage(null); setPixshopOutput(null); setPixshopAdjustments({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
         } else {
             document.body.style.overflow = 'auto';
         }
@@ -126,7 +133,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     
     useEffect(() => { // Reset inputs when mode changes
       setInputImage1(null); setInputImage2(null); setOutput([]); setError(null);
-      setIsAdvancedStyle(false);
+      setIsAdvancedStyle(false); setPixshopImage(null); setPixshopOutput(null);
     }, [activeMode]);
     
     const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
@@ -140,70 +147,96 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         reader.readAsDataURL(file);
     };
 
-    const handleGenerate = async () => {
-        setIsLoading(true); setError(null); setOutput([]);
+    const handleGenericApiCall = async (apiCall: () => Promise<Attachment[]>) => {
+        setIsLoading(true);
+        setError(null);
+        setOutput([]);
+        setPixshopOutput(null);
+
         try {
-            let result: Attachment[] = [];
-            if (activeMode === 'image') {
-                if (!prompt) throw new Error("A prompt is required.");
-                result = await generateImage(prompt, genSettings, userProfile);
-            } else if (activeMode === 'faceSwap') {
-                if (!inputImage1 || !inputImage2) throw new Error("Target image and source face are required.");
-                result = [await swapFace(inputImage1, inputImage2, userProfile)];
-            } else if (activeMode === 'edit') {
-                 if (!prompt) throw new Error("A prompt is required.");
-                if (!inputImage1) throw new Error("An image is required.");
-                const { attachments } = await editImage(prompt, [inputImage1], editSettings, userProfile);
-                result = attachments;
+            const result = await apiCall();
+            handleExpGain(50); // Generic EXP gain
+            if (activeMode === 'pixshop') {
+                setPixshopOutput(result[0] || null);
+            } else {
+                setOutput(result);
             }
-            handleExpGain(100);
-            setOutput(result);
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
             if (errorMessage.includes('This is a Pro feature')) {
                 onProFeatureBlock();
                 onClose();
             } else { setError(errorMessage); }
-        } finally { setIsLoading(false); }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    const handleGenerate = () => {
+        if (!prompt) { setError("A prompt is required."); return; }
+        handleGenericApiCall(() => generateImage(prompt, genSettings, userProfile));
     };
 
-    const handleApplyAdvancedStyles = async () => {
-        if (!inputImage1) { setError("Please upload an image to edit first."); return; }
+    const handleEdit = () => {
+        if (!prompt) { setError("A prompt is required."); return; }
+        if (!inputImage1) { setError("An image is required."); return; }
+        handleGenericApiCall(async () => {
+            const { attachments } = await editImage(prompt, [inputImage1], editSettings, userProfile);
+            return attachments;
+        });
+    };
 
+    const handleSwap = () => {
+        if (!inputImage1 || !inputImage2) { setError("Target image and source face are required."); return; }
+        handleGenericApiCall(async () => [await swapFace(inputImage1, inputImage2, userProfile)]);
+    };
+
+    const handleApplyAdvancedStyles = () => {
+        if (!inputImage1) { setError("Please upload an image to edit first."); return; }
         const promptParts: string[] = [];
         const additionalImages: Attachment[] = [];
-
         if (selectedPose) promptParts.push(`Change the person's pose to: ${selectedPose}.`);
         else if (isCustomPose && customPosePrompt) promptParts.push(`Change the person's pose to: ${customPosePrompt}.`);
-        
         if (selectedExpression) promptParts.push(`Change the person's facial expression to: ${selectedExpression}.`);
-        
         const outfitsToApply = userOutfits.filter(o => selectedOutfits.includes(o.fileName));
         if (outfitsToApply.length > 0) {
             if (isMixOutfit && outfitsToApply.length > 1) promptParts.push("Change the person's outfit by mixing the styles from these images.");
             else promptParts.push("Change the person's outfit to match this image.");
             additionalImages.push(...outfitsToApply);
         }
-        
         if (backgroundPrompt) promptParts.push(`Change the background to: ${backgroundPrompt}.`);
-        
         if (promptParts.length === 0) { setError("Please select at least one style to apply."); return; }
         const constructedPrompt = promptParts.join(' ');
         
-        setIsLoading(true); setError(null); setOutput([]);
-        
-        try {
-            const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], editSettings, userProfile);
-            setOutput(attachments);
-            handleExpGain(50);
-            setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
-            setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
-        } catch (e) {
-            const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-            if (errorMessage.includes('This is a Pro feature')) { onProFeatureBlock(); onClose(); } 
-            else { setError(errorMessage); }
-        } finally { setIsLoading(false); }
+        handleGenericApiCall(async () => {
+             const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], editSettings, userProfile);
+             setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
+             setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
+             return attachments;
+        });
     };
+    
+    const handlePixshopEdit = (editPrompt: string) => {
+        if (!pixshopImage) { setError("Please upload an image to edit first."); return; }
+        handleGenericApiCall(async () => {
+            const { attachments } = await editImage(editPrompt, [pixshopImage], editSettings, userProfile);
+            return attachments;
+        });
+    };
+    
+    const handlePixshopAdjustments = () => {
+        const { vibrance, warmth, contrast, isBW } = pixshopAdjustments;
+        const parts: string[] = [];
+        if (isBW) parts.push("convert the image to black and white");
+        if (vibrance !== 0) parts.push(`${vibrance > 0 ? 'increase' : 'decrease'} vibrance by ${Math.abs(vibrance)} steps`);
+        if (warmth !== 0) parts.push(`make the image ${warmth > 0 ? 'warmer' : 'cooler'} by ${Math.abs(warmth)} steps`);
+        if (contrast !== 0) parts.push(`${contrast > 0 ? 'increase' : 'decrease'} contrast by ${Math.abs(contrast)} steps`);
+        
+        if (parts.length > 0) {
+            handlePixshopEdit("Apply the following adjustments: " + parts.join(', '));
+        }
+    };
+
 
     const saveOutfits = (newOutfits: Attachment[]) => {
         if (!userProfile) return;
@@ -237,7 +270,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     
     const handleOutfitClick = (outfit: Attachment) => {
         if (isMixOutfit) {
-            setSelectedOutfits(prev => prev.includes(outfit.fileName) ? prev.filter(name => name !== outfit.fileName) : (prev.length < 2 ? [...prev, outfit.fileName] : prev));
+            setSelectedOutfits(prev => prev.includes(outfit.fileName) ? prev.filter(name => name !== outfit.fileName) : (prev.length < 3 ? [...prev, outfit.fileName] : prev));
         } else {
             setSelectedOutfits(prev => (prev.includes(outfit.fileName) ? [] : [outfit.fileName]));
         }
@@ -265,6 +298,21 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
     const getAspectRatioClass = () => activeMode !== 'image' ? 'aspect-square' : `aspect-[${genSettings.aspectRatio.replace(':', '/')}]`;
     
+    const pixshopColorFilters = [
+        { name: 'Vintage', prompt: 'apply a warm, vintage color filter with slightly faded colors' },
+        { name: 'B&W', prompt: 'convert to a high-contrast black and white image' },
+        { name: 'Cinematic', prompt: 'apply a cool, cinematic blue and teal color grade' },
+        { name: 'Vibrant', prompt: 'enhance the colors to be more vibrant and saturated' },
+    ];
+    
+    const pixshopArtStyles = [
+        { name: 'Anime', prompt: 'transform this photo into a detailed anime style illustration' },
+        { name: 'Van Gogh', prompt: 'repaint this photo in the expressive, impasto style of Vincent van Gogh' },
+        { name: 'Sketch', prompt: 'convert this photo into a detailed pencil sketch' },
+        { name: '3D Render', prompt: 'recreate this image as a polished 3D render with realistic lighting' },
+    ];
+
+
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
             <div className="bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col sm:flex-row p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200" onClick={e => e.stopPropagation()}>
@@ -280,7 +328,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             <option value="image">Image Generation</option>
                             <option value="edit">Image Editing</option>
                             <option value="faceSwap">Face Swap</option>
-                            <option value="video" disabled>Video Generation</option>
+                            <option value="pixshop">Studio Pixshop</option>
+                            <option value="video" disabled className="text-slate-500">Video Generation</option>
                         </select>
                     </div>
                     
@@ -321,7 +370,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             )}
                         </div>
                     )}
-                    {activeMode === 'edit' && (
+                    {(activeMode === 'edit' || activeMode === 'pixshop') && (
                         <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
                             <h3 className="font-semibold text-lg">Model Settings</h3>
                             <div>
@@ -346,7 +395,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         
                         {/* Input Column */}
                         <div className="flex flex-col gap-4">
-                            <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
+                            <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Image to Edit' : activeMode === 'pixshop' ? 'Canvas' : 'Input'}</h3>
                             {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
                             {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" />}
                             {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
@@ -370,7 +419,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
                                                      <h4 className="text-sm font-semibold">Outfit</h4>
-                                                    <div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix (Max 2)</label></div>
+                                                    <div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix (Max 3)</label></div>
                                                 </div>
                                                 <div className="grid grid-cols-3 gap-2">{[...Array(6)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div>
                                             </div>
@@ -379,19 +428,80 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 )}
                                 </>
                             )}
+                            
+                            {activeMode === 'pixshop' && (
+                                <div className="space-y-6">
+                                     <ImageUploader image={pixshopImage} onImageSet={handleSetImage(setPixshopImage)} title="Upload Image" />
+                                     
+                                     {/* Quick Edits */}
+                                     <div className="space-y-3">
+                                        <h4 className="font-semibold text-slate-600 dark:text-slate-300">Quick Edits</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <button onClick={() => handlePixshopEdit("blur the background, keeping the subject sharp")} disabled={!pixshopImage || isLoading} className="tool-btn"><CropIcon className="w-4 h-4"/> Blur BG</button>
+                                            <select onChange={(e) => handlePixshopEdit(e.target.value)} disabled={!pixshopImage || isLoading} className="tool-btn">
+                                                <option>Crop...</option>
+                                                <option value="crop to a 1:1 square aspect ratio">1:1 Square</option>
+                                                <option value="crop to a 16:9 widescreen aspect ratio">16:9 Widescreen</option>
+                                                <option value="crop to a 9:16 vertical aspect ratio">9:16 Vertical</option>
+                                            </select>
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {pixshopColorFilters.map(f => <button key={f.name} onClick={() => handlePixshopEdit(f.prompt)} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}
+                                        </div>
+                                     </div>
+
+                                     {/* Adjustments */}
+                                     <div className="space-y-3">
+                                         <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><AdjustmentsVerticalIcon className="w-5 h-5"/> Adjustments</h4>
+                                         <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg space-y-3">
+                                             <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
+                                             <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
+                                             <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
+                                             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
+                                             <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading} className="w-full p-2 text-sm bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
+                                         </div>
+                                     </div>
+
+                                     {/* Advanced */}
+                                     <div className="space-y-3">
+                                         <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><SparklesIcon className="w-5 h-5"/> Advanced Tools</h4>
+                                         <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <button onClick={() => handlePixshopEdit("restore this damaged/faded old photo, fixing scratches, improving colors, and enhancing clarity")} disabled={!pixshopImage || isLoading} className="tool-btn">Restore Photo</button>
+                                            <button onClick={() => handlePixshopEdit("remove the background, leaving only the main subject on a transparent background")} disabled={!pixshopImage || isLoading} className="tool-btn">Remove BG</button>
+                                            <select onChange={(e) => handlePixshopEdit(e.target.value)} disabled={!pixshopImage || isLoading} className="tool-btn col-span-2">
+                                                 <option>Apply Artistic Style...</option>
+                                                 {pixshopArtStyles.map(s => <option key={s.name} value={s.prompt}>{s.name}</option>)}
+                                             </select>
+                                         </div>
+                                     </div>
+                                </div>
+                            )}
+
                         </div>
                         
                         {/* Output Column */}
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Edit Result' : 'Output'}</h3>
+                                <h3 className="text-lg font-semibold">{activeMode === 'pixshop' ? 'Result' : 'Output'}</h3>
                                 {activeMode === 'edit' && isAdvancedStyle && <p className="text-sm text-slate-500">Photo result edited</p>}
                             </div>
                             <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                 {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
                                 {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
-                                {!isLoading && !error && output.length > 0 && <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>{output.map((item, index) => <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}><img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/><button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button></div>)}</div>}
-                                {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                                {!isLoading && !error && (output.length > 0 || pixshopOutput) && (
+                                    <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                        {(pixshopOutput ? [pixshopOutput] : output).map((item, index) => (
+                                            <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}>
+                                                <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/>
+                                                <div className="absolute top-2 right-2 flex flex-col gap-2">
+                                                    <button onClick={() => handleDownload(item)} className="p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button>
+                                                    {activeMode === 'pixshop' && <button onClick={() => { setPixshopImage(item); setPixshopOutput(null); }} className="p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100" title="Use as new input"><ArrowPathIcon className="w-5 h-5"/></button>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {!isLoading && !error && output.length === 0 && !pixshopOutput && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
                             </div>
 
                             {activeMode === 'edit' && isAdvancedStyle && (
@@ -414,15 +524,17 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                              <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                                 {isLoading ? 'Applying...' : 'Apply Advanced Styles'}
                             </button>
+                        ) : activeMode === 'pixshop' ? (
+                            <div className="text-center text-xs text-slate-400">Upload an image and select a tool to begin.</div>
                         ) : (
-                            <button onClick={handleGenerate} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
+                            <button onClick={activeMode === 'image' ? handleGenerate : activeMode === 'edit' ? handleEdit : handleSwap} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
                                 {isLoading ? 'Generating...' : 'Generate'}
                             </button>
                         )}
                     </div>
                 </div>
             </div>
-            <style>{`.input-style { color: inherit; background-color: transparent; border: 1px solid #4a5568; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .input-style:focus { outline: none; border-color: #6366f1; } .label-style { display: block; font-size: 0.875rem; font-weight: 500; }`}</style>
+            <style>{`.input-style { color: inherit; background-color: transparent; border: 1px solid #4a5568; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .input-style:focus { outline: none; border-color: #6366f1; } .label-style { display: block; font-size: 0.875rem; font-weight: 500; } .tool-btn { padding: 0.5rem; background-color: #f1f5f9; color: #334155; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; } .tool-btn:hover:not(:disabled) { background-color: #e2e8f0; } .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; } .dark .tool-btn { background-color: #334155; color: #e2e8f0; } .dark .tool-btn:hover:not(:disabled) { background-color: #475569; }`}</style>
         </div>
     );
 };
