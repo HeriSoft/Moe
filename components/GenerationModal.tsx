@@ -36,11 +36,11 @@ const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: Fil
     }
   };
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center w-full h-full">
         <h4 className={`font-semibold mb-2 text-slate-600 dark:text-slate-300 text-center ${textSize}`}>{title}</h4>
         <input type="file" ref={inputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/webp"/>
-        <button onClick={() => inputRef.current?.click()} className="w-full aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 text-center">
-            {image ? <img src={`data:${image.mimeType};base64,${image.data}`} alt="preview" className={`w-full h-full object-${objectFit} rounded-md`} /> : <PhotoIcon className="w-10 h-10" />}
+        <button onClick={() => inputRef.current?.click()} className="w-full h-full bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 text-center overflow-hidden">
+            {image ? <img src={`data:${image.mimeType};base64,${image.data}`} alt="preview" className={`max-w-full max-h-full object-${objectFit} rounded-md`} /> : <PhotoIcon className="w-10 h-10" />}
         </button>
     </div>
   );
@@ -87,6 +87,13 @@ interface ToolPromptState {
     onConfirm: (prompt: string) => void;
 }
 
+const effectOptions = [
+    { id: 'handle_sketch', label: 'Handle sketch drawing', promptPrefix: 'transform the image into a detailed hand-drawn sketch, focusing on lines and shading' },
+    { id: 'color_drawing', label: 'Color drawing', promptPrefix: 'transform the image into a vibrant color drawing with painterly strokes' },
+    { id: 'gravity_drawing', label: 'Gravity drawing', promptPrefix: 'reimagine the image with a surreal gravity-defying effect, where elements seem to float or be pulled in odd directions' },
+    { id: 'style_fonts', label: 'Style Fonts Effect', promptPrefix: 'add stylized text to the image. The user wants this text: ' }
+];
+
 
 export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain }) => {
     const [activeMode, setActiveMode] = useState<CreativeMode>('image');
@@ -121,6 +128,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const pixshopCanvasRef = useRef<HTMLDivElement>(null);
     const pixshopImageRef = useRef<HTMLImageElement>(null);
     const [toolPrompt, setToolPrompt] = useState<ToolPromptState | null>(null);
+    const [selectedEffect, setSelectedEffect] = useState<string>('handle_sketch');
 
     // Hand Drawing State
     const [isDrawing, setIsDrawing] = useState(false);
@@ -427,6 +435,22 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         setPixshopMode('idle');
     };
 
+    const handleBeautifulEffect = () => {
+        const selectedEffectData = effectOptions.find(e => e.id === selectedEffect);
+        if (!selectedEffectData) return;
+
+        if (selectedEffect === 'style_fonts') {
+            setToolPrompt({
+                show: true,
+                toolName: 'Style Fonts Effect',
+                title: 'Enter text and font style (e.g., "Hello World in a graffiti font")',
+                onConfirm: p => handlePixshopEdit(selectedEffectData.promptPrefix + p)
+            });
+        } else {
+            handlePixshopEdit(selectedEffectData.promptPrefix);
+        }
+    };
+
 
     const saveOutfits = (newOutfits: Attachment[]) => {
         if (!userProfile) return;
@@ -549,7 +573,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             <Slider label="Number of Images" value={genSettings.numImages} min={1} max={4} step={1} onChange={v => setGenSettings(s => ({ ...s, numImages: v }))} />
                             <div>
                                 <label className="label-style mb-1">Aspect Ratio</label>
-                                <select value={genSettings.aspectRatio} onChange={e => setGenSettings(s => ({ ...s, aspectRatio: e.target.value }))} className="w-full input-style text-slate-900 dark:text-slate-100">
+                                <select value={genSettings.aspectRatio} onChange={e => setGenSettings(s => ({ ...s, aspectRatio: e.target.value }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
                                     {availableRatios.map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
                                 </select>
                             </div>
@@ -557,14 +581,14 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 <>
                                     <div>
                                         <label className="label-style mb-1">Quality</label>
-                                        <select value={genSettings.quality} onChange={e => setGenSettings(s => ({ ...s, quality: e.target.value as 'standard' | 'hd' }))} className="w-full input-style text-slate-900 dark:text-slate-100">
+                                        <select value={genSettings.quality} onChange={e => setGenSettings(s => ({ ...s, quality: e.target.value as 'standard' | 'hd' }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
                                             <option value="standard">Standard</option>
                                             <option value="hd">HD</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label className="label-style mb-1">Style</label>
-                                        <select value={genSettings.style} onChange={e => setGenSettings(s => ({ ...s, style: e.target.value as 'vivid' | 'natural' }))} className="w-full input-style text-slate-900 dark:text-slate-100">
+                                        <select value={genSettings.style} onChange={e => setGenSettings(s => ({ ...s, style: e.target.value as 'vivid' | 'natural' }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
                                             <option value="vivid">Vivid</option>
                                             <option value="natural">Natural</option>
                                         </select>
@@ -602,7 +626,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                     <div className="flex flex-col gap-4">
                                         <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
                                         {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style text-slate-900 dark:text-slate-100"/>}
-                                        {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" objectFit="contain" />}
+                                        {activeMode === 'edit' && <div className="w-full aspect-square"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" objectFit="contain" /></div>}
                                         {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
                                     </div>
                                     {/* Output Column */}
@@ -668,11 +692,13 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                <div className="flex flex-col gap-2 min-h-0">
                                    <h3 className="text-lg font-semibold text-center flex-shrink-0">Canvas</h3>
                                    <div ref={pixshopCanvasRef} onMouseDown={handleCropPointerDown} onTouchStart={handleCropPointerDown} className={`relative w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center ${pixshopMode === 'crop' ? 'cursor-crosshair' : ''}`}>
-                                       {!pixshopImage ? <button onClick={() => document.getElementById('pixshop-uploader')?.click()} className="flex flex-col items-center gap-2 text-slate-500"><ArrowUpTrayIcon className="w-10 h-10"/></button> : <img ref={pixshopImageRef} src={`data:${pixshopImage.mimeType};base64,${pixshopImage.data}`} className="max-w-full max-h-full object-contain rounded-md" />}
+                                        <div className="relative w-full h-full flex items-center justify-center">
+                                            {!pixshopImage ? <button onClick={() => document.getElementById('pixshop-uploader')?.click()} className="flex flex-col items-center gap-2 text-slate-500"><ArrowUpTrayIcon className="w-10 h-10"/></button> : <img ref={pixshopImageRef} src={`data:${pixshopImage.mimeType};base64,${pixshopImage.data}`} className="max-w-full max-h-full object-contain" />}
+                                            {pixshopMode === 'draw' && pixshopImage && <canvas ref={drawingCanvasRef} className="absolute top-0 left-0 cursor-crosshair" onMouseDown={handleDrawStart} onMouseMove={handleDrawMove} onMouseUp={handleDrawEnd} onMouseLeave={handleDrawEnd} onTouchStart={handleDrawStart} onTouchMove={handleDrawMove} onTouchEnd={handleDrawEnd} />}
+                                        </div>
                                        <input type="file" id="pixshop-uploader" onChange={e => e.target.files && handleSetImage(setPixshopImage)(e.target.files[0])} className="hidden" accept="image/*"/>
                                        {pixshopImage && <button onClick={() => { setPixshopImage(null); setPixshopOutput(null); setPixshopMode('idle'); setCropRect(null); }} className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500"><TrashIcon className="w-4 h-4"/></button>}
                                        {pixshopMode === 'crop' && cropRect && <div className="absolute border-2 border-dashed border-white bg-black/30 pointer-events-none" style={{ left: `${cropRect.x*100}%`, top: `${cropRect.y*100}%`, width: `${cropRect.width*100}%`, height: `${cropRect.height*100}%` }}></div>}
-                                       {pixshopMode === 'draw' && pixshopImage && <canvas ref={drawingCanvasRef} className="absolute top-0 left-0 w-full h-full cursor-crosshair" onMouseDown={handleDrawStart} onMouseMove={handleDrawMove} onMouseUp={handleDrawEnd} onMouseLeave={handleDrawEnd} onTouchStart={handleDrawStart} onTouchMove={handleDrawMove} onTouchEnd={handleDrawEnd} />}
                                    </div>
                                </div>
                                <div className="flex flex-col gap-2 min-h-0">
@@ -712,8 +738,11 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         <div className="grid grid-cols-2 gap-2 text-sm">
                                             <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Edit', title: 'What would you like to change?', onConfirm: p => handlePixshopEdit(p) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EditIcon className="w-4 h-4"/> Magic Edit</button>
                                             <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Eraser', title: 'What would you like to remove?', onConfirm: p => handlePixshopEdit(`remove the ${p} from the image`) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EraserIcon className="w-4 h-4"/> Magic Eraser</button>
-                                            <button onClick={() => setToolPrompt({ show: true, toolName: 'Beautiful Effect', title: 'Describe the effect to apply (e.g., sparkling stars)', onConfirm: p => handlePixshopEdit(`add this beautiful effect to the image: ${p}`) })} disabled={!pixshopImage || isLoading} className="tool-btn"><SparklesIcon className="w-4 h-4"/> Beautiful Effect</button>
+                                            <button onClick={handleBeautifulEffect} disabled={!pixshopImage || isLoading} className="tool-btn col-span-2"><SparklesIcon className="w-4 h-4"/> Beautiful Effect</button>
                                             <button onClick={() => setPixshopMode(m => m === 'draw' ? 'idle' : 'draw')} disabled={!pixshopImage || isLoading} className={`tool-btn ${pixshopMode === 'draw' ? '!bg-indigo-500 text-white' : ''}`}><PaintBrushIcon className="w-4 h-4"/> Hand Drawing</button>
+                                        </div>
+                                        <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-1 text-xs">
+                                            {effectOptions.map(opt => (<label key={opt.id} className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700"><input type="radio" name="beautiful-effect" value={opt.id} checked={selectedEffect === opt.id} onChange={e => setSelectedEffect(e.target.value)} />{opt.label}</label>))}
                                         </div>
                                         {pixshopMode === 'draw' && (
                                             <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-2">
