@@ -212,8 +212,23 @@ export async function generateImage(prompt: string, settings: any, user: UserPro
     }
 }
 
+// =========================================================================
+// START: MODIFIED FUNCTION
+// =========================================================================
 // New function for image editing
 export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
+    
+    // Create a base config object
+    const config: any = {};
+
+    // Check if the outputSize property exists in settings and add it to the config
+    if (settings.outputSize && settings.outputSize.width && settings.outputSize.height) {
+        config.output = {
+            width: settings.outputSize.width,
+            height: settings.outputSize.height,
+        };
+    }
+
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -223,7 +238,7 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
                 model: settings.model,
                 prompt,
                 images,
-                config: {}, // Pass any other settings if needed
+                config: config, // Use the dynamically created config object
                 user, // Pass user profile for logging
             }
         })
@@ -233,6 +248,9 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
     }
     return await response.json();
 }
+// =========================================================================
+// END: MODIFIED FUNCTION
+// =========================================================================
 
 
 // New function for translating input text
