@@ -712,17 +712,23 @@ export default async function handler(req, res) {
             case 'editImage': {
                 await logAction(userEmail, 'edited an image');
                 if (!ai) throw new Error("Gemini API key not configured.");
-                const { prompt, images } = payload;
+                const { prompt, images, config: payloadConfig } = payload;
                 const imageParts = images.map(img => ({
                     inlineData: { data: img.data, mimeType: img.mimeType }
                 }));
                 const textPart = { text: prompt };
+                
+                const finalConfig = {
+                    responseModalities: ['IMAGE', 'TEXT'],
+                    ...(payloadConfig || {}) // Merge config from the frontend payload
+                };
 
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash-image-preview',
                     contents: { parts: [...imageParts, textPart] },
-                    config: { responseModalities: ['IMAGE', 'TEXT'] },
+                    config: finalConfig,
                 });
+                
                 const parts = response.candidates?.[0]?.content?.parts || [];
                 const textPartResponse = parts.find(p => p.text)?.text || '';
                 const imagePartResponse = parts.find(p => p.inlineData);
