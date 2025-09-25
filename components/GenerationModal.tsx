@@ -616,7 +616,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                     </div>
                     
                     {activeMode === 'image' && (
-                        <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
+                        <div className="hidden sm:block bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
                             <h3 className="font-semibold text-lg">Model Settings</h3>
                             <div>
                                 <label className="label-style mb-1">Model</label>
@@ -651,7 +651,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         </div>
                     )}
                     {(activeMode === 'edit' || activeMode === 'pixshop') && (
-                        <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
+                        <div className="hidden sm:block bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg space-y-4">
                             <h3 className="font-semibold text-lg">Model Settings</h3>
                             <div>
                                 <label className="label-style mb-1">Model</label>
@@ -662,7 +662,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         </div>
                     )}
                     {activeMode === 'faceSwap' && (
-                        <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg">
+                        <div className="hidden sm:block bg-slate-100 dark:bg-[#2d2d40] p-4 rounded-lg">
                             <h3 className="font-semibold text-lg">Face Swap Info</h3>
                             <p className="text-sm text-slate-500 dark:text-slate-400">Upload a target image and an image with the source face. The model will swap the face from the source onto the target.</p>
                         </div>
@@ -872,4 +872,3 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         </div>
     );
 };
-
