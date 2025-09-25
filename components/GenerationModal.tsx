@@ -15,7 +15,6 @@ export interface ImageGenerationSettings {
 
 export interface ImageEditingSettings {
     model: 'gemini-2.5-flash-image-preview';
-    // NEW: Add optional outputSize property to carry dimensions
     outputSize?: { width: number; height: number };
 }
 
@@ -105,7 +104,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // NEW: State to store the dimensions of the uploaded image for editing
     const [inputImageDimensions, setInputImageDimensions] = useState<{width: number, height: number} | null>(null);
 
     const [genSettings, setGenSettings] = useState<ImageGenerationSettings>({ model: 'imagen-4.0-generate-001', aspectRatio: '1:1', numImages: 1, quality: 'standard', style: 'vivid' });
@@ -114,7 +112,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     // Advanced Editing State
     const [isAdvancedStyle, setIsAdvancedStyle] = useState(false);
     const [userOutfits, setUserOutfits] = useState<Attachment[]>([]);
-    const [selectedOutfits, setSelectedOutfits] = useState<string[]>([]); // Store by fileName
+    const [selectedOutfits, setSelectedOutfits] = useState<string[]>([]);
     const [isMixOutfit, setIsMixOutfit] = useState(false);
     const [customPosePrompt, setCustomPosePrompt] = useState('');
     const [isCustomPose, setIsCustomPose] = useState(false);
@@ -141,8 +139,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
     const lastPointRef = useRef<{x: number, y: number} | null>(null);
 
-
-    // Load outfits from localStorage
     useEffect(() => {
         if (!userProfile) return;
         try {
@@ -163,23 +159,22 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setPixshopImage(null); setPixshopOutput(null); setPixshopAdjustments({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
             setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
             setToolPrompt(null);
-            setInputImageDimensions(null); // MODIFIED: Reset dimensions on open
+            setInputImageDimensions(null);
         } else {
             document.body.style.overflow = 'auto';
         }
     }, [isOpen]);
     
-    useEffect(() => { // Reset inputs when mode changes
+    useEffect(() => {
       setInputImage1(null); setInputImage2(null); setOutput([]); setError(null);
       setIsAdvancedStyle(false); setPixshopImage(null); setPixshopOutput(null);
       setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
       setToolPrompt(null);
-      setInputImageDimensions(null); // MODIFIED: Reset dimensions on mode change
+      setInputImageDimensions(null);
     }, [activeMode]);
     
     const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
 
-    // MODIFIED: This function now optionally takes a setter for dimensions
     const handleSetImage = (
         setter: React.Dispatch<React.SetStateAction<Attachment | null>>,
         dimensionSetter?: React.Dispatch<React.SetStateAction<{width: number; height: number} | null>>
@@ -190,7 +185,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             const base64String = reader.result.split(',')[1];
             setter({ data: base64String, mimeType: file.type, fileName: file.name });
 
-            // If a dimension setter is provided, create an Image object to measure it
             if (dimensionSetter) {
                 const img = new Image();
                 img.onload = () => {
@@ -207,10 +201,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         setError(null);
         setOutput([]);
         setPixshopOutput(null);
-
         try {
             const result = await apiCall();
-            handleExpGain(50); // Generic EXP gain
+            handleExpGain(50);
             if (activeMode === 'pixshop') {
                 setPixshopOutput(result[0] || null);
             } else {
@@ -236,7 +229,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!prompt) { setError("A prompt is required."); return; }
         if (!inputImage1) { setError("An image is required."); return; }
         handleGenericApiCall(async () => {
-            // MODIFIED: Pass dimensions along with settings
             const settingsWithDimensions: ImageEditingSettings = {
                 ...editSettings,
                 outputSize: inputImageDimensions ?? undefined,
@@ -269,7 +261,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const constructedPrompt = promptParts.join(' ');
         
         handleGenericApiCall(async () => {
-             // MODIFIED: Pass dimensions along with settings
              const settingsWithDimensions: ImageEditingSettings = {
                 ...editSettings,
                 outputSize: inputImageDimensions ?? undefined,
@@ -281,7 +272,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         });
     };
     
-    // ... (rest of the functions like handlePixshopEdit, handlePixshopAdjustments, etc. remain the same)
     const handlePixshopEdit = (editPrompt: string) => {
         if (!pixshopImage) { setError("Please upload an image to edit first."); return; }
         handleGenericApiCall(async () => {
@@ -305,29 +295,24 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
     const handleApplyCrop = () => {
         if (!cropRect || !pixshopImage || !pixshopImageRef.current) return;
-        
         const image = new Image();
         image.src = `data:${pixshopImage.mimeType};base64,${pixshopImage.data}`;
         image.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
-
             const nativeWidth = image.naturalWidth;
             const nativeHeight = image.naturalHeight;
             const sx = cropRect.x * nativeWidth;
             const sy = cropRect.y * nativeHeight;
             const sWidth = cropRect.width * nativeWidth;
             const sHeight = cropRect.height * nativeHeight;
-
             canvas.width = sWidth;
             canvas.height = sHeight;
             ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
-
             const dataUrl = canvas.toDataURL(pixshopImage.mimeType);
             const base64 = dataUrl.split(',')[1];
             const newAttachment = { ...pixshopImage, data: base64 };
-
             setPixshopImage(newAttachment);
             setPixshopOutput(newAttachment);
             setPixshopMode('idle');
@@ -354,7 +339,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const clientY = 'touches' in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
         const currentX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
         const currentY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-
         setCropRect({
             x: Math.min(cropStartPoint.x, currentX),
             y: Math.min(cropStartPoint.y, currentY),
@@ -363,9 +347,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         });
     }, [pixshopMode, cropStartPoint]);
 
-    const handleCropPointerUp = useCallback(() => {
-        setCropStartPoint(null);
-    }, []);
+    const handleCropPointerUp = useCallback(() => { setCropStartPoint(null); }, []);
 
     useEffect(() => {
         if (pixshopMode === 'crop' && cropStartPoint) {
@@ -402,10 +384,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const handleDrawStart = (e: React.MouseEvent | React.TouchEvent) => {
         if (pixshopMode !== 'draw') return;
         const pos = getCanvasCoordinates(e);
-        if (pos) {
-            setIsDrawing(true);
-            lastPointRef.current = pos;
-        }
+        if (pos) { setIsDrawing(true); lastPointRef.current = pos; }
     };
 
     const handleDrawMove = (e: React.MouseEvent | React.TouchEvent) => {
@@ -416,129 +395,80 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (pos && canvas && lastPointRef.current) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.strokeStyle = brushColor;
-                ctx.lineWidth = brushSize;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.beginPath();
-                ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
-                ctx.lineTo(pos.x, pos.y);
-                ctx.stroke();
-                lastPointRef.current = pos;
+                ctx.strokeStyle = brushColor; ctx.lineWidth = brushSize; ctx.lineCap = 'round';
+                ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
+                ctx.lineTo(pos.x, pos.y); ctx.stroke(); lastPointRef.current = pos;
             }
         }
     };
     
-    const handleDrawEnd = () => {
-        if(isDrawing) setIsDrawing(false);
-    };
+    const handleDrawEnd = () => { if(isDrawing) setIsDrawing(false); };
 
     useEffect(() => {
-        const canvas = drawingCanvasRef.current;
-        const image = pixshopImageRef.current;
+        const canvas = drawingCanvasRef.current; const image = pixshopImageRef.current;
         const container = pixshopContainerRef.current;
-    
         if (pixshopMode === 'draw' && canvas && image && container) {
             const setCanvasSize = () => {
                 if (image.naturalWidth === 0 || !image.complete) return;
-    
                 const { naturalWidth, naturalHeight } = image;
                 const { clientWidth: containerWidth, clientHeight: containerHeight } = container;
-    
                 const imageRatio = naturalWidth / naturalHeight;
                 const containerRatio = containerWidth / containerHeight;
-    
                 let renderedWidth, renderedHeight, offsetX, offsetY;
-    
                 if (imageRatio > containerRatio) {
-                    renderedWidth = containerWidth;
-                    renderedHeight = containerWidth / imageRatio;
-                    offsetX = 0;
-                    offsetY = (containerHeight - renderedHeight) / 2;
+                    renderedWidth = containerWidth; renderedHeight = containerWidth / imageRatio;
+                    offsetX = 0; offsetY = (containerHeight - renderedHeight) / 2;
                 } else {
-                    renderedHeight = containerHeight;
-                    renderedWidth = containerHeight * imageRatio;
-                    offsetY = 0;
-                    offsetX = (containerWidth - renderedWidth) / 2;
+                    renderedHeight = containerHeight; renderedWidth = containerHeight * imageRatio;
+                    offsetY = 0; offsetX = (containerWidth - renderedWidth) / 2;
                 }
-    
-                canvas.style.position = 'absolute';
-                canvas.style.left = `${offsetX}px`;
-                canvas.style.top = `${offsetY}px`;
-                canvas.style.width = `${renderedWidth}px`;
-                canvas.style.height = `${renderedHeight}px`;
-                canvas.width = renderedWidth;
+                canvas.style.position = 'absolute'; canvas.style.left = `${offsetX}px`;
+                canvas.style.top = `${offsetY}px`; canvas.style.width = `${renderedWidth}px`;
+                canvas.style.height = `${renderedHeight}px`; canvas.width = renderedWidth;
                 canvas.height = renderedHeight;
             };
-    
             const resizeObserver = new ResizeObserver(setCanvasSize);
             resizeObserver.observe(container);
-            
-            if (image.complete) setCanvasSize();
-            else image.onload = setCanvasSize;
-    
-            return () => {
-                resizeObserver.disconnect();
-                if (image) image.onload = null;
-            };
+            if (image.complete) setCanvasSize(); else image.onload = setCanvasSize;
+            return () => { resizeObserver.disconnect(); if (image) image.onload = null; };
         }
     }, [pixshopMode, pixshopImage]);
 
     const handleApplyHandDrawing = (promptText: string) => {
         const drawingCanvas = drawingCanvasRef.current;
         const originalImageEl = pixshopImageRef.current;
-
-        if (!drawingCanvas || !pixshopImage || !originalImageEl) {
-            setError("Cannot find required image elements.");
-            return;
-        }
-
+        if (!drawingCanvas || !pixshopImage || !originalImageEl) { setError("Cannot find required image elements."); return; }
         const emptyCanvas = document.createElement('canvas');
-        emptyCanvas.width = drawingCanvas.width;
-        emptyCanvas.height = drawingCanvas.height;
+        emptyCanvas.width = drawingCanvas.width; emptyCanvas.height = drawingCanvas.height;
         if (drawingCanvas.toDataURL() === emptyCanvas.toDataURL()) {
             setNotifications(p => ["Please draw something on the image first.", ...p]);
             return;
         }
-
         const compositeCanvas = document.createElement('canvas');
         const compositeCtx = compositeCanvas.getContext('2d');
-        if (!compositeCtx) {
-            setError("Could not create composite canvas context.");
-            return;
-        }
-
+        if (!compositeCtx) { setError("Could not create composite canvas context."); return; }
         compositeCanvas.width = originalImageEl.naturalWidth;
         compositeCanvas.height = originalImageEl.naturalHeight;
-
         compositeCtx.drawImage(originalImageEl, 0, 0, originalImageEl.naturalWidth, originalImageEl.naturalHeight);
         compositeCtx.drawImage(drawingCanvas, 0, 0, originalImageEl.naturalWidth, originalImageEl.naturalHeight);
-
         const compositeDataUrl = compositeCanvas.toDataURL('image/png');
         const compositeBase64 = compositeDataUrl.split(',')[1];
-        
         const compositeAttachment: Attachment = {
-            ...pixshopImage,
-            data: compositeBase64,
+            ...pixshopImage, data: compositeBase64,
             fileName: 'composite_edit_input.png',
         };
-        
         const transformationPrompt = `In the provided image, there is a prominent, non-photorealistic drawing (a sketch). Your primary task is to intelligently replace ONLY this drawn element with a photorealistic version of: "${promptText}". The new object must appear in the exact same location, have the same scale, and follow the general shape of the drawing. It is crucial to seamlessly blend the new object into the original photograph, matching lighting, shadows, and perspective. Do NOT alter any other part of the image. The drawing is your definitive guide for placement and form.`;
-
         handleGenericApiCall(async () => {
             const { attachments } = await editImage(transformationPrompt, [compositeAttachment], editSettings, userProfile);
             return attachments;
         });
-
         clearDrawingCanvas();
         setPixshopMode('idle');
     };
 
     const handleBeautifulEffectClick = () => {
         setToolPrompt({
-            show: true,
-            toolName: 'Beautiful Effect',
-            title: 'Add Creative Elements to Background',
+            show: true, toolName: 'Beautiful Effect', title: 'Add Creative Elements to Background',
             onConfirm: (promptText) => {
                 const selectedEffectData = effectOptions.find(e => e.id === selectedEffect);
                 if (selectedEffectData) {
@@ -548,7 +478,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             }
         });
     };
-
 
     const saveOutfits = (newOutfits: Attachment[]) => {
         if (!userProfile) return;
@@ -610,17 +539,13 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
     
     const pixshopColorFilters = [
-        { name: 'Vintage', prompt: 'apply a warm, vintage color filter with slightly faded colors' },
-        { name: 'B&W', prompt: 'convert to a high-contrast black and white image' },
-        { name: 'Cinematic', prompt: 'apply a cool, cinematic blue and teal color grade' },
-        { name: 'Vibrant', prompt: 'enhance the colors to be more vibrant and saturated' },
+        { name: 'Vintage', prompt: 'apply a warm, vintage color filter with slightly faded colors' }, { name: 'B&W', prompt: 'convert to a high-contrast black and white image' },
+        { name: 'Cinematic', prompt: 'apply a cool, cinematic blue and teal color grade' }, { name: 'Vibrant', prompt: 'enhance the colors to be more vibrant and saturated' },
     ];
     
     const pixshopArtStyles = [
-        { name: 'Anime', prompt: 'transform this photo into a detailed anime style illustration' },
-        { name: 'Van Gogh', prompt: 'repaint this photo in the expressive, impasto style of Vincent van Gogh' },
-        { name: 'Sketch', prompt: 'convert this photo into a detailed pencil sketch' },
-        { name: '3D Render', prompt: 'recreate this image in a cute, vibrant 3D cartoon style, like a Pixar movie render' },
+        { name: 'Anime', prompt: 'transform this photo into a detailed anime style illustration' }, { name: 'Van Gogh', prompt: 'repaint this photo in the expressive, impasto style of Vincent van Gogh' },
+        { name: 'Sketch', prompt: 'convert this photo into a detailed pencil sketch' }, { name: '3D Render', prompt: 'recreate this image in a cute, vibrant 3D cartoon style, like a Pixar movie render' },
     ];
 
 
@@ -637,21 +562,15 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         <label className="label-style mb-1">Tool</label>
                         <div className="grid grid-cols-1 gap-2 text-sm font-semibold">
                             {[
-                                { id: 'image', label: 'Image Generation', icon: ImageIcon },
-                                { id: 'edit', label: 'Advanced Editing', icon: EditIcon },
-                                { id: 'faceSwap', label: 'Face Swap', icon: FaceSwapIcon },
-                                { id: 'pixshop', label: 'Studio Pixshop', icon: CropIcon },
+                                { id: 'image', label: 'Image Generation', icon: ImageIcon }, { id: 'edit', label: 'Advanced Editing', icon: EditIcon },
+                                { id: 'faceSwap', label: 'Face Swap', icon: FaceSwapIcon }, { id: 'pixshop', label: 'Studio Pixshop', icon: CropIcon },
                             ].map(tool => (
-                                <button
-                                    key={tool.id}
-                                    onClick={() => setActiveMode(tool.id as CreativeMode)}
+                                <button key={tool.id} onClick={() => setActiveMode(tool.id as CreativeMode)}
                                     className={`p-3 rounded-lg flex items-center justify-start gap-4 transition-colors text-base
                                         ${activeMode === tool.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-[#2d2d40] hover:bg-slate-200 dark:hover:bg-slate-800'}
                                         ${activeMode !== tool.id ? 'text-slate-800 dark:text-slate-200' : ''}
-                                    `}
-                                >
-                                    <tool.icon className="w-6 h-6"/>
-                                    <span>{tool.label}</span>
+                                    `}>
+                                    <tool.icon className="w-6 h-6"/> <span>{tool.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -674,24 +593,22 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                     {availableRatios.map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
                                 </select>
                             </div>
-                            {isDalle && (
-                                <>
-                                    <div>
-                                        <label className="label-style mb-1">Quality</label>
-                                        <select value={genSettings.quality} onChange={e => setGenSettings(s => ({ ...s, quality: e.target.value as 'standard' | 'hd' }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
-                                            <option value="standard">Standard</option>
-                                            <option value="hd">HD</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="label-style mb-1">Style</label>
-                                        <select value={genSettings.style} onChange={e => setGenSettings(s => ({ ...s, style: e.target.value as 'vivid' | 'natural' }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
-                                            <option value="vivid">Vivid</option>
-                                            <option value="natural">Natural</option>
-                                        </select>
-                                    </div>
-                                </>
-                            )}
+                            {isDalle && ( <>
+                                <div>
+                                    <label className="label-style mb-1">Quality</label>
+                                    <select value={genSettings.quality} onChange={e => setGenSettings(s => ({ ...s, quality: e.target.value as 'standard' | 'hd' }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
+                                        <option value="standard">Standard</option>
+                                        <option value="hd">HD</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="label-style mb-1">Style</label>
+                                    <select value={genSettings.style} onChange={e => setGenSettings(s => ({ ...s, style: e.target.value as 'vivid' | 'natural' }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
+                                        <option value="vivid">Vivid</option>
+                                        <option value="natural">Natural</option>
+                                    </select>
+                                </div>
+                            </>)}
                         </div>
                     )}
                     {(activeMode === 'edit' || activeMode === 'pixshop') && (
@@ -720,12 +637,13 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             <div className="flex-grow overflow-y-auto pr-2 -mr-2 min-h-0">
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 items-start">
                                     {/* Input Column */}
-                                    <div className="flex flex-col gap-4">
+                                    {/* MODIFICATION START: Added min-h-0 to the column */}
+                                    <div className="flex flex-col gap-4 min-h-0">
+                                    {/* MODIFICATION END */}
                                         <h3 className="text-lg font-semibold flex-shrink-0">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
                                         {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style text-slate-900 dark:text-slate-100"/>}
                                         {activeMode === 'edit' && (
                                             <div className="aspect-square w-full">
-                                                {/* MODIFIED: Pass the dimension setter to ImageUploader */}
                                                 <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1, setInputImageDimensions)} title="" textSize="text-sm" objectFit="contain" />
                                             </div>
                                         )}
@@ -741,7 +659,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         )}
                                     </div>
                                     {/* Output Column */}
-                                    <div className="flex flex-col gap-4">
+                                    {/* MODIFICATION START: Added min-h-0 to the column */}
+                                    <div className="flex flex-col gap-4 min-h-0">
+                                    {/* MODIFICATION END */}
                                         <h3 className="text-lg font-semibold flex-shrink-0">Output</h3>
                                         <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                             {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
@@ -797,7 +717,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             </div>
                         </div>
                     ) : (
-                       // ... Pixshop JSX remains the same ...
                        <div className="flex flex-col h-full overflow-hidden">
                            {/* Pixshop: Top Row for Images */}
                            <div className="grid grid-cols-2 gap-4 flex-grow min-h-0">
@@ -831,9 +750,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                    </div>
                                </div>
                            </div>
-                           {/* Pixshop: Bottom Row for Tools */}
                            <div className="flex flex-col sm:grid sm:grid-cols-2 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
-                               {/* Left Column: Creative Tools */}
                                <div className="space-y-4">
                                    <div className="space-y-2">
                                         <h4 className="font-semibold text-sm">Creative Tools</h4>
@@ -866,7 +783,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         </select>
                                    </div>
                                </div>
-                               {/* Right Column: Color & Adjustments */}
                                <div className="space-y-4">
                                    <div className="space-y-2">
                                         <h4 className="font-semibold text-sm">Color Filters</h4>
@@ -888,7 +804,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                     )}
                 </div>
             </div>
-            {/* ... ToolPrompt JSX remains the same ... */}
             {toolPrompt?.show && (
                 <div className="absolute inset-0 bg-black/50 z-10 flex items-center justify-center" onClick={() => setToolPrompt(null)}>
                     <div className="bg-white dark:bg-[#2d2d40] rounded-lg shadow-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
