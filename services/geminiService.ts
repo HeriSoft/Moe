@@ -220,7 +220,7 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
 
     // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images (e.g. when applying outfits).
     // The Gemini API expects an `output` object within the `config`.
-    if (settings && settings.outputSize && settings.outputSize.width && settings.outputSize.height) {
+    if (settings?.outputSize?.width && settings?.outputSize?.height) {
         config.output = {
             width: settings.outputSize.width,
             height: settings.outputSize.height,
