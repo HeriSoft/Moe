@@ -453,25 +453,65 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         }
     }, [pixshopMode, pixshopImage]);
 
+    // =================================================================
+    // START: REBUILT HAND DRAWING LOGIC WITH MASKING
+    // =================================================================
     const handleApplyHandDrawing = (promptText: string) => {
-        if (!drawingCanvasRef.current || !pixshopImage) return;
-        const drawingDataUrl = drawingCanvasRef.current.toDataURL('image/png');
-        if (drawingDataUrl === 'data:,') {
-            setNotifications(p => ["Please draw something on the image first.", ...p]);
+        const drawingCanvas = drawingCanvasRef.current;
+        if (!drawingCanvas || !pixshopImage) return;
+
+        // Create a new canvas in memory to generate the mask
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = drawingCanvas.width;
+        maskCanvas.height = drawingCanvas.height;
+        const maskCtx = maskCanvas.getContext('2d');
+
+        if (!maskCtx) {
+            setError("Could not create mask context.");
             return;
         }
-        const drawingBase64 = drawingDataUrl.split(',')[1];
-        const drawingAttachment: Attachment = { data: drawingBase64, mimeType: 'image/png', fileName: 'drawing_mask.png' };
+
+        // 1. Fill the mask canvas with black (untouchable area)
+        maskCtx.fillStyle = '#000000';
+        maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+
+        // 2. Draw the user's drawing onto the mask.
+        // This makes the drawn parts non-black.
+        maskCtx.drawImage(drawingCanvas, 0, 0);
+
+        // 3. Use composite operations to turn all non-black (the drawn parts) to white.
+        // 'source-in' means the new shape is drawn only where the new shape and the existing canvas content overlap.
+        // By filling with white, we turn any existing pixel into a white pixel.
+        maskCtx.globalCompositeOperation = 'source-in';
+        maskCtx.fillStyle = '#FFFFFF';
+        maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
         
-        const combinedPrompt = `The user has provided a primary image and a second image, which is a hand-drawn mask. The drawing on the mask indicates the precise location, shape, and orientation where a new object should be integrated. The user wants to transform the drawn area into: "${promptText}". You MUST replace the drawn pixels (indicated by the mask) with a photorealistic rendering of the object described in the prompt. The new object must seamlessly blend into the original image, adopting its lighting, shadows, perspective, and overall style. Do not alter any other part of the image. Do not generate a new subject; modify the existing one according to the mask and prompt.`;
+        const maskDataUrl = maskCanvas.toDataURL('image/png');
+
+        // Check if the mask is empty (all black) which means nothing was drawn
+        if (!maskDataUrl.includes('//')) { // A simple heuristic to check for non-empty PNG data
+             setNotifications(p => ["Please draw something on the image first.", ...p]);
+             return;
+        }
+
+        const maskBase64 = maskDataUrl.split(',')[1];
+        const maskAttachment: Attachment = { data: maskBase64, mimeType: 'image/png', fileName: 'inpainting_mask.png' };
+        
+        // A new, highly specific prompt for inpainting with a mask
+        const inpaintingPrompt = `You are performing a precise inpainting task. You are provided with an original image and a black-and-white mask image. Your ONLY job is to realistically fill the WHITE area of the mask with the following object: "${promptText}". The object must be contained entirely within the white masked region. Do NOT alter, modify, or move any part of the original image that corresponds to the BLACK area of the mask. The generated object must seamlessly integrate with the original image's lighting, shadows, perspective, and overall style.`;
 
         handleGenericApiCall(async () => {
-            const { attachments } = await editImage(combinedPrompt, [pixshopImage, drawingAttachment], editSettings, userProfile);
+            // Send the ORIGINAL image and the new MASK image
+            const { attachments } = await editImage(inpaintingPrompt, [pixshopImage, maskAttachment], editSettings, userProfile);
             return attachments;
         });
+
         clearDrawingCanvas();
         setPixshopMode('idle');
     };
+    // =================================================================
+    // END: REBUILT HAND DRAWING LOGIC
+    // =================================================================
 
     const handleBeautifulEffectClick = () => {
         setToolPrompt({
@@ -858,4 +898,3 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         </div>
     );
 };
-
