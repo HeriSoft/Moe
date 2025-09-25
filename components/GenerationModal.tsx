@@ -139,6 +139,21 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
     const lastPointRef = useRef<{x: number, y: number} | null>(null);
 
+    const getSquareOutputSettings = useCallback((): ImageEditingSettings => {
+        let outputSize = undefined;
+        if (inputImageDimensions) {
+            // Determine the largest dimension of the input image
+            const maxDim = Math.max(inputImageDimensions.width, inputImageDimensions.height);
+            // The API might have limits, a cap of 1024x1024 is reasonable for editing.
+            const finalDim = Math.min(maxDim, 1024);
+            outputSize = { width: finalDim, height: finalDim };
+        }
+        return {
+            ...editSettings,
+            outputSize,
+        };
+    }, [inputImageDimensions, editSettings]);
+
     useEffect(() => {
         if (!userProfile) return;
         try {
@@ -229,11 +244,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!prompt) { setError("A prompt is required."); return; }
         if (!inputImage1) { setError("An image is required."); return; }
         handleGenericApiCall(async () => {
-            const settingsWithDimensions: ImageEditingSettings = {
-                ...editSettings,
-                outputSize: inputImageDimensions ?? undefined,
-            };
-            const { attachments } = await editImage(prompt, [inputImage1], settingsWithDimensions, userProfile);
+            const finalEditSettings = getSquareOutputSettings();
+            const { attachments } = await editImage(prompt, [inputImage1], finalEditSettings, userProfile);
             return attachments;
         });
     };
@@ -261,11 +273,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const constructedPrompt = promptParts.join(' ');
         
         handleGenericApiCall(async () => {
-             const settingsWithDimensions: ImageEditingSettings = {
-                ...editSettings,
-                outputSize: inputImageDimensions ?? undefined,
-             };
-             const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], settingsWithDimensions, userProfile);
+             const finalEditSettings = getSquareOutputSettings();
+             const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], finalEditSettings, userProfile);
              setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
              setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
              return attachments;
