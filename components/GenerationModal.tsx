@@ -463,7 +463,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const drawingBase64 = drawingDataUrl.split(',')[1];
         const drawingAttachment: Attachment = { data: drawingBase64, mimeType: 'image/png', fileName: 'drawing_mask.png' };
         
-        const combinedPrompt = `Inpaint the first image. The second image is an inpainting mask where the white area indicates the region to modify. The user's request is to inpaint a "${promptText}" into the masked area. The result must be seamlessly blended with the original, unmasked parts of the image.`;
+        const combinedPrompt = `Analyze the primary image and the provided mask image. The user wants to add a specific object into the masked area (the white part of the second image). The object to add is: "${promptText}". It is crucial that you render this exact object. Do not substitute it with a different type of object. Integrate the new object seamlessly into the original image, respecting lighting, shadows, and perspective.`;
 
         handleGenericApiCall(async () => {
             const { attachments } = await editImage(combinedPrompt, [pixshopImage, drawingAttachment], editSettings, userProfile);
@@ -657,7 +657,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                     {activeMode !== 'pixshop' ? (
                         <div className="flex flex-col h-full">
                             <div className="flex-grow overflow-y-auto pr-2 -mr-2 min-h-0">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 items-start">
                                     {/* Input Column */}
                                     <div className="flex flex-col gap-4">
                                         <h3 className="text-lg font-semibold flex-shrink-0">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
