@@ -454,55 +454,60 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     }, [pixshopMode, pixshopImage]);
 
     // =================================================================
-    // START: REBUILT HAND DRAWING LOGIC WITH MASKING
+    // START: V2 - ROBUST HAND DRAWING LOGIC (COMPOSITE IMAGE METHOD)
     // =================================================================
     const handleApplyHandDrawing = (promptText: string) => {
         const drawingCanvas = drawingCanvasRef.current;
-        if (!drawingCanvas || !pixshopImage) return;
+        const originalImageEl = pixshopImageRef.current;
 
-        // Create a new canvas in memory to generate the mask
-        const maskCanvas = document.createElement('canvas');
-        maskCanvas.width = drawingCanvas.width;
-        maskCanvas.height = drawingCanvas.height;
-        const maskCtx = maskCanvas.getContext('2d');
-
-        if (!maskCtx) {
-            setError("Could not create mask context.");
+        if (!drawingCanvas || !pixshopImage || !originalImageEl) {
+            setError("Cannot find required image elements.");
             return;
         }
 
-        // 1. Fill the mask canvas with black (untouchable area)
-        maskCtx.fillStyle = '#000000';
-        maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-
-        // 2. Draw the user's drawing onto the mask.
-        // This makes the drawn parts non-black.
-        maskCtx.drawImage(drawingCanvas, 0, 0);
-
-        // 3. Use composite operations to turn all non-black (the drawn parts) to white.
-        // 'source-in' means the new shape is drawn only where the new shape and the existing canvas content overlap.
-        // By filling with white, we turn any existing pixel into a white pixel.
-        maskCtx.globalCompositeOperation = 'source-in';
-        maskCtx.fillStyle = '#FFFFFF';
-        maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-        
-        const maskDataUrl = maskCanvas.toDataURL('image/png');
-
-        // Check if the mask is empty (all black) which means nothing was drawn
-        if (!maskDataUrl.includes('//')) { // A simple heuristic to check for non-empty PNG data
-             setNotifications(p => ["Please draw something on the image first.", ...p]);
-             return;
+        // Check if anything was actually drawn
+        const emptyCanvas = document.createElement('canvas');
+        emptyCanvas.width = drawingCanvas.width;
+        emptyCanvas.height = drawingCanvas.height;
+        if (drawingCanvas.toDataURL() === emptyCanvas.toDataURL()) {
+            setNotifications(p => ["Please draw something on the image first.", ...p]);
+            return;
         }
 
-        const maskBase64 = maskDataUrl.split(',')[1];
-        const maskAttachment: Attachment = { data: maskBase64, mimeType: 'image/png', fileName: 'inpainting_mask.png' };
+        // Create a new canvas to merge the original image and the drawing
+        const compositeCanvas = document.createElement('canvas');
+        const compositeCtx = compositeCanvas.getContext('2d');
+        if (!compositeCtx) {
+            setError("Could not create composite canvas context.");
+            return;
+        }
+
+        // Set canvas size to the original image's native dimensions for max quality
+        compositeCanvas.width = originalImageEl.naturalWidth;
+        compositeCanvas.height = originalImageEl.naturalHeight;
+
+        // 1. Draw the original image onto the composite canvas first
+        compositeCtx.drawImage(originalImageEl, 0, 0, originalImageEl.naturalWidth, originalImageEl.naturalHeight);
+
+        // 2. Draw the user's sketch on top, scaling it from its display size to the native image size.
+        // The drawing canvas's dimensions match the *displayed* image, so this correctly overlays the sketch.
+        compositeCtx.drawImage(drawingCanvas, 0, 0, originalImageEl.naturalWidth, originalImageEl.naturalHeight);
+
+        const compositeDataUrl = compositeCanvas.toDataURL('image/png');
+        const compositeBase64 = compositeDataUrl.split(',')[1];
         
-        // A new, highly specific prompt for inpainting with a mask
-        const inpaintingPrompt = `You are performing a precise inpainting task. You are provided with an original image and a black-and-white mask image. Your ONLY job is to realistically fill the WHITE area of the mask with the following object: "${promptText}". The object must be contained entirely within the white masked region. Do NOT alter, modify, or move any part of the original image that corresponds to the BLACK area of the mask. The generated object must seamlessly integrate with the original image's lighting, shadows, perspective, and overall style.`;
+        const compositeAttachment: Attachment = {
+            ...pixshopImage, // Keep original mimeType
+            data: compositeBase64,
+            fileName: 'composite_edit_input.png',
+        };
+        
+        // A new, direct prompt telling the AI to replace the drawn element.
+        const transformationPrompt = `In the provided image, there is a prominent, non-photorealistic drawing (a sketch). Your primary task is to intelligently replace ONLY this drawn element with a photorealistic version of: "${promptText}". The new object must appear in the exact same location, have the same scale, and follow the general shape of the drawing. It is crucial to seamlessly blend the new object into the original photograph, matching lighting, shadows, and perspective. Do NOT alter any other part of the image. The drawing is your definitive guide for placement and form.`;
 
         handleGenericApiCall(async () => {
-            // Send the ORIGINAL image and the new MASK image
-            const { attachments } = await editImage(inpaintingPrompt, [pixshopImage, maskAttachment], editSettings, userProfile);
+            // Send the new COMPOSITE image as the primary (and only) image for editing.
+            const { attachments } = await editImage(transformationPrompt, [compositeAttachment], editSettings, userProfile);
             return attachments;
         });
 
@@ -510,8 +515,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         setPixshopMode('idle');
     };
     // =================================================================
-    // END: REBUILT HAND DRAWING LOGIC
+    // END: V2 - ROBUST HAND DRAWING LOGIC
     // =================================================================
+
 
     const handleBeautifulEffectClick = () => {
         setToolPrompt({
