@@ -463,7 +463,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const drawingBase64 = drawingDataUrl.split(',')[1];
         const drawingAttachment: Attachment = { data: drawingBase64, mimeType: 'image/png', fileName: 'drawing_mask.png' };
         
-        const combinedPrompt = `Using the second image as a mask (white areas indicate where to edit), apply this change to the first image: "${promptText}". Apply the change *only* within the masked region.`;
+        const combinedPrompt = `Inpaint the first image. The second image is an inpainting mask where the white area indicates the region to modify. The user's request is to inpaint a "${promptText}" into the masked area. The result must be seamlessly blended with the original, unmasked parts of the image.`;
 
         handleGenericApiCall(async () => {
             const { attachments } = await editImage(combinedPrompt, [pixshopImage, drawingAttachment], editSettings, userProfile);
@@ -547,7 +547,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const dalleRatios = ["1:1", "16:9", "9:16"];
     const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
-    const getAspectRatioClass = () => activeMode !== 'image' ? 'aspect-square' : `aspect-[${genSettings.aspectRatio.replace(':', '/')}]`;
     
     const pixshopColorFilters = [
         { name: 'Vintage', prompt: 'apply a warm, vintage color filter with slightly faded colors' },
@@ -658,25 +657,34 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                     {activeMode !== 'pixshop' ? (
                         <div className="flex flex-col h-full">
                             <div className="flex-grow overflow-y-auto pr-2 -mr-2 min-h-0">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 h-full">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
                                     {/* Input Column */}
-                                    <div className="flex flex-col gap-4 min-h-0">
+                                    <div className="flex flex-col gap-4">
                                         <h3 className="text-lg font-semibold flex-shrink-0">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
                                         {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style text-slate-900 dark:text-slate-100"/>}
-                                        {activeMode === 'edit' && <div className="flex-grow min-h-0"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" objectFit="contain" /></div>}
-                                        {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
+                                        {activeMode === 'edit' && (
+                                            <div className="aspect-square w-full">
+                                                <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" objectFit="contain" />
+                                            </div>
+                                        )}
+                                        {activeMode === 'faceSwap' && (
+                                            <div className="aspect-square w-full grid grid-cols-2 gap-4">
+                                                <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" />
+                                                <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" />
+                                            </div>
+                                        )}
                                     </div>
                                     {/* Output Column */}
-                                    <div className="flex flex-col gap-4 min-h-0">
+                                    <div className="flex flex-col gap-4">
                                         <h3 className="text-lg font-semibold flex-shrink-0">Output</h3>
-                                        <div className="w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
+                                        <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                             {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
                                             {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
                                             {!isLoading && !error && output.length > 0 && (
                                                 <div className={`grid gap-2 w-full h-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                                     {output.map((item, index) => (
-                                                        <div key={index} className={`relative group w-full h-full`}>
-                                                            <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className={`rounded-lg w-full h-full object-contain`}/>
+                                                        <div key={index} className="relative group w-full h-full">
+                                                            <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg w-full h-full object-contain"/>
                                                             <button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button>
                                                         </div>
                                                     ))}
