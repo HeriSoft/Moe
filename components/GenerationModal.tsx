@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-// FIX: Add missing ArrowUpTrayIcon import
-import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon } from './icons';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon, EraserIcon } from './icons';
 import { generateImage, editImage, swapFace } from '../services/geminiService';
 import type { Attachment, UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
@@ -78,6 +77,16 @@ const EXPRESSIONS = [
     { label: 'Angry', prompt: 'an angry, furious expression', Icon: FaceAngryIcon },
 ];
 
+// NEW: Type for crop rectangle state
+type CropRect = { x: number; y: number; width: number; height: number; } | null;
+
+interface ToolPromptState {
+    show: boolean;
+    toolName: string;
+    title: string;
+    onConfirm: (prompt: string) => void;
+}
+
 
 export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain }) => {
     const [activeMode, setActiveMode] = useState<CreativeMode>('image');
@@ -102,10 +111,18 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [selectedPose, setSelectedPose] = useState<string | null>(null);
     const [selectedExpression, setSelectedExpression] = useState<string | null>(null);
     
-    // --- NEW: Studio Pixshop State ---
+    // --- Studio Pixshop State ---
     const [pixshopImage, setPixshopImage] = useState<Attachment | null>(null);
     const [pixshopOutput, setPixshopOutput] = useState<Attachment | null>(null);
     const [pixshopAdjustments, setPixshopAdjustments] = useState({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
+    // --- State for manual cropping ---
+    const [isCropping, setIsCropping] = useState(false);
+    const [cropStartPoint, setCropStartPoint] = useState<{x: number, y: number} | null>(null);
+    const [cropRect, setCropRect] = useState<CropRect>(null);
+    const pixshopCanvasRef = useRef<HTMLDivElement>(null);
+    const pixshopImageRef = useRef<HTMLImageElement>(null);
+    const [toolPrompt, setToolPrompt] = useState<ToolPromptState | null>(null);
+
 
     // Load outfits from localStorage
     useEffect(() => {
@@ -126,6 +143,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setIsAdvancedStyle(false); setSelectedOutfits([]); setIsMixOutfit(false);
             setSelectedPose(null); setSelectedExpression(null); setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
             setPixshopImage(null); setPixshopOutput(null); setPixshopAdjustments({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
+            setIsCropping(false); setCropRect(null); setCropStartPoint(null);
+            setToolPrompt(null);
         } else {
             document.body.style.overflow = 'auto';
         }
@@ -134,6 +153,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     useEffect(() => { // Reset inputs when mode changes
       setInputImage1(null); setInputImage2(null); setOutput([]); setError(null);
       setIsAdvancedStyle(false); setPixshopImage(null); setPixshopOutput(null);
+      setIsCropping(false); setCropRect(null); setCropStartPoint(null);
+      setToolPrompt(null);
     }, [activeMode]);
     
     const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
@@ -237,6 +258,84 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         }
     };
 
+    const handleApplyCrop = () => {
+        if (!cropRect || !pixshopImage || !pixshopImageRef.current) return;
+        
+        const image = new Image();
+        image.src = `data:${pixshopImage.mimeType};base64,${pixshopImage.data}`;
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            const nativeWidth = image.naturalWidth;
+            const nativeHeight = image.naturalHeight;
+            const sx = cropRect.x * nativeWidth;
+            const sy = cropRect.y * nativeHeight;
+            const sWidth = cropRect.width * nativeWidth;
+            const sHeight = cropRect.height * nativeHeight;
+
+            canvas.width = sWidth;
+            canvas.height = sHeight;
+            ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+
+            const dataUrl = canvas.toDataURL(pixshopImage.mimeType);
+            const base64 = dataUrl.split(',')[1];
+            const newAttachment = { ...pixshopImage, data: base64 };
+
+            setPixshopImage(newAttachment);
+            setPixshopOutput(newAttachment);
+            setIsCropping(false);
+            setCropRect(null);
+        };
+    };
+
+    const handleCropPointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isCropping || !pixshopCanvasRef.current) return;
+        const rect = pixshopCanvasRef.current.getBoundingClientRect();
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+        setCropStartPoint({ x, y });
+        setCropRect({ x, y, width: 0, height: 0 });
+    };
+
+    const handleCropPointerMove = useCallback((e: MouseEvent | TouchEvent) => {
+        if (!isCropping || !cropStartPoint || !pixshopCanvasRef.current) return;
+        e.preventDefault();
+        const rect = pixshopCanvasRef.current.getBoundingClientRect();
+        const clientX = 'touches' in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
+        const clientY = 'touches' in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
+        const currentX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const currentY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+        setCropRect({
+            x: Math.min(cropStartPoint.x, currentX),
+            y: Math.min(cropStartPoint.y, currentY),
+            width: Math.abs(currentX - cropStartPoint.x),
+            height: Math.abs(currentY - cropStartPoint.y),
+        });
+    }, [isCropping, cropStartPoint]);
+
+    const handleCropPointerUp = useCallback(() => {
+        setCropStartPoint(null);
+    }, []);
+
+    useEffect(() => {
+        if (isCropping && cropStartPoint) {
+            window.addEventListener('mousemove', handleCropPointerMove);
+            window.addEventListener('touchmove', handleCropPointerMove);
+            window.addEventListener('mouseup', handleCropPointerUp);
+            window.addEventListener('touchend', handleCropPointerUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleCropPointerMove);
+            window.removeEventListener('touchmove', handleCropPointerMove);
+            window.removeEventListener('mouseup', handleCropPointerUp);
+            window.removeEventListener('touchend', handleCropPointerUp);
+        };
+    }, [isCropping, cropStartPoint, handleCropPointerMove, handleCropPointerUp]);
 
     const saveOutfits = (newOutfits: Attachment[]) => {
         if (!userProfile) return;
@@ -309,7 +408,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         { name: 'Anime', prompt: 'transform this photo into a detailed anime style illustration' },
         { name: 'Van Gogh', prompt: 'repaint this photo in the expressive, impasto style of Vincent van Gogh' },
         { name: 'Sketch', prompt: 'convert this photo into a detailed pencil sketch' },
-        { name: '3D Render', prompt: 'recreate this image as a polished 3D render with realistic lighting' },
+        { name: '3D Render', prompt: 'recreate this image in a cute, vibrant 3D cartoon style, like a Pixar movie render' },
     ];
 
 
@@ -323,14 +422,27 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         <button onClick={onClose} className="sm:hidden text-slate-500"><CloseIcon className="w-7 h-7" /></button>
                     </div>
                     <div className="mb-4">
-                        <label htmlFor="creative-mode-select" className="label-style mb-1">Tool</label>
-                        <select id="creative-mode-select" value={activeMode} onChange={(e) => setActiveMode(e.target.value as CreativeMode)} className="w-full input-style">
-                            <option value="image">Image Generation</option>
-                            <option value="edit">Image Editing</option>
-                            <option value="faceSwap">Face Swap</option>
-                            <option value="pixshop">Studio Pixshop</option>
-                            <option value="video" disabled className="text-slate-500">Video Generation</option>
-                        </select>
+                        <label className="label-style mb-1">Tool</label>
+                        <div className="grid grid-cols-1 gap-2 text-sm font-semibold">
+                            {[
+                                { id: 'image', label: 'Image Generation', icon: ImageIcon },
+                                { id: 'edit', label: 'Advanced Editing', icon: EditIcon },
+                                { id: 'faceSwap', label: 'Face Swap', icon: FaceSwapIcon },
+                                { id: 'pixshop', label: 'Studio Pixshop', icon: CropIcon },
+                            ].map(tool => (
+                                <button
+                                    key={tool.id}
+                                    onClick={() => setActiveMode(tool.id as CreativeMode)}
+                                    className={`p-3 rounded-lg flex items-center justify-start gap-4 transition-colors text-base
+                                        ${activeMode === tool.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-[#2d2d40] hover:bg-slate-200 dark:hover:bg-slate-800'}
+                                        ${activeMode !== tool.id ? 'text-slate-800 dark:text-slate-200' : ''}
+                                    `}
+                                >
+                                    <tool.icon className="w-6 h-6"/>
+                                    <span>{tool.label}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     
                     {activeMode === 'image' && (
@@ -391,149 +503,156 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
                 {/* Right Column: Main Content */}
                 <div className="w-full sm:w-[60%] md:w-2/3 sm:pl-6 flex flex-col flex-grow min-h-0 overflow-hidden">
-                    <div className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 min-h-0 overflow-y-auto">
-                        
-                        {/* Input Column */}
-                        <div className="flex flex-col gap-4">
-                            <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Image to Edit' : activeMode === 'pixshop' ? 'Canvas' : 'Input'}</h3>
-                            {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
-                            {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" />}
-                            {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
-                            
-                            {activeMode === 'edit' && (
-                                <>
-                                <div className="flex items-center justify-between"><label htmlFor="adv-toggle" className="font-semibold text-slate-600 dark:text-slate-300">Advanced Style</label><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="adv-toggle" checked={isAdvancedStyle} onChange={e => setIsAdvancedStyle(e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></label></div>
-                                
-                                {!isAdvancedStyle && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your editing prompt (e.g., 'add a hat')..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
-
-                                {isAdvancedStyle && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                                        <div className="space-y-4">
-                                            <div>
-                                                <h4 className="text-sm font-semibold mb-2">Pose</h4>
-                                                <div className="flex items-center gap-2 mb-2"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>
-                                                {isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/> : <div className="grid grid-cols-4 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}
-                                            </div>
-                                        </div>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <div className="flex items-center justify-between mb-2">
-                                                     <h4 className="text-sm font-semibold">Outfit</h4>
-                                                    <div className="flex items-center gap-2"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix (Max 3)</label></div>
+                    {activeMode !== 'pixshop' ? (
+                        <>
+                            <div className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 min-h-0 overflow-y-auto">
+                                {/* Input Column */}
+                                <div className="flex flex-col gap-4">
+                                    <h3 className="text-lg font-semibold">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
+                                    {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
+                                    {activeMode === 'edit' && <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="" textSize="text-sm" />}
+                                    {activeMode === 'faceSwap' && <div className="grid grid-cols-2 gap-4"><ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" /><ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" /></div>}
+                                    {activeMode === 'edit' && (
+                                        <>
+                                            <div className="flex items-center justify-between"><label htmlFor="adv-toggle" className="font-semibold text-slate-600 dark:text-slate-300">Advanced Style</label><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="adv-toggle" checked={isAdvancedStyle} onChange={e => setIsAdvancedStyle(e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></label></div>
+                                            {!isAdvancedStyle && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your editing prompt (e.g., 'add a hat')..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style"/>}
+                                            {isAdvancedStyle && (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                                                    <div className="space-y-4">
+                                                        <div><h4 className="text-sm font-semibold mb-2">Pose</h4>{isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style flex-grow"/> : <div className="grid grid-cols-4 gap-2">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}<div className="flex items-center gap-2 mt-2 text-xs"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div></div>
+                                                        <div><div className="flex items-center justify-between mb-2"><h4 className="text-sm font-semibold">Outfit</h4><div className="flex items-center gap-2 text-xs"><input type="checkbox" id="mix-outfit" checked={isMixOutfit} onChange={e => setIsMixOutfit(e.target.checked)}/><label htmlFor="mix-outfit">Mix (Max 3)</label></div></div><div className="grid grid-cols-3 gap-2">{[...Array(6)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div></div>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        <div><h4 className="text-sm font-semibold mb-2">Expression</h4><div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleExpressionClick(e.prompt)} title={e.label} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center ${selectedExpression === e.prompt ? 'ring-2 ring-indigo-500' : ''}`}><e.Icon className="w-5 h-5"/></button>)}</div></div>
+                                                        <div><h4 className="text-sm font-semibold mb-2">Background</h4><input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/></div>
+                                                    </div>
                                                 </div>
-                                                <div className="grid grid-cols-3 gap-2">{[...Array(6)].map((_, i) => userOutfits[i] ? <button key={userOutfits[i].fileName} onClick={() => handleOutfitClick(userOutfits[i])} className={`relative rounded-md overflow-hidden aspect-square ${selectedOutfits.includes(userOutfits[i].fileName) ? 'ring-2 ring-indigo-500' : ''}`}><img src={`data:${userOutfits[i].mimeType};base64,${userOutfits[i].data}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); saveOutfits(userOutfits.filter((_, idx) => idx !== i)); }} className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full"><TrashIcon className="w-3 h-3"/></button></button> : <div key={i} className="flex flex-col gap-1 items-center justify-center p-1 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 aspect-square"><button onClick={handleAddOutfitFromDrive} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700"><GoogleDriveIcon className="w-3 h-3"/></button><input type="file" id={`outfit-upload-${i}`} onChange={e => e.target.files && handleAddOutfit(e.target.files[0])} className="hidden"/><label htmlFor={`outfit-upload-${i}`} className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 cursor-pointer"><ArrowUpTrayIcon className="w-3 h-3"/></label></div>)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                                </>
-                            )}
-                            
-                            {activeMode === 'pixshop' && (
-                                <div className="space-y-6">
-                                     <ImageUploader image={pixshopImage} onImageSet={handleSetImage(setPixshopImage)} title="Upload Image" />
-                                     
-                                     {/* Quick Edits */}
-                                     <div className="space-y-3">
-                                        <h4 className="font-semibold text-slate-600 dark:text-slate-300">Quick Edits</h4>
-                                        <div className="grid grid-cols-2 gap-2 text-sm">
-                                            <button onClick={() => handlePixshopEdit("blur the background, keeping the subject sharp")} disabled={!pixshopImage || isLoading} className="tool-btn"><CropIcon className="w-4 h-4"/> Blur BG</button>
-                                            <select onChange={(e) => handlePixshopEdit(e.target.value)} disabled={!pixshopImage || isLoading} className="tool-btn">
-                                                <option>Crop...</option>
-                                                <option value="crop to a 1:1 square aspect ratio">1:1 Square</option>
-                                                <option value="crop to a 16:9 widescreen aspect ratio">16:9 Widescreen</option>
-                                                <option value="crop to a 9:16 vertical aspect ratio">9:16 Vertical</option>
-                                            </select>
-                                        </div>
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {pixshopColorFilters.map(f => <button key={f.name} onClick={() => handlePixshopEdit(f.prompt)} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}
-                                        </div>
-                                     </div>
-
-                                     {/* Adjustments */}
-                                     <div className="space-y-3">
-                                         <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><AdjustmentsVerticalIcon className="w-5 h-5"/> Adjustments</h4>
-                                         <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg space-y-3">
-                                             <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
-                                             <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
-                                             <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
-                                             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
-                                             <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading} className="w-full p-2 text-sm bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
-                                         </div>
-                                     </div>
-
-                                     {/* Advanced */}
-                                     <div className="space-y-3">
-                                         <h4 className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2"><SparklesIcon className="w-5 h-5"/> Advanced Tools</h4>
-                                         <div className="grid grid-cols-2 gap-2 text-sm">
-                                            <button onClick={() => handlePixshopEdit("restore this damaged/faded old photo, fixing scratches, improving colors, and enhancing clarity")} disabled={!pixshopImage || isLoading} className="tool-btn">Restore Photo</button>
-                                            <button onClick={() => handlePixshopEdit("remove the background, leaving only the main subject on a transparent background")} disabled={!pixshopImage || isLoading} className="tool-btn">Remove BG</button>
-                                            <select onChange={(e) => handlePixshopEdit(e.target.value)} disabled={!pixshopImage || isLoading} className="tool-btn col-span-2">
-                                                 <option>Apply Artistic Style...</option>
-                                                 {pixshopArtStyles.map(s => <option key={s.name} value={s.prompt}>{s.name}</option>)}
-                                             </select>
-                                         </div>
-                                     </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
-                            )}
-
-                        </div>
-                        
-                        {/* Output Column */}
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold">{activeMode === 'pixshop' ? 'Result' : 'Output'}</h3>
-                                {activeMode === 'edit' && isAdvancedStyle && <p className="text-sm text-slate-500">Photo result edited</p>}
+                                {/* Output Column */}
+                                <div className="flex flex-col gap-4">
+                                    <h3 className="text-lg font-semibold">Output</h3>
+                                    <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
+                                        {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
+                                        {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
+                                        {!isLoading && !error && output.length > 0 && (
+                                            <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                {output.map((item, index) => (
+                                                    <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}>
+                                                        <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/>
+                                                        <button onClick={() => handleDownload(item)} className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {!isLoading && !error && output.length === 0 && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
-                                {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
-                                {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
-                                {!isLoading && !error && (output.length > 0 || pixshopOutput) && (
-                                    <div className={`grid gap-2 w-full ${output.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                        {(pixshopOutput ? [pixshopOutput] : output).map((item, index) => (
-                                            <div key={index} className={`relative group w-full ${getAspectRatioClass()}`}>
-                                                <img src={`data:${item.mimeType};base64,${item.data}`} alt="Generated media" className="rounded-lg object-cover w-full h-full"/>
+                            <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
+                                {activeMode === 'edit' && isAdvancedStyle ? (
+                                    <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Applying...' : 'Apply Advanced Styles'}</button>
+                                ) : (
+                                    <button onClick={activeMode === 'image' ? handleGenerate : activeMode === 'edit' ? handleEdit : handleSwap} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Generating...' : 'Generate'}</button>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                       <div className="flex flex-col h-full overflow-hidden">
+                           {/* Pixshop: Top Row for Images */}
+                           <div className="grid grid-cols-2 gap-4 flex-grow min-h-0">
+                               <div className="flex flex-col gap-2 min-h-0">
+                                   <h3 className="text-lg font-semibold text-center flex-shrink-0">Canvas</h3>
+                                   <div ref={pixshopCanvasRef} onMouseDown={handleCropPointerDown} onTouchStart={handleCropPointerDown} className={`relative w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center ${isCropping ? 'cursor-crosshair' : ''}`}>
+                                       {!pixshopImage ? <button onClick={() => document.getElementById('pixshop-uploader')?.click()} className="flex flex-col items-center gap-2 text-slate-500"><ArrowUpTrayIcon className="w-10 h-10"/></button> : <img ref={pixshopImageRef} src={`data:${pixshopImage.mimeType};base64,${pixshopImage.data}`} className="max-w-full max-h-full object-contain rounded-md" />}
+                                       <input type="file" id="pixshop-uploader" onChange={e => e.target.files && handleSetImage(setPixshopImage)(e.target.files[0])} className="hidden" accept="image/*"/>
+                                       {pixshopImage && <button onClick={() => { setPixshopImage(null); setPixshopOutput(null); setIsCropping(false); setCropRect(null); }} className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500"><TrashIcon className="w-4 h-4"/></button>}
+                                       {isCropping && cropRect && <div className="absolute border-2 border-dashed border-white bg-black/30 pointer-events-none" style={{ left: `${cropRect.x*100}%`, top: `${cropRect.y*100}%`, width: `${cropRect.width*100}%`, height: `${cropRect.height*100}%` }}></div>}
+                                   </div>
+                               </div>
+                               <div className="flex flex-col gap-2 min-h-0">
+                                   <h3 className="text-lg font-semibold text-center flex-shrink-0">Result</h3>
+                                   <div className="w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
+                                        {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
+                                        {!isLoading && error && <p className="text-center text-red-500 p-4">{error}</p>}
+                                        {!isLoading && !error && pixshopOutput && (
+                                            <div className="relative group w-full h-full">
+                                                <img src={`data:${pixshopOutput.mimeType};base64,${pixshopOutput.data}`} alt="Result" className="rounded-lg object-contain w-full h-full"/>
                                                 <div className="absolute top-2 right-2 flex flex-col gap-2">
-                                                    <button onClick={() => handleDownload(item)} className="p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button>
-                                                    {activeMode === 'pixshop' && <button onClick={() => { setPixshopImage(item); setPixshopOutput(null); }} className="p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100" title="Use as new input"><ArrowPathIcon className="w-5 h-5"/></button>}
+                                                    <button onClick={() => handleDownload(pixshopOutput)} className="p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100"><DownloadIcon className="w-5 h-5"/></button>
+                                                    <button onClick={() => { setPixshopImage(pixshopOutput); setPixshopOutput(null); }} className="p-2 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 focus:opacity-100" title="Use as new input"><ArrowPathIcon className="w-5 h-5"/></button>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {!isLoading && !error && output.length === 0 && !pixshopOutput && <p className="text-slate-500 dark:text-slate-400">Your results will appear here</p>}
-                            </div>
-
-                            {activeMode === 'edit' && isAdvancedStyle && (
-                                <div className="space-y-4 text-sm">
-                                    <div>
-                                        <h4 className="text-sm font-semibold mb-2">Expression</h4>
-                                        <div className="grid grid-cols-4 gap-2">{EXPRESSIONS.map(e => <button key={e.label} onClick={() => handleExpressionClick(e.prompt)} title={e.label} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex justify-center items-center ${selectedExpression === e.prompt ? 'ring-2 ring-indigo-500' : ''}`}><e.Icon className="w-5 h-5"/></button>)}</div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-semibold mb-2">Background</h4>
-                                        <input type="text" value={backgroundPrompt} onChange={e => setBackgroundPrompt(e.target.value)} placeholder="e.g., a futuristic city" className="input-style flex-grow"/>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                    </div>
-                    <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
-                        {activeMode === 'edit' && isAdvancedStyle ? (
-                             <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
-                                {isLoading ? 'Applying...' : 'Apply Advanced Styles'}
-                            </button>
-                        ) : activeMode === 'pixshop' ? (
-                            <div className="text-center text-xs text-slate-400">Upload an image and select a tool to begin.</div>
-                        ) : (
-                            <button onClick={activeMode === 'image' ? handleGenerate : activeMode === 'edit' ? handleEdit : handleSwap} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">
-                                {isLoading ? 'Generating...' : 'Generate'}
-                            </button>
-                        )}
-                    </div>
+                                        )}
+                                        {!isLoading && !error && !pixshopOutput && <p className="text-slate-500 dark:text-slate-400">Result will appear here</p>}
+                                   </div>
+                               </div>
+                           </div>
+                           {/* Pixshop: Bottom Row for Tools */}
+                           <div className="grid grid-cols-2 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+                               {/* Left Column: Creative Tools */}
+                               <div className="space-y-4">
+                                   <div className="space-y-2">
+                                        <h4 className="font-semibold text-sm">Creative Tools</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <button onClick={() => setIsCropping(c => !c)} disabled={!pixshopImage || isLoading} className={`tool-btn ${isCropping ? '!bg-indigo-500 text-white' : ''}`}><CropIcon className="w-4 h-4"/> Crop</button>
+                                            <button onClick={() => handlePixshopEdit("blur the background, keeping the subject sharp")} disabled={!pixshopImage || isLoading} className="tool-btn">Blur BG</button>
+                                            <button onClick={() => handlePixshopEdit("restore this damaged/faded old photo")} disabled={!pixshopImage || isLoading} className="tool-btn">Restore Photo</button>
+                                            <button onClick={() => handlePixshopEdit("remove the background")} disabled={!pixshopImage || isLoading} className="tool-btn">Remove BG</button>
+                                        </div>
+                                        {isCropping && <div className="grid grid-cols-2 gap-2 text-sm"><button onClick={handleApplyCrop} disabled={!cropRect || !cropRect.width || !cropRect.height} className="tool-btn bg-green-500 text-white hover:bg-green-600 disabled:opacity-50">Apply</button><button onClick={() => { setIsCropping(false); setCropRect(null); }} className="tool-btn bg-red-500 text-white hover:bg-red-600">Cancel</button></div>}
+                                   </div>
+                                    <div className="space-y-2">
+                                        <h4 className="font-semibold text-sm">AI Tools</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Edit', title: 'What would you like to change?', onConfirm: p => handlePixshopEdit(p) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EditIcon className="w-4 h-4"/> Magic Edit</button>
+                                            <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Eraser', title: 'What would you like to remove?', onConfirm: p => handlePixshopEdit(`remove the ${p} from the image`) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EraserIcon className="w-4 h-4"/> Magic Eraser</button>
+                                            <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Draw', title: 'What would you like to draw?', onConfirm: p => handlePixshopEdit(`draw ${p} on the image`) })} disabled={!pixshopImage || isLoading} className="tool-btn"><PaintBrushIcon className="w-4 h-4"/> Magic Draw</button>
+                                        </div>
+                                        <select onChange={(e) => handlePixshopEdit(e.target.value)} disabled={!pixshopImage || isLoading} className="tool-btn w-full text-sm">
+                                            <option value="">Apply Artistic Style...</option>
+                                            {pixshopArtStyles.map(s => <option key={s.name} value={s.prompt}>{s.name}</option>)}
+                                        </select>
+                                   </div>
+                               </div>
+                               {/* Right Column: Color & Adjustments */}
+                               <div className="space-y-4">
+                                   <div className="space-y-2">
+                                        <h4 className="font-semibold text-sm">Color Filters</h4>
+                                        <div className="grid grid-cols-4 gap-2">{pixshopColorFilters.map(f => <button key={f.name} onClick={() => handlePixshopEdit(f.prompt)} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}</div>
+                                   </div>
+                                   <div className="space-y-2">
+                                        <h4 className="font-semibold text-sm">Manual Adjustments</h4>
+                                        <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-lg space-y-2">
+                                            <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
+                                            <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
+                                            <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
+                                            <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
+                                            <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading || (pixshopAdjustments.vibrance === 0 && pixshopAdjustments.warmth === 0 && pixshopAdjustments.contrast === 0 && !pixshopAdjustments.isBW)} className="w-full p-2 text-xs bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
+                                        </div>
+                                   </div>
+                               </div>
+                           </div>
+                       </div>
+                    )}
                 </div>
             </div>
+            {toolPrompt?.show && (
+                <div className="absolute inset-0 bg-black/50 z-10 flex items-center justify-center" onClick={() => setToolPrompt(null)}>
+                    <div className="bg-white dark:bg-[#2d2d40] rounded-lg shadow-lg p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold mb-4">{toolPrompt.title}</h3>
+                        <form onSubmit={e => { e.preventDefault(); const input = (e.target as HTMLFormElement).elements.namedItem('promptInput') as HTMLInputElement; toolPrompt.onConfirm(input.value); setToolPrompt(null); }}>
+                            <input name="promptInput" type="text" className="input-style w-full" autoFocus />
+                            <div className="flex justify-end gap-2 mt-4">
+                                <button type="button" onClick={() => setToolPrompt(null)} className="px-4 py-2 rounded-md text-sm font-semibold bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button>
+                                <button type="submit" className="px-4 py-2 rounded-md text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700">Confirm</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
             <style>{`.input-style { color: inherit; background-color: transparent; border: 1px solid #4a5568; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .input-style:focus { outline: none; border-color: #6366f1; } .label-style { display: block; font-size: 0.875rem; font-weight: 500; } .tool-btn { padding: 0.5rem; background-color: #f1f5f9; color: #334155; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; } .tool-btn:hover:not(:disabled) { background-color: #e2e8f0; } .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; } .dark .tool-btn { background-color: #334155; color: #e2e8f0; } .dark .tool-btn:hover:not(:disabled) { background-color: #475569; }`}</style>
         </div>
     );
