@@ -29,7 +29,13 @@ const Slider: React.FC<{ label: string; value: number; min: number; max: number;
 );
 
 
-const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: File) => void; title: string; textSize?: string; objectFit?: 'cover' | 'contain' }> = ({ image, onImageSet, title, textSize = 'text-sm', objectFit = 'cover' }) => {
+const ImageUploader: React.FC<{ 
+  image: Attachment | null; 
+  onImageSet: (file: File) => void; 
+  title: string; 
+  textSize?: string; 
+  objectFit?: 'cover' | 'contain' 
+}> = ({ image, onImageSet, title, textSize = 'text-sm', objectFit = 'contain' }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -40,8 +46,17 @@ const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: Fil
     <div className="flex flex-col items-center w-full h-full">
         <h4 className={`font-semibold mb-2 text-slate-600 dark:text-slate-300 text-center ${textSize}`}>{title}</h4>
         <input type="file" ref={inputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/webp"/>
-        <button onClick={() => inputRef.current?.click()} className="w-full flex-grow min-h-0 bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 text-center overflow-hidden">
-            {image ? <img src={`data:${image.mimeType};base64,${image.data}`} alt="preview" className={`max-w-full max-h-full object-${objectFit} rounded-md`} /> : <PhotoIcon className="w-10 h-10" />}
+        <button 
+            onClick={() => inputRef.current?.click()} 
+            className="w-full flex-grow aspect-square bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 overflow-hidden"
+        >
+            {image 
+              ? <img 
+                  src={`data:${image.mimeType};base64,${image.data}`} 
+                  alt="preview" 
+                  className={`w-full h-full object-${objectFit} rounded-md`} 
+                /> 
+              : <PhotoIcon className="w-10 h-10" />}
         </button>
     </div>
   );
@@ -104,10 +119,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const [inputImageDimensions, setInputImageDimensions] = useState<{width: number, height: number} | null>(null);
-
     const [genSettings, setGenSettings] = useState<ImageGenerationSettings>({ model: 'imagen-4.0-generate-001', aspectRatio: '1:1', numImages: 1, quality: 'standard', style: 'vivid' });
     const [editSettings, setEditSettings] = useState<ImageEditingSettings>({ model: 'gemini-2.5-flash-image-preview' });
+    const [inputImageDimensions, setInputImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
     // Advanced Editing State
     const [isAdvancedStyle, setIsAdvancedStyle] = useState(false);
@@ -139,14 +153,55 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
     const lastPointRef = useRef<{x: number, y: number} | null>(null);
 
-    const getSquareOutputSettings = useCallback((): ImageEditingSettings => {
-        let outputSize = undefined;
+    const handleSetImage = (
+        setter: React.Dispatch<React.SetStateAction<Attachment | null>>,
+        options?: { captureDimensionsForEdit?: boolean }
+    ) => (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (!event.target?.result) {
+                setNotifications(p => ["File could not be read.", ...p.slice(0, 19)]);
+                return;
+            }
+            
+            const dataUrl = event.target.result as string;
+    
+            if (options?.captureDimensionsForEdit) {
+                const img = new Image();
+                img.onload = () => {
+                    setInputImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+                    const base64String = dataUrl.split(',')[1];
+                    setter({ data: base64String, mimeType: file.type, fileName: file.name });
+                };
+                img.onerror = () => {
+                    setNotifications(p => ["Could not read image dimensions.", ...p.slice(0, 19)]);
+                };
+                img.src = dataUrl;
+            } else {
+                // For other modes like faceSwap, just set the image
+                const base64String = dataUrl.split(',')[1];
+                setter({ data: base64String, mimeType: file.type, fileName: file.name });
+            }
+        };
+        reader.onerror = () => {
+            setNotifications(p => ["Failed to process image.", ...p.slice(0, 19)]);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const getOriginalOutputSettings = useCallback((): ImageEditingSettings => {
         if (inputImageDimensions) {
-            const maxDim = Math.max(inputImageDimensions.width, inputImageDimensions.height);
-            const finalDim = Math.min(maxDim, 1024);
-            outputSize = { width: finalDim, height: finalDim };
+            let { width, height } = inputImageDimensions;
+            // Cap the max dimension at 1024 while preserving aspect ratio
+            if (width > 1024 || height > 1024) {
+                const scale = 1024 / Math.max(width, height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+            return { ...editSettings, outputSize: { width, height } };
         }
-        return { ...editSettings, outputSize };
+        // If dimensions aren't available for some reason, don't specify outputSize
+        return { ...editSettings };
     }, [inputImageDimensions, editSettings]);
 
     useEffect(() => {
@@ -169,7 +224,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setPixshopImage(null); setPixshopOutput(null); setPixshopAdjustments({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
             setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
             setToolPrompt(null);
-            setInputImageDimensions(null);
         } else {
             document.body.style.overflow = 'auto';
         }
@@ -180,31 +234,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
       setIsAdvancedStyle(false); setPixshopImage(null); setPixshopOutput(null);
       setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
       setToolPrompt(null);
-      setInputImageDimensions(null);
     }, [activeMode]);
     
     const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
-
-    const handleSetImage = (
-        setter: React.Dispatch<React.SetStateAction<Attachment | null>>,
-        dimensionSetter?: React.Dispatch<React.SetStateAction<{width: number; height: number} | null>>
-    ) => (file: File) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            if (typeof reader.result !== 'string') return;
-            const base64String = reader.result.split(',')[1];
-            setter({ data: base64String, mimeType: file.type, fileName: file.name });
-
-            if (dimensionSetter) {
-                const img = new Image();
-                img.onload = () => {
-                    dimensionSetter({ width: img.naturalWidth, height: img.naturalHeight });
-                };
-                img.src = reader.result;
-            }
-        };
-        reader.readAsDataURL(file);
-    };
 
     const handleGenericApiCall = async (apiCall: () => Promise<Attachment[]>) => {
         setIsLoading(true);
@@ -239,7 +271,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!prompt) { setError("A prompt is required."); return; }
         if (!inputImage1) { setError("An image is required."); return; }
         handleGenericApiCall(async () => {
-            const finalEditSettings = getSquareOutputSettings();
+            const finalEditSettings = getOriginalOutputSettings();
             const { attachments } = await editImage(prompt, [inputImage1], finalEditSettings, userProfile);
             return attachments;
         });
@@ -268,7 +300,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const constructedPrompt = promptParts.join(' ');
         
         handleGenericApiCall(async () => {
-             const finalEditSettings = getSquareOutputSettings();
+             const finalEditSettings = getOriginalOutputSettings();
              const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], finalEditSettings, userProfile);
              setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
              setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
@@ -646,16 +678,16 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style text-slate-900 dark:text-slate-100"/>}
                                         {activeMode === 'edit' && (
                                             <div className="aspect-square w-full">
-                                                <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1, setInputImageDimensions)} title="" textSize="text-sm" objectFit="contain" />
+                                                <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1, { captureDimensionsForEdit: true })} title="" textSize="text-sm" objectFit="contain" />
                                             </div>
                                         )}
                                         {activeMode === 'faceSwap' && (
                                             <div className="w-full grid grid-cols-2 gap-4">
                                                 <div className="aspect-square">
-                                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" />
+                                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" objectFit="cover"/>
                                                 </div>
                                                 <div className="aspect-square">
-                                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" />
+                                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" objectFit="cover"/>
                                                 </div>
                                             </div>
                                         )}
