@@ -142,16 +142,11 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const getSquareOutputSettings = useCallback((): ImageEditingSettings => {
         let outputSize = undefined;
         if (inputImageDimensions) {
-            // Determine the largest dimension of the input image
             const maxDim = Math.max(inputImageDimensions.width, inputImageDimensions.height);
-            // The API might have limits, a cap of 1024x1024 is reasonable for editing.
             const finalDim = Math.min(maxDim, 1024);
             outputSize = { width: finalDim, height: finalDim };
         }
-        return {
-            ...editSettings,
-            outputSize,
-        };
+        return { ...editSettings, outputSize };
     }, [inputImageDimensions, editSettings]);
 
     useEffect(() => {
@@ -646,9 +641,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             <div className="flex-grow overflow-y-auto pr-2 -mr-2 min-h-0">
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4 items-start">
                                     {/* Input Column */}
-                                    {/* MODIFICATION START: Added min-h-0 to the column */}
                                     <div className="flex flex-col gap-4 min-h-0">
-                                    {/* MODIFICATION END */}
                                         <h3 className="text-lg font-semibold flex-shrink-0">{activeMode === 'edit' ? 'Image to Edit' : 'Input'}</h3>
                                         {activeMode === 'image' && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your prompt here..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style text-slate-900 dark:text-slate-100"/>}
                                         {activeMode === 'edit' && (
@@ -668,9 +661,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         )}
                                     </div>
                                     {/* Output Column */}
-                                    {/* MODIFICATION START: Added min-h-0 to the column */}
                                     <div className="flex flex-col gap-4 min-h-0">
-                                    {/* MODIFICATION END */}
                                         <h3 className="text-lg font-semibold flex-shrink-0">Output</h3>
                                         <div className="w-full aspect-square bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                             {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
