@@ -533,6 +533,13 @@ export const CropIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     </svg>
 );
 
+export const EraserIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487-7.84 7.84a.75.75 0 0 0 0 1.06l4.243 4.243a.75.75 0 0 0 1.06 0l7.84-7.84a.75.75 0 0 0 0-1.06l-4.243-4.243a.75.75 0 0 0-1.06 0Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.038 16.323 3.75 15.035a2.25 2.25 0 0 1 0-3.182L5.432 10.2a.75.75 0 0 0 1.06 0l2.829 2.828a.75.75 0 0 0 0 1.06l-1.617 1.617a2.25 2.25 0 0 1-3.182 0Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487 19.5 7.125" />
+    </svg>
+);
 
 
 // --- ALIASES for easier import ---
