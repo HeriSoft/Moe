@@ -88,10 +88,10 @@ interface ToolPromptState {
 }
 
 const effectOptions = [
-    { id: 'handle_sketch', label: 'Handle sketch drawing', promptPrefix: 'transform the image into a detailed hand-drawn sketch, focusing on lines and shading' },
-    { id: 'color_drawing', label: 'Color drawing', promptPrefix: 'transform the image into a vibrant color drawing with painterly strokes' },
-    { id: 'gravity_drawing', label: 'Gravity drawing', promptPrefix: 'reimagine the image with a surreal gravity-defying effect, where elements seem to float or be pulled in odd directions' },
-    { id: 'style_fonts', label: 'Style Fonts Effect', promptPrefix: 'add stylized text to the image. The user wants this text: ' }
+    { id: 'handle_sketch', label: 'Handle sketch drawing', promptPrefix: 'transform the image into a detailed hand-drawn sketch, focusing on lines and shading, and add the following element as part of the sketch:' },
+    { id: 'color_drawing', label: 'Color drawing', promptPrefix: 'transform the image into a vibrant color drawing with painterly strokes, and add the following element in the same style:' },
+    { id: 'gravity_drawing', label: 'Gravity drawing', promptPrefix: 'reimagine the image with a surreal gravity-defying effect, where elements seem to float or be pulled in odd directions, and incorporate the following element into the scene:' },
+    { id: 'style_fonts', label: 'Style Fonts Effect', promptPrefix: 'add stylized text to the image. The user wants this text and effect:' }
 ];
 
 
@@ -125,7 +125,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [pixshopMode, setPixshopMode] = useState<'idle' | 'crop' | 'draw'>('idle');
     const [cropStartPoint, setCropStartPoint] = useState<{x: number, y: number} | null>(null);
     const [cropRect, setCropRect] = useState<CropRect>(null);
-    const pixshopCanvasRef = useRef<HTMLDivElement>(null);
+    const pixshopContainerRef = useRef<HTMLDivElement>(null);
     const pixshopImageRef = useRef<HTMLImageElement>(null);
     const [toolPrompt, setToolPrompt] = useState<ToolPromptState | null>(null);
     const [selectedEffect, setSelectedEffect] = useState<string>('handle_sketch');
@@ -305,8 +305,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     };
 
     const handleCropPointerDown = (e: React.MouseEvent | React.TouchEvent) => {
-        if (pixshopMode !== 'crop' || !pixshopCanvasRef.current) return;
-        const rect = pixshopCanvasRef.current.getBoundingClientRect();
+        if (pixshopMode !== 'crop' || !pixshopContainerRef.current) return;
+        const rect = pixshopContainerRef.current.getBoundingClientRect();
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
         const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -316,9 +316,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     };
 
     const handleCropPointerMove = useCallback((e: MouseEvent | TouchEvent) => {
-        if (pixshopMode !== 'crop' || !cropStartPoint || !pixshopCanvasRef.current) return;
+        if (pixshopMode !== 'crop' || !cropStartPoint || !pixshopContainerRef.current) return;
         e.preventDefault();
-        const rect = pixshopCanvasRef.current.getBoundingClientRect();
+        const rect = pixshopContainerRef.current.getBoundingClientRect();
         const clientX = 'touches' in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
         const clientY = 'touches' in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
         const currentX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -351,7 +351,6 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         };
     }, [pixshopMode, cropStartPoint, handleCropPointerMove, handleCropPointerUp]);
     
-    // --- Hand Drawing Logic ---
     const clearDrawingCanvas = () => {
         const canvas = drawingCanvasRef.current;
         if (canvas) {
@@ -380,6 +379,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
     const handleDrawMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDrawing || pixshopMode !== 'draw') return;
+        e.preventDefault();
         const pos = getCanvasCoordinates(e);
         const canvas = drawingCanvasRef.current;
         if (pos && canvas && lastPointRef.current) {
@@ -398,27 +398,65 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         }
     };
     
-    const handleDrawEnd = () => setIsDrawing(false);
+    const handleDrawEnd = () => {
+        if(isDrawing) setIsDrawing(false);
+    };
 
     useEffect(() => {
         const canvas = drawingCanvasRef.current;
         const image = pixshopImageRef.current;
-        if (pixshopMode === 'draw' && canvas && image) {
+        const container = pixshopContainerRef.current;
+    
+        if (pixshopMode === 'draw' && canvas && image && container) {
             const setCanvasSize = () => {
-                canvas.width = image.clientWidth;
-                canvas.height = image.clientHeight;
+                if (image.naturalWidth === 0 || !image.complete) return;
+    
+                const { naturalWidth, naturalHeight } = image;
+                const { clientWidth: containerWidth, clientHeight: containerHeight } = container;
+    
+                const imageRatio = naturalWidth / naturalHeight;
+                const containerRatio = containerWidth / containerHeight;
+    
+                let renderedWidth, renderedHeight, offsetX, offsetY;
+    
+                if (imageRatio > containerRatio) {
+                    renderedWidth = containerWidth;
+                    renderedHeight = containerWidth / imageRatio;
+                    offsetX = 0;
+                    offsetY = (containerHeight - renderedHeight) / 2;
+                } else {
+                    renderedHeight = containerHeight;
+                    renderedWidth = containerHeight * imageRatio;
+                    offsetY = 0;
+                    offsetX = (containerWidth - renderedWidth) / 2;
+                }
+    
+                canvas.style.position = 'absolute';
+                canvas.style.left = `${offsetX}px`;
+                canvas.style.top = `${offsetY}px`;
+                canvas.style.width = `${renderedWidth}px`;
+                canvas.style.height = `${renderedHeight}px`;
+                canvas.width = renderedWidth;
+                canvas.height = renderedHeight;
             };
+    
             const resizeObserver = new ResizeObserver(setCanvasSize);
-            resizeObserver.observe(image);
-            setCanvasSize();
-            return () => resizeObserver.disconnect();
+            resizeObserver.observe(container);
+            
+            if (image.complete) setCanvasSize();
+            else image.onload = setCanvasSize;
+    
+            return () => {
+                resizeObserver.disconnect();
+                if (image) image.onload = null;
+            };
         }
     }, [pixshopMode, pixshopImage]);
 
     const handleApplyHandDrawing = (promptText: string) => {
         if (!drawingCanvasRef.current || !pixshopImage) return;
         const drawingDataUrl = drawingCanvasRef.current.toDataURL('image/png');
-        if (drawingDataUrl === 'data:,') { // Empty canvas
+        if (drawingDataUrl === 'data:,') {
             setNotifications(p => ["Please draw something on the image first.", ...p]);
             return;
         }
@@ -435,20 +473,19 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         setPixshopMode('idle');
     };
 
-    const handleBeautifulEffect = () => {
-        const selectedEffectData = effectOptions.find(e => e.id === selectedEffect);
-        if (!selectedEffectData) return;
-
-        if (selectedEffect === 'style_fonts') {
-            setToolPrompt({
-                show: true,
-                toolName: 'Style Fonts Effect',
-                title: 'Enter text and font style (e.g., "Hello World in a graffiti font")',
-                onConfirm: p => handlePixshopEdit(selectedEffectData.promptPrefix + p)
-            });
-        } else {
-            handlePixshopEdit(selectedEffectData.promptPrefix);
-        }
+    const handleBeautifulEffectClick = () => {
+        setToolPrompt({
+            show: true,
+            toolName: 'Beautiful Effect',
+            title: 'Add Creative Elements',
+            onConfirm: (promptText) => {
+                const selectedEffectData = effectOptions.find(e => e.id === selectedEffect);
+                if (selectedEffectData) {
+                    const finalPrompt = selectedEffectData.promptPrefix + " " + promptText;
+                    handlePixshopEdit(finalPrompt);
+                }
+            }
+        });
     };
 
 
@@ -691,10 +728,10 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                            <div className="grid grid-cols-2 gap-4 flex-grow min-h-0">
                                <div className="flex flex-col gap-2 min-h-0">
                                    <h3 className="text-lg font-semibold text-center flex-shrink-0">Canvas</h3>
-                                   <div ref={pixshopCanvasRef} onMouseDown={handleCropPointerDown} onTouchStart={handleCropPointerDown} className={`relative w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center ${pixshopMode === 'crop' ? 'cursor-crosshair' : ''}`}>
+                                   <div ref={pixshopContainerRef} onMouseDown={handleCropPointerDown} onTouchStart={handleCropPointerDown} className={`relative w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center ${pixshopMode === 'crop' ? 'cursor-crosshair' : ''}`}>
                                         <div className="relative w-full h-full flex items-center justify-center">
                                             {!pixshopImage ? <button onClick={() => document.getElementById('pixshop-uploader')?.click()} className="flex flex-col items-center gap-2 text-slate-500"><ArrowUpTrayIcon className="w-10 h-10"/></button> : <img ref={pixshopImageRef} src={`data:${pixshopImage.mimeType};base64,${pixshopImage.data}`} className="max-w-full max-h-full object-contain" />}
-                                            {pixshopMode === 'draw' && pixshopImage && <canvas ref={drawingCanvasRef} className="absolute top-0 left-0 cursor-crosshair" onMouseDown={handleDrawStart} onMouseMove={handleDrawMove} onMouseUp={handleDrawEnd} onMouseLeave={handleDrawEnd} onTouchStart={handleDrawStart} onTouchMove={handleDrawMove} onTouchEnd={handleDrawEnd} />}
+                                            {pixshopMode === 'draw' && pixshopImage && <canvas ref={drawingCanvasRef} className="absolute cursor-crosshair" onMouseDown={handleDrawStart} onMouseMove={handleDrawMove} onMouseUp={handleDrawEnd} onMouseLeave={handleDrawEnd} onTouchStart={handleDrawStart} onTouchMove={handleDrawMove} onTouchEnd={handleDrawEnd} />}
                                         </div>
                                        <input type="file" id="pixshop-uploader" onChange={e => e.target.files && handleSetImage(setPixshopImage)(e.target.files[0])} className="hidden" accept="image/*"/>
                                        {pixshopImage && <button onClick={() => { setPixshopImage(null); setPixshopOutput(null); setPixshopMode('idle'); setCropRect(null); }} className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500"><TrashIcon className="w-4 h-4"/></button>}
@@ -738,11 +775,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         <div className="grid grid-cols-2 gap-2 text-sm">
                                             <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Edit', title: 'What would you like to change?', onConfirm: p => handlePixshopEdit(p) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EditIcon className="w-4 h-4"/> Magic Edit</button>
                                             <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Eraser', title: 'What would you like to remove?', onConfirm: p => handlePixshopEdit(`remove the ${p} from the image`) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EraserIcon className="w-4 h-4"/> Magic Eraser</button>
-                                            <button onClick={handleBeautifulEffect} disabled={!pixshopImage || isLoading} className="tool-btn col-span-2"><SparklesIcon className="w-4 h-4"/> Beautiful Effect</button>
+                                            <button onClick={handleBeautifulEffectClick} disabled={!pixshopImage || isLoading} className="tool-btn"><SparklesIcon className="w-4 h-4"/> Beautiful Effect</button>
                                             <button onClick={() => setPixshopMode(m => m === 'draw' ? 'idle' : 'draw')} disabled={!pixshopImage || isLoading} className={`tool-btn ${pixshopMode === 'draw' ? '!bg-indigo-500 text-white' : ''}`}><PaintBrushIcon className="w-4 h-4"/> Hand Drawing</button>
-                                        </div>
-                                        <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-1 text-xs">
-                                            {effectOptions.map(opt => (<label key={opt.id} className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700"><input type="radio" name="beautiful-effect" value={opt.id} checked={selectedEffect === opt.id} onChange={e => setSelectedEffect(e.target.value)} />{opt.label}</label>))}
                                         </div>
                                         {pixshopMode === 'draw' && (
                                             <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-2">
@@ -781,9 +815,24 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             </div>
             {toolPrompt?.show && (
                 <div className="absolute inset-0 bg-black/50 z-10 flex items-center justify-center" onClick={() => setToolPrompt(null)}>
-                    <div className="bg-white dark:bg-[#2d2d40] rounded-lg shadow-lg p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-[#2d2d40] rounded-lg shadow-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-bold mb-4">{toolPrompt.title}</h3>
-                        <form onSubmit={e => { e.preventDefault(); const input = (e.target as HTMLFormElement).elements.namedItem('promptInput') as HTMLInputElement; toolPrompt.onConfirm(input.value); setToolPrompt(null); }}>
+                         {toolPrompt.toolName === 'Beautiful Effect' && (
+                            <div className="mb-4 space-y-1 text-sm text-slate-700 dark:text-slate-200">
+                                {effectOptions.map(opt => (
+                                    <label key={opt.id} className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700">
+                                        <input type="radio" name="beautiful-effect" value={opt.id} checked={selectedEffect === opt.id} onChange={e => setSelectedEffect(e.target.value)} />
+                                        {opt.label}
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                        <form onSubmit={e => {
+                            e.preventDefault();
+                            const input = (e.target as HTMLFormElement).elements.namedItem('promptInput') as HTMLInputElement;
+                            toolPrompt.onConfirm(input.value);
+                            setToolPrompt(null);
+                        }}>
                             <input name="promptInput" type="text" className="input-style w-full text-slate-900 dark:text-slate-100" autoFocus />
                             <div className="flex justify-end gap-2 mt-4">
                                 <button type="button" onClick={() => setToolPrompt(null)} className="px-4 py-2 rounded-md text-sm font-semibold bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 dark:hover:bg-slate-500">Cancel</button>
