@@ -740,7 +740,7 @@ export default async function handler(req, res) {
             case 'swapFace': {
                 await logAction(userEmail, 'played Swapface');
                 const { targetImage, sourceImage } = payload;
-                const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
+                const GRADIO_PUBLIC_URL = "https://65979c9594c34759e3.gradio.live";
                 
                 const uploadFileAndGetRef = async (image) => {
                     const buffer = Buffer.from(image.data, 'base64');
