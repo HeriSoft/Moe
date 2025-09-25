@@ -212,17 +212,15 @@ export async function generateImage(prompt: string, settings: any, user: UserPro
     }
 }
 
-// =========================================================================
-// START: MODIFIED FUNCTION
-// =========================================================================
 // New function for image editing
 export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
     
     // Create a base config object
     const config: any = {};
 
-    // Check if the outputSize property exists in settings and add it to the config
-    if (settings.outputSize && settings.outputSize.width && settings.outputSize.height) {
+    // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images (e.g. when applying outfits).
+    // The Gemini API expects an `output` object within the `config`.
+    if (settings && settings.outputSize && settings.outputSize.width && settings.outputSize.height) {
         config.output = {
             width: settings.outputSize.width,
             height: settings.outputSize.height,
@@ -248,9 +246,6 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
     }
     return await response.json();
 }
-// =========================================================================
-// END: MODIFIED FUNCTION
-// =========================================================================
 
 
 // New function for translating input text
