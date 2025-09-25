@@ -751,9 +751,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         </div>
                     ) : (
                        <div className="flex flex-col h-full overflow-hidden">
-                           {/* Pixshop: Images Area */}
-                           <div className="flex flex-col sm:flex-row gap-4 flex-grow min-h-0">
-                               <div className="flex flex-col gap-2 min-h-0 sm:w-1/2">
+                           {/* Pixshop: Top Row for Images */}
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-grow min-h-0">
+                               <div className="flex flex-col gap-2 min-h-0">
                                    <h3 className="text-lg font-semibold text-center flex-shrink-0">Canvas</h3>
                                    <div ref={pixshopContainerRef} onMouseDown={handleCropPointerDown} onTouchStart={handleCropPointerDown} className={`relative w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center ${pixshopMode === 'crop' ? 'cursor-crosshair' : ''}`}>
                                         <div className="relative w-full h-full flex items-center justify-center">
@@ -765,7 +765,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                        {pixshopMode === 'crop' && cropRect && <div className="absolute border-2 border-dashed border-white bg-black/30 pointer-events-none" style={{ left: `${cropRect.x*100}%`, top: `${cropRect.y*100}%`, width: `${cropRect.width*100}%`, height: `${cropRect.height*100}%` }}></div>}
                                    </div>
                                </div>
-                               <div className="flex flex-col gap-2 min-h-0 sm:w-1/2">
+                               <div className="flex flex-col gap-2 min-h-0">
                                    <h3 className="text-lg font-semibold text-center flex-shrink-0">Result</h3>
                                    <div className="w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center p-2">
                                         {isLoading && <ArrowPathIcon className="w-10 h-10 text-slate-400 animate-spin" />}
@@ -783,9 +783,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                    </div>
                                </div>
                            </div>
-                           {/* Pixshop: Tools Area */}
-                           <div className="flex flex-col sm:flex-row gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
-                               <div className="space-y-4 sm:w-1/2">
+                           <div className="flex flex-col sm:grid sm:grid-cols-2 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+                               <div className="space-y-4">
                                    <div className="space-y-2">
                                         <h4 className="font-semibold text-sm">Creative Tools</h4>
                                         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -817,7 +816,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         </select>
                                    </div>
                                </div>
-                               <div className="space-y-4 sm:w-1/2">
+                               <div className="space-y-4">
                                    <div className="space-y-2">
                                         <h4 className="font-semibold text-sm">Color Filters</h4>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{pixshopColorFilters.map(f => <button key={f.name} onClick={() => { handlePixshopEdit(f.prompt); }} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}</div>
