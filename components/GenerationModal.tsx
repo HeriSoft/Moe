@@ -39,7 +39,7 @@ const ImageUploader: React.FC<{ image: Attachment | null; onImageSet: (file: Fil
     <div className="flex flex-col items-center w-full h-full">
         <h4 className={`font-semibold mb-2 text-slate-600 dark:text-slate-300 text-center ${textSize}`}>{title}</h4>
         <input type="file" ref={inputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/webp"/>
-        <button onClick={() => inputRef.current?.click()} className="w-full h-full bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 text-center overflow-hidden">
+        <button onClick={() => inputRef.current?.click()} className="w-full flex-grow min-h-0 bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-500 transition-colors p-2 text-center overflow-hidden">
             {image ? <img src={`data:${image.mimeType};base64,${image.data}`} alt="preview" className={`max-w-full max-h-full object-${objectFit} rounded-md`} /> : <PhotoIcon className="w-10 h-10" />}
         </button>
     </div>
@@ -463,7 +463,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const drawingBase64 = drawingDataUrl.split(',')[1];
         const drawingAttachment: Attachment = { data: drawingBase64, mimeType: 'image/png', fileName: 'drawing_mask.png' };
         
-        const combinedPrompt = `Analyze the primary image and the provided mask image. The user wants to add a specific object into the masked area (the white part of the second image). The object to add is: "${promptText}". It is crucial that you render this exact object. Do not substitute it with a different type of object. Integrate the new object seamlessly into the original image, respecting lighting, shadows, and perspective.`;
+        const combinedPrompt = `The user has provided a primary image and a second image, which is a hand-drawn mask. The drawing on the mask indicates the precise location, shape, and orientation where a new object should be integrated. The user wants to transform the drawn area into: "${promptText}". You MUST replace the drawn pixels (indicated by the mask) with a photorealistic rendering of the object described in the prompt. The new object must seamlessly blend into the original image, adopting its lighting, shadows, perspective, and overall style. Do not alter any other part of the image. Do not generate a new subject; modify the existing one according to the mask and prompt.`;
 
         handleGenericApiCall(async () => {
             const { attachments } = await editImage(combinedPrompt, [pixshopImage, drawingAttachment], editSettings, userProfile);
@@ -668,9 +668,13 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                             </div>
                                         )}
                                         {activeMode === 'faceSwap' && (
-                                            <div className="aspect-square w-full grid grid-cols-2 gap-4">
-                                                <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" />
-                                                <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" />
+                                            <div className="w-full grid grid-cols-2 gap-4">
+                                                <div className="aspect-square">
+                                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" />
+                                                </div>
+                                                <div className="aspect-square">
+                                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" />
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -853,4 +857,4 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             <style>{`.input-style { color: inherit; background-color: transparent; border: 1px solid #4a5568; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .input-style:focus { outline: none; border-color: #6366f1; } .label-style { display: block; font-size: 0.875rem; font-weight: 500; } .tool-btn { padding: 0.5rem; background-color: #f1f5f9; color: #334155; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.5rem; } .tool-btn:hover:not(:disabled) { background-color: #e2e8f0; } .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; } .dark .tool-btn { background-color: #334155; color: #e2e8f0; } .dark .tool-btn:hover:not(:disabled) { background-color: #475569; }`}</style>
         </div>
     );
-};
+};```
