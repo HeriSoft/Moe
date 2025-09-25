@@ -297,7 +297,10 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         }
         if (backgroundPrompt) promptParts.push(`Change the background to: ${backgroundPrompt}.`);
         if (promptParts.length === 0) { setError("Please select at least one style to apply."); return; }
-        const constructedPrompt = promptParts.join(' ');
+        
+        let constructedPrompt = promptParts.join(' ');
+        // Add the negative prompt as requested by the user to prevent cropping.
+        constructedPrompt += " Important: Do not crop the image, do not cut off feet, do not cut the image. (Quan trọng: Không được crop ảnh, mất chân, cắt ảnh).";
         
         handleGenericApiCall(async () => {
              const finalEditSettings = getOriginalOutputSettings();
