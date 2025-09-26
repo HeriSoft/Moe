@@ -3,7 +3,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 // --- Constants ---
 const NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const OCTAVE_RANGE = [3, 4, 5];
-const SOUND_BASE_URL = 'https://cdn.jsdelivr.net/gh/ryo-ma/github-profile-trophy@master/src/sound/piano/';
+// FIX: Switched to a more reliable and complete soundfont from gleitz/midi-js-soundfonts
+const SOUND_BASE_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_grand_piano-mp3/';
+
+// FIX: Map for converting note names (e.g., Db) to filename-compatible names (e.g., Cs for C-sharp)
+const NOTE_TO_FILENAME_MAP: { [note: string]: string } = {
+    'C': 'C', 'Db': 'Cs', 'D': 'D', 'Eb': 'Ds', 'E': 'E',
+    'F': 'F', 'Gb': 'Fs', 'G': 'G', 'Ab': 'Gs', 'A': 'A',
+    'Bb': 'As', 'B': 'B'
+};
 
 const PIANO_KEYS = OCTAVE_RANGE.flatMap(octave =>
   NOTES.map(note => ({
@@ -12,7 +20,6 @@ const PIANO_KEYS = OCTAVE_RANGE.flatMap(octave =>
   }))
 );
 
-// Maps keyboard keys to notes within an octave, which will be adjusted by the octave state.
 const KEY_TO_NOTE_MAP: { [key: string]: { note: string; octaveOffset: number } } = {
   // Bottom row - Base Octave
   'z': { note: 'C', octaveOffset: 0 }, 's': { note: 'Db', octaveOffset: 0 },
@@ -35,7 +42,9 @@ const generateNoteFiles = () => {
     [...OCTAVE_RANGE, 6].forEach(octave => { // Preload up to C6
         NOTES.forEach(note => {
             const noteName = `${note}${octave}`;
-            files[noteName] = `${SOUND_BASE_URL}${noteName}.mp3`;
+            const fileNote = NOTE_TO_FILENAME_MAP[note];
+            const fileName = `${fileNote}${octave}.mp3`;
+            files[noteName] = `${SOUND_BASE_URL}${fileName}`;
         });
     });
     return files;
@@ -161,20 +170,6 @@ const Piano: React.FC = () => {
     };
   }, [handleKeyboardEvent]);
   
-  const getKeyboardKeyForNote = useCallback((noteName: string): string | null => {
-    const noteMatch = noteName.match(/([A-Gb]+)(\d)/);
-    if (!noteMatch) return null;
-    const [, note, noteOctaveStr] = noteMatch;
-    const noteOctave = parseInt(noteOctaveStr, 10);
-
-    for (const [key, keyInfo] of Object.entries(KEY_TO_NOTE_MAP)) {
-        if (keyInfo.note === note && (octave + keyInfo.octaveOffset) === noteOctave) {
-            return key.toUpperCase();
-        }
-    }
-    return null;
-  }, [octave]);
-  
   return (
     <div className="w-full">
       <div className="flex items-center justify-between p-2 sm:p-4 bg-gray-900 rounded-t-lg text-white">
@@ -207,16 +202,14 @@ const Piano: React.FC = () => {
               onTouchEnd={() => handleInteractionEnd(keyInfo.note)}
               className={`key white-key relative flex flex-col justify-end items-center ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
             >
-                <span className="key-label text-gray-500 font-semibold text-xs sm:text-base mb-2">
-                    {getKeyboardKeyForNote(keyInfo.note)}
-                </span>
+                {/* FIX: Removed keyboard shortcut labels per user request */}
             </div>
           ))}
           {PIANO_KEYS.map((keyInfo, index) => {
             if (keyInfo.type === 'black') {
               const precedingWhiteKeys = PIANO_KEYS.slice(0, index).filter(k => k.type === 'white').length;
               const whiteKeyWidthPercent = 100 / whiteKeyCount;
-              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.55;
+              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.58; // FIX: Adjusted width for better aesthetics
               const leftPosition = `${precedingWhiteKeys * whiteKeyWidthPercent - blackKeyWidthPercent / 2}%`;
               
               return (
@@ -241,33 +234,44 @@ const Piano: React.FC = () => {
             </div>
         )}
       </div>
+      {/* FIX: Overhauled CSS for a more realistic and visually correct piano appearance */}
       <style>{`
         .key {
-          border: 1px solid #4a5568;
           cursor: pointer;
-          transition: background-color 0.1s ease;
+          transition: all 0.07s ease;
+          -webkit-tap-highlight-color: transparent; /* Prevent flash on mobile taps */
         }
         .white-key {
           flex-grow: 1;
-          background: linear-gradient(to bottom, #fff, #e0e0e0);
-          border-top: none;
+          background-color: #f8f8f8;
+          border-left: 1px solid #ccc;
+          border-bottom: 1px solid #ccc;
+          border-right: 1px solid #ccc;
           border-radius: 0 0 5px 5px;
+          box-shadow: inset 0 1px 0 white, inset 0 -1px 0 #bbb, 0 5px 3px -3px rgba(0,0,0,0.3);
+        }
+        .white-key:first-child {
+            border-left: 1px solid #ccc;
         }
         .white-key.key-active {
-          background: linear-gradient(to bottom, #e0e0e0, #d0d0d0);
-          box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+          background-color: #e0e0e0;
+          transform: translateY(1px);
+          box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
         }
         .black-key {
           position: absolute;
           height: 60%;
-          background: linear-gradient(to bottom, #222, #000);
+          background-color: #333;
+          background: linear-gradient(to right, #222, #444);
           z-index: 10;
           border-radius: 0 0 4px 4px;
-          box-shadow: 0 2px 3px rgba(0,0,0,0.4);
+          box-shadow: -1px 0 2px rgba(255,255,255,0.2) inset, 0 3px 5px rgba(0,0,0,0.5);
+          border: 1px solid #000;
         }
         .black-key.key-active {
-          background: linear-gradient(to bottom, #000, #222);
-          box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
+          background: #222;
+          transform: translateY(1px);
+          box-shadow: inset 0 2px 3px rgba(0,0,0,0.4);
         }
         .control-btn {
             background-color: #4a5568;
@@ -290,9 +294,6 @@ const Piano: React.FC = () => {
         .sustain-toggle.active {
             background-color: #a0aec0;
             border-color: #fff;
-        }
-        .key-label {
-            pointer-events: none;
         }
       `}</style>
     </div>
