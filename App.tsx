@@ -16,6 +16,7 @@ import { FilesLibraryModal } from './components/FilesLibraryModal';
 import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal'; 
 import { MusicBoxModal } from './components/MusicBoxModal'; 
 import { AdminMusicModal } from './components/AdminMusicModal'; 
+import { PianoModal } from './components/PianoModal';
 import {
   streamModelResponse,
   addExp,
@@ -123,6 +124,9 @@ const App: React.FC = () => {
   
   // --- New Unified Generation Modal State ---
   const [isGenerationModalOpen, setIsGenerationModalOpen] = useState(false);
+
+  // --- New Piano Modal State ---
+  const [isPianoModalOpen, setIsPianoModalOpen] = useState(false);
 
   // --- New Welcome Modal State ---
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(() => {
@@ -1039,6 +1043,7 @@ const App: React.FC = () => {
           onOpenFilesLibrary={() => setIsFilesLibraryOpen(true)}
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
+          onOpenPianoModal={() => setIsPianoModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
           musicBoxState={musicBoxState}
@@ -1161,6 +1166,7 @@ const App: React.FC = () => {
         activeGenre={musicActiveGenre}
         setActiveGenre={setMusicActiveGenre}
         searchTerm={musicSearchTerm}
+// FIX: The state setter for the music search term is `setMusicSearchTerm`, not `setSearchTerm`.
         setSearchTerm={setMusicSearchTerm}
       />
       <AdminMusicModal
@@ -1169,6 +1175,10 @@ const App: React.FC = () => {
         userProfile={userProfile}
         setNotifications={setNotifications}
         onDataChange={fetchSongs}
+      />
+      <PianoModal 
+        isOpen={isPianoModalOpen}
+        onClose={() => setIsPianoModalOpen(false)}
       />
     </div>
   );
