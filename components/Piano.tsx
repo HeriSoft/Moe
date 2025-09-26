@@ -161,6 +161,20 @@ const Piano: React.FC = () => {
     };
   }, [handleKeyboardEvent]);
   
+  const getKeyboardKeyForNote = useCallback((noteName: string): string | null => {
+    const noteMatch = noteName.match(/([A-Gb]+)(\d)/);
+    if (!noteMatch) return null;
+    const [, note, noteOctaveStr] = noteMatch;
+    const noteOctave = parseInt(noteOctaveStr, 10);
+
+    for (const [key, keyInfo] of Object.entries(KEY_TO_NOTE_MAP)) {
+        if (keyInfo.note === note && (octave + keyInfo.octaveOffset) === noteOctave) {
+            return key.toUpperCase();
+        }
+    }
+    return null;
+  }, [octave]);
+  
   return (
     <div className="w-full">
       <div className="flex items-center justify-between p-2 sm:p-4 bg-gray-900 rounded-t-lg text-white">
@@ -189,10 +203,14 @@ const Piano: React.FC = () => {
               onMouseDown={() => handleInteractionStart(keyInfo.note)}
               onMouseUp={() => handleInteractionEnd(keyInfo.note)}
               onMouseLeave={() => activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note)}
-              onTouchStart={(e) => { e.preventDefault(); handleInteractionStart(keyInfo.note); }}
+              onTouchStart={() => handleInteractionStart(keyInfo.note)}
               onTouchEnd={() => handleInteractionEnd(keyInfo.note)}
-              className={`key white-key ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
-            />
+              className={`key white-key relative flex flex-col justify-end items-center ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
+            >
+                <span className="key-label text-gray-500 font-semibold text-xs sm:text-base mb-2">
+                    {getKeyboardKeyForNote(keyInfo.note)}
+                </span>
+            </div>
           ))}
           {PIANO_KEYS.map((keyInfo, index) => {
             if (keyInfo.type === 'black') {
@@ -207,7 +225,7 @@ const Piano: React.FC = () => {
                   onMouseDown={(e) => { e.stopPropagation(); handleInteractionStart(keyInfo.note); }}
                   onMouseUp={(e) => { e.stopPropagation(); handleInteractionEnd(keyInfo.note); }}
                   onMouseLeave={(e) => { e.stopPropagation(); activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note); }}
-                  onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); handleInteractionStart(keyInfo.note); }}
+                  onTouchStart={(e) => { e.stopPropagation(); handleInteractionStart(keyInfo.note); }}
                   onTouchEnd={(e) => { e.stopPropagation(); handleInteractionEnd(keyInfo.note); }}
                   className={`key black-key ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
                   style={{ left: leftPosition, width: `${blackKeyWidthPercent}%` }}
@@ -272,6 +290,9 @@ const Piano: React.FC = () => {
         .sustain-toggle.active {
             background-color: #a0aec0;
             border-color: #fff;
+        }
+        .key-label {
+            pointer-events: none;
         }
       `}</style>
     </div>
