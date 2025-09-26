@@ -1,160 +1,277 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// Using publicly available sound files to avoid needing local assets.
+// --- Constants ---
+const NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+const OCTAVE_RANGE = [3, 4, 5];
 const SOUND_BASE_URL = 'https://cdn.jsdelivr.net/gh/ryo-ma/github-profile-trophy@master/src/sound/piano/';
 
-const KEYS = [
-  { key: 'a', note: 'C4', type: 'white', soundFile: `${SOUND_BASE_URL}C4.mp3` },
-  { key: 'w', note: 'Db4', type: 'black', soundFile: `${SOUND_BASE_URL}Db4.mp3` },
-  { key: 's', note: 'D4', type: 'white', soundFile: `${SOUND_BASE_URL}D4.mp3` },
-  { key: 'e', note: 'Eb4', type: 'black', soundFile: `${SOUND_BASE_URL}Eb4.mp3` },
-  { key: 'd', note: 'E4', type: 'white', soundFile: `${SOUND_BASE_URL}E4.mp3` },
-  { key: 'f', note: 'F4', type: 'white', soundFile: `${SOUND_BASE_URL}F4.mp3` },
-  { key: 't', note: 'Gb4', type: 'black', soundFile: `${SOUND_BASE_URL}Gb4.mp3` },
-  { key: 'g', note: 'G4', type: 'white', soundFile: `${SOUND_BASE_URL}G4.mp3` },
-  { key: 'y', note: 'Ab4', type: 'black', soundFile: `${SOUND_BASE_URL}Ab4.mp3` },
-  { key: 'h', note: 'A4', type: 'white', soundFile: `${SOUND_BASE_URL}A4.mp3` },
-  { key: 'u', note: 'Bb4', type: 'black', soundFile: `${SOUND_BASE_URL}Bb4.mp3` },
-  { key: 'j', note: 'B4', type: 'white', soundFile: `${SOUND_BASE_URL}B4.mp3` },
-  { key: 'k', note: 'C5', type: 'white', soundFile: `${SOUND_BASE_URL}C5.mp3` },
-];
+const PIANO_KEYS = OCTAVE_RANGE.flatMap(octave =>
+  NOTES.map(note => ({
+    note: `${note}${octave}`,
+    type: note.includes('b') ? 'black' : 'white',
+  }))
+);
 
-const Piano: React.FC = () => {
-  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
-  const audioObjects = useRef<Map<string, HTMLAudioElement>>(new Map());
+// Maps keyboard keys to notes within an octave, which will be adjusted by the octave state.
+const KEY_TO_NOTE_MAP: { [key: string]: { note: string; octaveOffset: number } } = {
+  // Bottom row - Base Octave
+  'z': { note: 'C', octaveOffset: 0 }, 's': { note: 'Db', octaveOffset: 0 },
+  'x': { note: 'D', octaveOffset: 0 }, 'd': { note: 'Eb', octaveOffset: 0 },
+  'c': { note: 'E', octaveOffset: 0 }, 'v': { note: 'F', octaveOffset: 0 },
+  'g': { note: 'Gb', octaveOffset: 0 }, 'b': { note: 'G', octaveOffset: 0 },
+  'h': { note: 'Ab', octaveOffset: 0 }, 'n': { note: 'A', octaveOffset: 0 },
+  'j': { note: 'Bb', octaveOffset: 0 }, 'm': { note: 'B', octaveOffset: 0 },
+  // Top row - Next Octave
+  'q': { note: 'C', octaveOffset: 1 }, '2': { note: 'Db', octaveOffset: 1 },
+  'w': { note: 'D', octaveOffset: 1 }, '3': { note: 'Eb', octaveOffset: 1 },
+  'e': { note: 'E', octaveOffset: 1 }, 'r': { note: 'F', octaveOffset: 1 },
+  '5': { note: 'Gb', octaveOffset: 1 }, 't': { note: 'G', octaveOffset: 1 },
+  '6': { note: 'Ab', octaveOffset: 1 }, 'y': { note: 'A', octaveOffset: 1 },
+  '7': { note: 'Bb', octaveOffset: 1 }, 'u': { note: 'B', octaveOffset: 1 },
+};
 
-  // Preload audio files
-  useEffect(() => {
-    KEYS.forEach(keyInfo => {
-      const audio = new Audio(keyInfo.soundFile);
-      audio.preload = 'auto';
-      audioObjects.current.set(keyInfo.note, audio);
+const generateNoteFiles = () => {
+    const files: { [note: string]: string } = {};
+    [...OCTAVE_RANGE, 6].forEach(octave => { // Preload up to C6
+        NOTES.forEach(note => {
+            const noteName = `${note}${octave}`;
+            files[noteName] = `${SOUND_BASE_URL}${noteName}.mp3`;
+        });
     });
-  }, []);
+    return files;
+};
+const allNoteFiles = generateNoteFiles();
 
-  const playNote = useCallback((note: string) => {
-    const audio = audioObjects.current.get(note);
-    if (audio) {
-      audio.currentTime = 0; // Rewind to the start
-      audio.play().catch(e => console.error("Audio playback error:", e));
-    }
-  }, []);
+// --- Sound Engine Hook using Web Audio API ---
+const usePianoSound = () => {
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+    const activeSourcesRef = useRef<Map<string, { source: AudioBufferSourceNode, gainNode: GainNode }>>(new Map());
+    const [isLoaded, setIsLoaded] = useState(false);
 
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.repeat) return;
-    const keyInfo = KEYS.find(k => k.key === event.key.toLowerCase());
-    if (keyInfo) {
-      playNote(keyInfo.note);
-      setActiveKeys(prev => new Set(prev).add(keyInfo.note));
-    }
-  }, [playNote]);
+    useEffect(() => {
+        const initAudio = async () => {
+            try {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+                
+                const loadPromises = Object.entries(allNoteFiles).map(async ([note, fileUrl]) => {
+                    try {
+                        const response = await fetch(fileUrl);
+                        if (!response.ok) return;
+                        const arrayBuffer = await response.arrayBuffer();
+                        const audioBuffer = await audioContextRef.current?.decodeAudioData(arrayBuffer);
+                        if (audioBuffer) {
+                            audioBuffersRef.current.set(note, audioBuffer);
+                        }
+                    } catch (e) { /* Silently fail for missing notes */ }
+                });
+                await Promise.all(loadPromises);
+                setIsLoaded(true);
+            } catch (e) {
+                console.error("Failed to initialize AudioContext", e);
+            }
+        };
+        initAudio();
+        return () => { audioContextRef.current?.close().catch(console.error); };
+    }, []);
 
-  const handleKeyUp = useCallback((event: KeyboardEvent) => {
-    const keyInfo = KEYS.find(k => k.key === event.key.toLowerCase());
-    if (keyInfo) {
-      setActiveKeys(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(keyInfo.note);
-        return newSet;
-      });
-    }
-  }, []);
-  
-  const handleMouseDown = useCallback((note: string) => {
+    const playNote = useCallback((note: string) => {
+        const audioContext = audioContextRef.current;
+        const audioBuffer = audioBuffersRef.current.get(note);
+        if (!audioContext || !audioBuffer) return;
+
+        if (audioContext.state === 'suspended') { audioContext.resume(); }
+
+        const gainNode = audioContext.createGain();
+        gainNode.connect(audioContext.destination);
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(gainNode);
+        source.start(0);
+
+        activeSourcesRef.current.set(note, { source, gainNode });
+    }, []);
+    
+    const stopNote = useCallback((note: string, fadeOutDuration = 0.05) => {
+        const activeSource = activeSourcesRef.current.get(note);
+        const audioContext = audioContextRef.current;
+
+        if (audioContext && activeSource) {
+            activeSource.gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + fadeOutDuration);
+            activeSource.source.stop(audioContext.currentTime + fadeOutDuration);
+            activeSourcesRef.current.delete(note);
+        }
+    }, []);
+
+    return { playNote, stopNote, isLoaded };
+};
+
+// --- Piano Component ---
+const Piano: React.FC = () => {
+  const { playNote, stopNote, isLoaded } = usePianoSound();
+  const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
+  const [octave, setOctave] = useState(3);
+  const [sustain, setSustain] = useState(false);
+
+  const whiteKeys = PIANO_KEYS.filter(k => k.type === 'white');
+  const whiteKeyCount = whiteKeys.length;
+
+  const handleInteractionStart = useCallback((note: string) => {
     playNote(note);
-    setActiveKeys(prev => new Set(prev).add(note));
+    setActiveNotes(prev => new Set(prev).add(note));
   }, [playNote]);
 
-  const handleMouseUpOrLeave = useCallback((note: string) => {
-    setActiveKeys(prev => {
+  const handleInteractionEnd = useCallback((note: string) => {
+    if (!sustain) {
+        stopNote(note);
+    }
+    setActiveNotes(prev => {
       const newSet = new Set(prev);
       newSet.delete(note);
       return newSet;
     });
-  }, []);
-
+  }, [stopNote, sustain]);
+  
+  const handleKeyboardEvent = useCallback((event: KeyboardEvent, isDown: boolean) => {
+    if (event.repeat) return;
+    const keyInfo = KEY_TO_NOTE_MAP[event.key.toLowerCase()];
+    if (keyInfo) {
+      const targetOctave = octave + keyInfo.octaveOffset;
+      const noteToPlay = `${keyInfo.note}${targetOctave}`;
+      if (allNoteFiles[noteToPlay]) {
+        if (isDown) {
+            handleInteractionStart(noteToPlay);
+        } else {
+            handleInteractionEnd(noteToPlay);
+        }
+      }
+    }
+  }, [octave, handleInteractionStart, handleInteractionEnd]);
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    const onKeyDown = (e: KeyboardEvent) => handleKeyboardEvent(e, true);
+    const onKeyUp = (e: KeyboardEvent) => handleKeyboardEvent(e, false);
+    
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
-  }, [handleKeyDown, handleKeyUp]);
-
-  const whiteKeys = KEYS.filter(k => k.type === 'white');
-  const blackKeys = KEYS.filter(k => k.type === 'black');
-
+  }, [handleKeyboardEvent]);
+  
   return (
-    <div className="relative w-full h-48 sm:h-64 select-none bg-gray-800 p-2 rounded-b-lg">
-      <div className="relative w-full h-full flex">
-        {whiteKeys.map(keyInfo => (
-          <div
-            key={keyInfo.note}
-            onMouseDown={() => handleMouseDown(keyInfo.note)}
-            onMouseUp={() => handleMouseUpOrLeave(keyInfo.note)}
-            onMouseLeave={() => handleMouseUpOrLeave(keyInfo.note)}
-            onTouchStart={() => handleMouseDown(keyInfo.note)}
-            onTouchEnd={() => handleMouseUpOrLeave(keyInfo.note)}
-            className={`key white-key ${activeKeys.has(keyInfo.note) ? 'key-active' : ''}`}
-          >
-            <span className="key-label">{keyInfo.key.toUpperCase()}</span>
+    <div className="w-full">
+      <div className="flex items-center justify-between p-2 sm:p-4 bg-gray-900 rounded-t-lg text-white">
+        <div className="text-sm sm:text-base font-semibold">
+          1 : Acoustic Grand Piano
+        </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="font-semibold text-sm sm:text-base">Oct</span>
+            <button onClick={() => setOctave(o => Math.max(2, o - 1))} className="control-btn">-</button>
+            <span className="font-bold w-4 text-center text-sm sm:text-base">{octave}</span>
+            <button onClick={() => setOctave(o => Math.min(4, o + 1))} className="control-btn">+</button>
           </div>
-        ))}
-        {blackKeys.map(keyInfo => {
-          const whiteKeyIndex = whiteKeys.findIndex(wk => wk.note.startsWith(keyInfo.note.charAt(0)));
-          return (
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm sm:text-base">Sustain</span>
+            <button onClick={() => setSustain(s => !s)} className={`sustain-toggle ${sustain ? 'active' : ''}`}></button>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative w-full h-48 sm:h-64 select-none bg-gray-800 p-2 rounded-b-lg">
+        <div className="relative w-full h-full flex">
+          {whiteKeys.map(keyInfo => (
             <div
               key={keyInfo.note}
-              onMouseDown={() => handleMouseDown(keyInfo.note)}
-              onMouseUp={() => handleMouseUpOrLeave(keyInfo.note)}
-              onMouseLeave={() => handleMouseUpOrLeave(keyInfo.note)}
-              onTouchStart={() => handleMouseDown(keyInfo.note)}
-              onTouchEnd={() => handleMouseUpOrLeave(keyInfo.note)}
-              className={`key black-key ${activeKeys.has(keyInfo.note) ? 'key-active' : ''}`}
-              style={{ left: `${(whiteKeyIndex + 0.68) * (100 / whiteKeys.length)}%` }}
-            >
-              <span className="key-label text-white">{keyInfo.key.toUpperCase()}</span>
+              onMouseDown={() => handleInteractionStart(keyInfo.note)}
+              onMouseUp={() => handleInteractionEnd(keyInfo.note)}
+              onMouseLeave={() => activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note)}
+              onTouchStart={(e) => { e.preventDefault(); handleInteractionStart(keyInfo.note); }}
+              onTouchEnd={() => handleInteractionEnd(keyInfo.note)}
+              className={`key white-key ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
+            />
+          ))}
+          {PIANO_KEYS.map((keyInfo, index) => {
+            if (keyInfo.type === 'black') {
+              const precedingWhiteKeys = PIANO_KEYS.slice(0, index).filter(k => k.type === 'white').length;
+              const whiteKeyWidthPercent = 100 / whiteKeyCount;
+              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.55;
+              const leftPosition = `${precedingWhiteKeys * whiteKeyWidthPercent - blackKeyWidthPercent / 2}%`;
+              
+              return (
+                <div
+                  key={keyInfo.note}
+                  onMouseDown={(e) => { e.stopPropagation(); handleInteractionStart(keyInfo.note); }}
+                  onMouseUp={(e) => { e.stopPropagation(); handleInteractionEnd(keyInfo.note); }}
+                  onMouseLeave={(e) => { e.stopPropagation(); activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note); }}
+                  onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); handleInteractionStart(keyInfo.note); }}
+                  onTouchEnd={(e) => { e.stopPropagation(); handleInteractionEnd(keyInfo.note); }}
+                  className={`key black-key ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
+                  style={{ left: leftPosition, width: `${blackKeyWidthPercent}%` }}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+        {!isLoaded && (
+            <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-white rounded-lg">
+                <p className="animate-pulse">Loading Sounds...</p>
             </div>
-          );
-        })}
+        )}
       </div>
       <style>{`
         .key {
-          border: 1px solid black;
-          display: flex;
-          flex-direction: column;
-          justify-content: flex-end;
-          align-items: center;
-          padding-bottom: 8px;
-          user-select: none;
+          border: 1px solid #4a5568;
           cursor: pointer;
+          transition: background-color 0.1s ease;
         }
         .white-key {
           flex-grow: 1;
-          background-color: white;
-          color: #333;
+          background: linear-gradient(to bottom, #fff, #e0e0e0);
+          border-top: none;
+          border-radius: 0 0 5px 5px;
+        }
+        .white-key.key-active {
+          background: linear-gradient(to bottom, #e0e0e0, #d0d0d0);
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
         }
         .black-key {
           position: absolute;
-          width: 58%;
           height: 60%;
-          background-color: #222;
+          background: linear-gradient(to bottom, #222, #000);
           z-index: 10;
-          transform: translateX(-50%);
-          border-radius: 0 0 5px 5px;
-        }
-        .key-label {
-          font-weight: bold;
-          font-size: 0.8rem;
-          color: #aaa;
-        }
-        .key.key-active {
-          background-color: #ccc;
+          border-radius: 0 0 4px 4px;
+          box-shadow: 0 2px 3px rgba(0,0,0,0.4);
         }
         .black-key.key-active {
-          background-color: #444;
+          background: linear-gradient(to bottom, #000, #222);
+          box-shadow: inset 0 1px 2px rgba(255,255,255,0.2);
+        }
+        .control-btn {
+            background-color: #4a5568;
+            border-radius: 4px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .sustain-toggle {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #718096;
+            background-color: #4a5568;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .sustain-toggle.active {
+            background-color: #a0aec0;
+            border-color: #fff;
         }
       `}</style>
     </div>
