@@ -3,10 +3,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 // --- Constants ---
 const NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const OCTAVE_RANGE = [3, 4, 5];
-// FIX: Switched to a more reliable and complete soundfont from gleitz/midi-js-soundfonts
-const SOUND_BASE_URL = 'https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_grand_piano-mp3/';
 
-// FIX: Map for converting note names (e.g., Db) to filename-compatible names (e.g., Cs for C-sharp)
+const SOUNDFONT_OPTIONS = [
+    { value: 'acoustic_grand_piano', label: 'Acoustic Grand Piano' },
+    { value: 'bright_acoustic_piano', label: 'Bright Acoustic Piano' },
+    { value: 'electric_grand_piano', label: 'Electric Grand Piano' },
+    { value: 'honkytonk_piano', label: 'Honky-Tonk Piano' },
+];
+
+// Map for converting note names (e.g., Db) to filename-compatible names (e.g., Cs for C-sharp)
 const NOTE_TO_FILENAME_MAP: { [note: string]: string } = {
     'C': 'C', 'Db': 'Cs', 'D': 'D', 'Eb': 'Ds', 'E': 'E',
     'F': 'F', 'Gb': 'Fs', 'G': 'G', 'Ab': 'Gs', 'A': 'A',
@@ -68,7 +73,8 @@ const KEY_TO_NOTE_MAP: { [key: string]: { note: string; octaveOffset: number } }
   '\\': { note: 'Bb', octaveOffset: 2 },
 };
 
-const generateNoteFiles = () => {
+const generateNoteFiles = (soundfont: string) => {
+    const SOUND_BASE_URL = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${soundfont}-mp3/`;
     const files: { [note: string]: string } = {};
     [...OCTAVE_RANGE, 6, 7].forEach(octave => { // Preload up to C7 to support octave shifts
         NOTES.forEach(note => {
@@ -80,10 +86,9 @@ const generateNoteFiles = () => {
     });
     return files;
 };
-const allNoteFiles = generateNoteFiles();
 
 // --- Sound Engine Hook using Web Audio API ---
-const usePianoSound = () => {
+const usePianoSound = (soundfont: string) => {
     const audioContextRef = useRef<AudioContext | null>(null);
     const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
     const activeSourcesRef = useRef<Map<string, { source: AudioBufferSourceNode, gainNode: GainNode }>>(new Map());
@@ -91,27 +96,33 @@ const usePianoSound = () => {
 
     useEffect(() => {
         const initAudio = async () => {
-            try {
+            setIsLoaded(false);
+            audioBuffersRef.current.clear();
+            
+            if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-                
-                const loadPromises = Object.entries(allNoteFiles).map(async ([note, fileUrl]) => {
-                    try {
-                        const response = await fetch(fileUrl);
-                        if (!response.ok) return;
-                        const arrayBuffer = await response.arrayBuffer();
-                        const audioBuffer = await audioContextRef.current?.decodeAudioData(arrayBuffer);
-                        if (audioBuffer) {
-                            audioBuffersRef.current.set(note, audioBuffer);
-                        }
-                    } catch (e) { /* Silently fail for missing notes */ }
-                });
-                await Promise.all(loadPromises);
-                setIsLoaded(true);
-            } catch (e) {
-                console.error("Failed to initialize AudioContext", e);
             }
+            const audioContext = audioContextRef.current;
+            const noteFiles = generateNoteFiles(soundfont);
+            
+            const loadPromises = Object.entries(noteFiles).map(async ([note, fileUrl]) => {
+                try {
+                    const response = await fetch(fileUrl);
+                    if (!response.ok) return;
+                    const arrayBuffer = await response.arrayBuffer();
+                    const audioBuffer = await audioContext?.decodeAudioData(arrayBuffer);
+                    if (audioBuffer) {
+                        audioBuffersRef.current.set(note, audioBuffer);
+                    }
+                } catch (e) { /* Silently fail for missing notes */ }
+            });
+            await Promise.all(loadPromises);
+            setIsLoaded(true);
         };
         initAudio();
+    }, [soundfont]);
+
+    useEffect(() => {
         return () => { audioContextRef.current?.close().catch(console.error); };
     }, []);
 
@@ -149,7 +160,8 @@ const usePianoSound = () => {
 
 // --- Piano Component ---
 const Piano: React.FC = () => {
-  const { playNote, stopNote, isLoaded } = usePianoSound();
+  const [soundfont, setSoundfont] = useState('acoustic_grand_piano');
+  const { playNote, stopNote, isLoaded } = usePianoSound(soundfont);
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const [octave, setOctave] = useState(3);
   const [sustain, setSustain] = useState(false);
@@ -175,15 +187,15 @@ const Piano: React.FC = () => {
   
   const handleKeyboardEvent = useCallback((event: KeyboardEvent, isDown: boolean) => {
     if (event.repeat) return;
-    // Use event.key directly and lowercase only if it's a letter, to handle special chars and 'Backspace' correctly.
-    const keyForMap = (event.key.length === 1) ? event.key.toLowerCase() : event.key;
+    const keyForMap = event.key.toLowerCase();
     const keyInfo = KEY_TO_NOTE_MAP[keyForMap];
 
     if (keyInfo) {
-      event.preventDefault(); // Prevent default browser actions for keys like Backspace
+      event.preventDefault();
       const targetOctave = octave + keyInfo.octaveOffset;
       const noteToPlay = `${keyInfo.note}${targetOctave}`;
       
+      const allNoteFiles = generateNoteFiles(soundfont);
       if (allNoteFiles[noteToPlay]) {
         if (isDown) {
             handleInteractionStart(noteToPlay);
@@ -192,7 +204,7 @@ const Piano: React.FC = () => {
         }
       }
     }
-  }, [octave, handleInteractionStart, handleInteractionEnd]);
+  }, [octave, soundfont, handleInteractionStart, handleInteractionEnd]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => handleKeyboardEvent(e, true);
@@ -209,19 +221,28 @@ const Piano: React.FC = () => {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between p-2 sm:p-4 bg-gray-900 rounded-t-lg text-white">
-        <div className="text-sm sm:text-base font-semibold">
-          1 : Acoustic Grand Piano
+        <div className="flex items-center gap-2 sm:gap-4">
+            <label htmlFor="soundfont-select" className="text-sm sm:text-base font-semibold hidden sm:inline">Instrument:</label>
+             <select 
+                id="soundfont-select"
+                value={soundfont} 
+                onChange={e => setSoundfont(e.target.value)}
+                className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                aria-label="Select Piano Sound"
+            >
+                {SOUNDFONT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="flex items-center gap-1 sm:gap-2">
             <span className="font-semibold text-sm sm:text-base">Oct</span>
-            <button onClick={() => setOctave(o => Math.max(2, o - 1))} className="control-btn">-</button>
+            <button onClick={() => setOctave(o => Math.max(2, o - 1))} className="control-btn" aria-label="Decrease octave">-</button>
             <span className="font-bold w-4 text-center text-sm sm:text-base">{octave}</span>
-            <button onClick={() => setOctave(o => Math.min(4, o + 1))} className="control-btn">+</button>
+            <button onClick={() => setOctave(o => Math.min(4, o + 1))} className="control-btn" aria-label="Increase octave">+</button>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm sm:text-base">Sustain</span>
-            <button onClick={() => setSustain(s => !s)} className={`sustain-toggle ${sustain ? 'active' : ''}`}></button>
+            <button onClick={() => setSustain(s => !s)} className={`sustain-toggle ${sustain ? 'active' : ''}`} aria-pressed={sustain}></button>
           </div>
         </div>
       </div>
