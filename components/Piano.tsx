@@ -21,25 +21,56 @@ const PIANO_KEYS = OCTAVE_RANGE.flatMap(octave =>
 );
 
 const KEY_TO_NOTE_MAP: { [key: string]: { note: string; octaveOffset: number } } = {
-  // Bottom row - Base Octave
-  'z': { note: 'C', octaveOffset: 0 }, 's': { note: 'Db', octaveOffset: 0 },
-  'x': { note: 'D', octaveOffset: 0 }, 'd': { note: 'Eb', octaveOffset: 0 },
-  'c': { note: 'E', octaveOffset: 0 }, 'v': { note: 'F', octaveOffset: 0 },
-  'g': { note: 'Gb', octaveOffset: 0 }, 'b': { note: 'G', octaveOffset: 0 },
-  'h': { note: 'Ab', octaveOffset: 0 }, 'n': { note: 'A', octaveOffset: 0 },
-  'j': { note: 'Bb', octaveOffset: 0 }, 'm': { note: 'B', octaveOffset: 0 },
-  // Top row - Next Octave
-  'q': { note: 'C', octaveOffset: 1 }, '2': { note: 'Db', octaveOffset: 1 },
-  'w': { note: 'D', octaveOffset: 1 }, '3': { note: 'Eb', octaveOffset: 1 },
-  'e': { note: 'E', octaveOffset: 1 }, 'r': { note: 'F', octaveOffset: 1 },
-  '5': { note: 'Gb', octaveOffset: 1 }, 't': { note: 'G', octaveOffset: 1 },
-  '6': { note: 'Ab', octaveOffset: 1 }, 'y': { note: 'A', octaveOffset: 1 },
-  '7': { note: 'Bb', octaveOffset: 1 }, 'u': { note: 'B', octaveOffset: 1 },
+  // --- WHITE KEYS ---
+  // Octave 0 (base)
+  'a': { note: 'C', octaveOffset: 0 },
+  's': { note: 'D', octaveOffset: 0 },
+  'd': { note: 'E', octaveOffset: 0 },
+  'f': { note: 'F', octaveOffset: 0 },
+  'g': { note: 'G', octaveOffset: 0 },
+  'h': { note: 'A', octaveOffset: 0 },
+  'j': { note: 'B', octaveOffset: 0 },
+  // Octave 1
+  'k': { note: 'C', octaveOffset: 1 },
+  'l': { note: 'D', octaveOffset: 1 },
+  ';': { note: 'E', octaveOffset: 1 },
+  "'": { note: 'F', octaveOffset: 1 },
+  'q': { note: 'G', octaveOffset: 1 },
+  'w': { note: 'A', octaveOffset: 1 },
+  'e': { note: 'B', octaveOffset: 1 },
+  // Octave 2
+  'r': { note: 'C', octaveOffset: 2 },
+  't': { note: 'D', octaveOffset: 2 },
+  'y': { note: 'E', octaveOffset: 2 },
+  'u': { note: 'F', octaveOffset: 2 },
+  'i': { note: 'G', octaveOffset: 2 },
+  'o': { note: 'A', octaveOffset: 2 },
+  'p': { note: 'B', octaveOffset: 2 },
+
+  // --- BLACK KEYS ---
+  // Octave 0 (base)
+  '`': { note: 'Db', octaveOffset: 0 },
+  '1': { note: 'Eb', octaveOffset: 0 },
+  '2': { note: 'Gb', octaveOffset: 0 },
+  '3': { note: 'Ab', octaveOffset: 0 },
+  '4': { note: 'Bb', octaveOffset: 0 },
+  // Octave 1
+  '5': { note: 'Db', octaveOffset: 1 },
+  '6': { note: 'Eb', octaveOffset: 1 },
+  '7': { note: 'Gb', octaveOffset: 1 },
+  '8': { note: 'Ab', octaveOffset: 1 },
+  '9': { note: 'Bb', octaveOffset: 1 },
+  // Octave 2
+  '0': { note: 'Db', octaveOffset: 2 },
+  '-': { note: 'Eb', octaveOffset: 2 },
+  '=': { note: 'Gb', octaveOffset: 2 },
+  'backspace': { note: 'Ab', octaveOffset: 2 },
+  '\\': { note: 'Bb', octaveOffset: 2 },
 };
 
 const generateNoteFiles = () => {
     const files: { [note: string]: string } = {};
-    [...OCTAVE_RANGE, 6].forEach(octave => { // Preload up to C6
+    [...OCTAVE_RANGE, 6, 7].forEach(octave => { // Preload up to C7 to support octave shifts
         NOTES.forEach(note => {
             const noteName = `${note}${octave}`;
             const fileNote = NOTE_TO_FILENAME_MAP[note];
@@ -144,10 +175,15 @@ const Piano: React.FC = () => {
   
   const handleKeyboardEvent = useCallback((event: KeyboardEvent, isDown: boolean) => {
     if (event.repeat) return;
-    const keyInfo = KEY_TO_NOTE_MAP[event.key.toLowerCase()];
+    // Use event.key directly and lowercase only if it's a letter, to handle special chars and 'Backspace' correctly.
+    const keyForMap = (event.key.length === 1) ? event.key.toLowerCase() : event.key;
+    const keyInfo = KEY_TO_NOTE_MAP[keyForMap];
+
     if (keyInfo) {
+      event.preventDefault(); // Prevent default browser actions for keys like Backspace
       const targetOctave = octave + keyInfo.octaveOffset;
       const noteToPlay = `${keyInfo.note}${targetOctave}`;
+      
       if (allNoteFiles[noteToPlay]) {
         if (isDown) {
             handleInteractionStart(noteToPlay);
@@ -198,18 +234,17 @@ const Piano: React.FC = () => {
               onMouseDown={() => handleInteractionStart(keyInfo.note)}
               onMouseUp={() => handleInteractionEnd(keyInfo.note)}
               onMouseLeave={() => activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note)}
-              onTouchStart={() => handleInteractionStart(keyInfo.note)}
-              onTouchEnd={() => handleInteractionEnd(keyInfo.note)}
+              onTouchStart={(e) => { e.preventDefault(); handleInteractionStart(keyInfo.note); }}
+              onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd(keyInfo.note); }}
               className={`key white-key relative flex flex-col justify-end items-center ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
             >
-                {/* FIX: Removed keyboard shortcut labels per user request */}
             </div>
           ))}
           {PIANO_KEYS.map((keyInfo, index) => {
             if (keyInfo.type === 'black') {
               const precedingWhiteKeys = PIANO_KEYS.slice(0, index).filter(k => k.type === 'white').length;
               const whiteKeyWidthPercent = 100 / whiteKeyCount;
-              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.58; // FIX: Adjusted width for better aesthetics
+              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.58;
               const leftPosition = `${precedingWhiteKeys * whiteKeyWidthPercent - blackKeyWidthPercent / 2}%`;
               
               return (
@@ -218,8 +253,8 @@ const Piano: React.FC = () => {
                   onMouseDown={(e) => { e.stopPropagation(); handleInteractionStart(keyInfo.note); }}
                   onMouseUp={(e) => { e.stopPropagation(); handleInteractionEnd(keyInfo.note); }}
                   onMouseLeave={(e) => { e.stopPropagation(); activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note); }}
-                  onTouchStart={(e) => { e.stopPropagation(); handleInteractionStart(keyInfo.note); }}
-                  onTouchEnd={(e) => { e.stopPropagation(); handleInteractionEnd(keyInfo.note); }}
+                  onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); handleInteractionStart(keyInfo.note); }}
+                  onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); handleInteractionEnd(keyInfo.note); }}
                   className={`key black-key ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
                   style={{ left: leftPosition, width: `${blackKeyWidthPercent}%` }}
                 />
@@ -234,12 +269,11 @@ const Piano: React.FC = () => {
             </div>
         )}
       </div>
-      {/* FIX: Overhauled CSS for a more realistic and visually correct piano appearance */}
       <style>{`
         .key {
           cursor: pointer;
           transition: all 0.07s ease;
-          -webkit-tap-highlight-color: transparent; /* Prevent flash on mobile taps */
+          -webkit-tap-highlight-color: transparent;
         }
         .white-key {
           flex-grow: 1;
