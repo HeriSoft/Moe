@@ -590,12 +590,16 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!textRef.current || !pixshopContainerRef.current) return;
         setIsDraggingText(true);
         const textRect = textRef.current.getBoundingClientRect();
-        const containerRect = pixshopContainerRef.current.getBoundingClientRect();
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        
+        // Calculate click offset from the center of the text element
+        const textCenterX = textRect.left + textRect.width / 2;
+        const textCenterY = textRect.top + textRect.height / 2;
+
         textDragStartOffset.current = {
-            x: clientX - textRect.left + containerRect.left,
-            y: clientY - textRect.top + containerRect.top,
+            x: clientX - textCenterX,
+            y: clientY - textCenterY,
         };
     };
 
@@ -606,11 +610,13 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-        const x = clientX - containerRect.left - textDragStartOffset.current.x;
-        const y = clientY - containerRect.top - textDragStartOffset.current.y;
-
-        const xPercent = Math.max(0, Math.min(100, (x / containerRect.width) * 100));
-        const yPercent = Math.max(0, Math.min(100, (y / containerRect.height) * 100));
+        // Calculate the new center position in pixels, relative to the container
+        const newCenterX_relative_px = clientX - containerRect.left - textDragStartOffset.current.x;
+        const newCenterY_relative_px = clientY - containerRect.top - textDragStartOffset.current.y;
+        
+        // Convert to percentage
+        const xPercent = Math.max(0, Math.min(100, (newCenterX_relative_px / containerRect.width) * 100));
+        const yPercent = Math.max(0, Math.min(100, (newCenterY_relative_px / containerRect.height) * 100));
 
         setTextToolState(s => ({ ...s, x: xPercent, y: yPercent }));
 
