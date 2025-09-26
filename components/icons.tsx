@@ -547,6 +547,14 @@ export const TypeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     </svg>
 );
 
+// --- NEW ICONS for Piano ---
+export const PianoIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12.75h16.5m-16.5 3.75h16.5M5.25 4.5v15m13.5-15v15" />
+        <path strokeLinecap="round" d="M8.25 7.5h1.5v3h-1.5zM11.25 7.5h1.5v3h-1.5zM14.25 7.5h1.5v3h-1.5z" />
+    </svg>
+);
+
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
