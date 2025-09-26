@@ -44,7 +44,7 @@ export const PianoModal: React.FC<PianoModalProps> = ({ isOpen, onClose }) => {
         </div>
         <div className="p-4">
             <p className="text-center text-sm text-slate-500 dark:text-slate-400 mb-4">
-                Use your computer keyboard to play. The corresponding keys are shown on the piano.
+                Click or use your keyboard to play.
             </p>
             <Piano />
         </div>
