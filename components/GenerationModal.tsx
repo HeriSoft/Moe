@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon, EraserIcon } from './icons';
+import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon, EraserIcon, TypeIcon } from './icons';
 import { generateImage, editImage, swapFace } from '../services/geminiService';
 import type { Attachment, UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
@@ -138,7 +138,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [pixshopImage, setPixshopImage] = useState<Attachment | null>(null);
     const [pixshopOutput, setPixshopOutput] = useState<Attachment | null>(null);
     const [pixshopAdjustments, setPixshopAdjustments] = useState({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
-    const [pixshopMode, setPixshopMode] = useState<'idle' | 'crop' | 'draw'>('idle');
+    const [pixshopMode, setPixshopMode] = useState<'idle' | 'crop' | 'draw' | 'mask' | 'text'>('idle');
     const [cropStartPoint, setCropStartPoint] = useState<{x: number, y: number} | null>(null);
     const [cropRect, setCropRect] = useState<CropRect>(null);
     const pixshopContainerRef = useRef<HTMLDivElement>(null);
@@ -146,12 +146,27 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [toolPrompt, setToolPrompt] = useState<ToolPromptState | null>(null);
     const [selectedEffect, setSelectedEffect] = useState<string>('handle_sketch');
 
-    // Hand Drawing State
+    // Canvas tools state
     const [isDrawing, setIsDrawing] = useState(false);
     const [brushColor, setBrushColor] = useState('#FFFFFF');
     const [brushSize, setBrushSize] = useState(5);
+    // FIX: Add missing state for the masking tool's brush size.
+    const [maskBrushSize, setMaskBrushSize] = useState(20);
     const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+    const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const lastPointRef = useRef<{x: number, y: number} | null>(null);
+
+    // Text tool state
+    const [textToolState, setTextToolState] = useState({
+        text: 'Your Text Here',
+        stylePrompt: '',
+        x: 50, // percentage
+        y: 50, // percentage
+    });
+    const textRef = useRef<HTMLDivElement>(null);
+    const [isDraggingText, setIsDraggingText] = useState(false);
+    const textDragStartOffset = useRef({ x: 0, y: 0 });
+
 
     const handleSetImage = (
         setter: React.Dispatch<React.SetStateAction<Attachment | null>>,
@@ -311,10 +326,11 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         });
     };
     
-    const handlePixshopEdit = (editPrompt: string) => {
+    const handlePixshopEdit = (editPrompt: string, additionalImages: Attachment[] = []) => {
         if (!pixshopImage) { setError("Please upload an image to edit first."); return; }
+        const imagesToSend = [pixshopImage, ...additionalImages];
         handleGenericApiCall(async () => {
-            const { attachments } = await editImage(editPrompt, [pixshopImage], editSettings, userProfile);
+            const { attachments } = await editImage(editPrompt, imagesToSend, editSettings, userProfile);
             return attachments;
         });
     };
@@ -403,16 +419,17 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         };
     }, [pixshopMode, cropStartPoint, handleCropPointerMove, handleCropPointerUp]);
     
-    const clearDrawingCanvas = () => {
-        const canvas = drawingCanvasRef.current;
+    // --- Canvas Drawing Logic (reused for Draw & Mask) ---
+    const clearCanvas = (canvasRef: React.RefObject<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
         if (canvas) {
             const context = canvas.getContext('2d');
             context?.clearRect(0, 0, canvas.width, canvas.height);
         }
     };
 
-    const getCanvasCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
-        const canvas = drawingCanvasRef.current;
+    const getCanvasCoordinates = (e: React.MouseEvent | React.TouchEvent, canvasRef: React.RefObject<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
         if (!canvas) return null;
         const rect = canvas.getBoundingClientRect();
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -420,33 +437,49 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         return { x: clientX - rect.left, y: clientY - rect.top };
     };
 
-    const handleDrawStart = (e: React.MouseEvent | React.TouchEvent) => {
-        if (pixshopMode !== 'draw') return;
-        const pos = getCanvasCoordinates(e);
+    const handleCanvasDrawStart = (e: React.MouseEvent | React.TouchEvent) => {
+        if (pixshopMode !== 'draw' && pixshopMode !== 'mask') return;
+        const currentCanvasRef = pixshopMode === 'draw' ? drawingCanvasRef : maskCanvasRef;
+        const pos = getCanvasCoordinates(e, currentCanvasRef);
         if (pos) { setIsDrawing(true); lastPointRef.current = pos; }
     };
 
-    const handleDrawMove = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawing || pixshopMode !== 'draw') return;
+    const handleCanvasDrawMove = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing || (pixshopMode !== 'draw' && pixshopMode !== 'mask')) return;
         e.preventDefault();
-        const pos = getCanvasCoordinates(e);
-        const canvas = drawingCanvasRef.current;
+        const currentCanvasRef = pixshopMode === 'draw' ? drawingCanvasRef : maskCanvasRef;
+        const pos = getCanvasCoordinates(e, currentCanvasRef);
+        const canvas = currentCanvasRef.current;
         if (pos && canvas && lastPointRef.current) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                ctx.strokeStyle = brushColor; ctx.lineWidth = brushSize; ctx.lineCap = 'round';
-                ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
-                ctx.lineTo(pos.x, pos.y); ctx.stroke(); lastPointRef.current = pos;
+                if (pixshopMode === 'draw') {
+                    ctx.strokeStyle = brushColor; ctx.lineWidth = brushSize;
+                } else { // Masking
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.lineWidth = maskBrushSize;
+                }
+                ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+                ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
+                ctx.lineTo(pos.x, pos.y); ctx.stroke();
+                if (pixshopMode === 'mask') { // Fill for better visibility
+                    ctx.beginPath();
+                    ctx.arc(lastPointRef.current.x, lastPointRef.current.y, maskBrushSize / 2, 0, 2 * Math.PI);
+                    ctx.arc(pos.x, pos.y, maskBrushSize / 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                lastPointRef.current = pos;
             }
         }
     };
     
-    const handleDrawEnd = () => { if(isDrawing) setIsDrawing(false); };
+    const handleCanvasDrawEnd = () => { if(isDrawing) setIsDrawing(false); };
 
     useEffect(() => {
-        const canvas = drawingCanvasRef.current; const image = pixshopImageRef.current;
+        const currentCanvasRef = pixshopMode === 'draw' ? drawingCanvasRef : maskCanvasRef;
+        const canvas = currentCanvasRef.current; const image = pixshopImageRef.current;
         const container = pixshopContainerRef.current;
-        if (pixshopMode === 'draw' && canvas && image && container) {
+        if ((pixshopMode === 'draw' || pixshopMode === 'mask') && canvas && image && container) {
             const setCanvasSize = () => {
                 if (image.naturalWidth === 0 || !image.complete) return;
                 const { naturalWidth, naturalHeight } = image;
@@ -473,6 +506,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         }
     }, [pixshopMode, pixshopImage]);
 
+
     const handleApplyHandDrawing = (promptText: string) => {
         const drawingCanvas = drawingCanvasRef.current;
         const originalImageEl = pixshopImageRef.current;
@@ -497,13 +531,108 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             fileName: 'composite_edit_input.png',
         };
         const transformationPrompt = `In the provided image, there is a prominent, non-photorealistic drawing (a sketch). Your primary task is to intelligently replace ONLY this drawn element with a photorealistic version of: "${promptText}". The new object must appear in the exact same location, have the same scale, and follow the general shape of the drawing. It is crucial to seamlessly blend the new object into the original photograph, matching lighting, shadows, and perspective. Do NOT alter any other part of the image. The drawing is your definitive guide for placement and form.`;
-        handleGenericApiCall(async () => {
-            const { attachments } = await editImage(transformationPrompt, [compositeAttachment], editSettings, userProfile);
-            return attachments;
-        });
-        clearDrawingCanvas();
+        handlePixshopEdit(transformationPrompt, [compositeAttachment]);
+        clearCanvas(drawingCanvasRef);
         setPixshopMode('idle');
     };
+    
+    const handleApplyMask = (promptText: string) => {
+        const maskCanvas = maskCanvasRef.current;
+        if (!maskCanvas || !pixshopImage) { setError("Mask or image missing."); return; }
+
+        // Create a true black and white mask from the drawn mask
+        const bwMaskCanvas = document.createElement('canvas');
+        bwMaskCanvas.width = maskCanvas.width;
+        bwMaskCanvas.height = maskCanvas.height;
+        const bwCtx = bwMaskCanvas.getContext('2d');
+        if (!bwCtx) { setError("Could not create mask context."); return; }
+        
+        bwCtx.fillStyle = 'black';
+        bwCtx.fillRect(0, 0, bwMaskCanvas.width, bwMaskCanvas.height);
+        bwCtx.drawImage(maskCanvas, 0, 0); // Draws the red semi-transparent mask
+        const imageData = bwCtx.getImageData(0, 0, bwMaskCanvas.width, bwMaskCanvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            // If the pixel has any red (from our brush), make it pure white
+            if (data[i] > 0) {
+                data[i] = 255; // R
+                data[i + 1] = 255; // G
+                data[i + 2] = 255; // B
+            }
+        }
+        bwCtx.putImageData(imageData, 0, 0);
+
+        const maskDataUrl = bwMaskCanvas.toDataURL('image/png');
+        const maskBase64 = maskDataUrl.split(',')[1];
+        const maskAttachment: Attachment = {
+            data: maskBase64,
+            mimeType: 'image/png',
+            fileName: 'mask.png'
+        };
+
+        const finalPrompt = `Use the provided black and white mask image to perform the following edit: "${promptText}". The edit should ONLY apply to the white areas of the mask. Do not alter the black areas.`;
+        handlePixshopEdit(finalPrompt, [maskAttachment]);
+        clearCanvas(maskCanvasRef);
+        setPixshopMode('idle');
+    };
+
+    const handleApplyText = () => {
+        if (!pixshopImage || !textToolState.text || !textToolState.stylePrompt) {
+            setError("Image, text content, and style prompt are required."); return;
+        }
+        const finalPrompt = `Add the text "${textToolState.text}" to the image. The text style should be: "${textToolState.stylePrompt}". Position the text at approximately ${textToolState.x.toFixed(0)}% from the left and ${textToolState.y.toFixed(0)}% from the top.`;
+        handlePixshopEdit(finalPrompt);
+        setPixshopMode('idle');
+    };
+
+    // --- Drag handlers for text tool ---
+    const handleTextDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!textRef.current || !pixshopContainerRef.current) return;
+        setIsDraggingText(true);
+        const textRect = textRef.current.getBoundingClientRect();
+        const containerRect = pixshopContainerRef.current.getBoundingClientRect();
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        textDragStartOffset.current = {
+            x: clientX - textRect.left + containerRect.left,
+            y: clientY - textRect.top + containerRect.top,
+        };
+    };
+
+    const handleTextDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+        if (!isDraggingText || !pixshopContainerRef.current) return;
+        e.preventDefault();
+        const containerRect = pixshopContainerRef.current.getBoundingClientRect();
+        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+        const x = clientX - containerRect.left - textDragStartOffset.current.x;
+        const y = clientY - containerRect.top - textDragStartOffset.current.y;
+
+        const xPercent = Math.max(0, Math.min(100, (x / containerRect.width) * 100));
+        const yPercent = Math.max(0, Math.min(100, (y / containerRect.height) * 100));
+
+        setTextToolState(s => ({ ...s, x: xPercent, y: yPercent }));
+
+    }, [isDraggingText]);
+    
+    const handleTextDragEnd = useCallback(() => setIsDraggingText(false), []);
+
+    useEffect(() => {
+        if (isDraggingText) {
+            window.addEventListener('mousemove', handleTextDragMove);
+            window.addEventListener('touchmove', handleTextDragMove, { passive: false });
+            window.addEventListener('mouseup', handleTextDragEnd);
+            window.addEventListener('touchend', handleTextDragEnd);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleTextDragMove);
+            window.removeEventListener('touchmove', handleTextDragMove);
+            window.removeEventListener('mouseup', handleTextDragEnd);
+            window.removeEventListener('touchend', handleTextDragEnd);
+        };
+    }, [isDraggingText, handleTextDragMove, handleTextDragEnd]);
+
 
     const handleBeautifulEffectClick = () => {
         setToolPrompt({
@@ -758,7 +887,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                    <div ref={pixshopContainerRef} onMouseDown={handleCropPointerDown} onTouchStart={handleCropPointerDown} className={`relative w-full flex-grow min-h-0 bg-slate-100 dark:bg-[#2d2d40] rounded-lg flex items-center justify-center ${pixshopMode === 'crop' ? 'cursor-crosshair' : ''}`}>
                                         <div className="relative w-full h-full flex items-center justify-center">
                                             {!pixshopImage ? <button onClick={() => document.getElementById('pixshop-uploader')?.click()} className="flex flex-col items-center gap-2 text-slate-500"><ArrowUpTrayIcon className="w-10 h-10"/></button> : <img ref={pixshopImageRef} src={`data:${pixshopImage.mimeType};base64,${pixshopImage.data}`} className="max-w-full max-h-full object-contain" />}
-                                            {pixshopMode === 'draw' && pixshopImage && <canvas ref={drawingCanvasRef} className="absolute cursor-crosshair" onMouseDown={handleDrawStart} onMouseMove={handleDrawMove} onMouseUp={handleDrawEnd} onMouseLeave={handleDrawEnd} onTouchStart={handleDrawStart} onTouchMove={handleDrawMove} onTouchEnd={handleDrawEnd} />}
+                                            {(pixshopMode === 'draw' || pixshopMode === 'mask') && pixshopImage && <canvas ref={pixshopMode === 'draw' ? drawingCanvasRef : maskCanvasRef} className="absolute cursor-crosshair" onMouseDown={handleCanvasDrawStart} onMouseMove={handleCanvasDrawMove} onMouseUp={handleCanvasDrawEnd} onMouseLeave={handleCanvasDrawEnd} onTouchStart={handleCanvasDrawStart} onTouchMove={handleCanvasDrawMove} onTouchEnd={handleCanvasDrawEnd} />}
+                                            {pixshopMode === 'text' && pixshopImage && <div ref={textRef} onMouseDown={handleTextDragStart} onTouchStart={handleTextDragStart} className="absolute p-2 bg-black/50 text-white font-bold cursor-move select-none whitespace-nowrap" style={{ left: `${textToolState.x}%`, top: `${textToolState.y}%`, transform: 'translate(-50%, -50%)', textShadow: '1px 1px 2px black' }}>{textToolState.text}</div>}
                                         </div>
                                        <input type="file" id="pixshop-uploader" onChange={e => e.target.files && handleSetImage(setPixshopImage)(e.target.files[0])} className="hidden" accept="image/*"/>
                                        {pixshopImage && <button onClick={() => { setPixshopImage(null); setPixshopOutput(null); setPixshopMode('idle'); setCropRect(null); }} className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-red-500"><TrashIcon className="w-4 h-4"/></button>}
@@ -784,54 +914,53 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                </div>
                            </div>
                            <div className="flex flex-col sm:grid sm:grid-cols-2 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
-                               <div className="space-y-4">
-                                   <div className="space-y-2">
-                                        <h4 className="font-semibold text-sm">Creative Tools</h4>
-                                        <div className="grid grid-cols-2 gap-2 text-sm">
-                                            <button onClick={() => setPixshopMode(m => m === 'crop' ? 'idle' : 'crop')} disabled={!pixshopImage || isLoading} className={`tool-btn ${pixshopMode === 'crop' ? '!bg-indigo-500 text-white' : ''}`}><CropIcon className="w-4 h-4"/> Crop</button>
-                                            <button onClick={() => handlePixshopEdit("blur the background, keeping the subject sharp")} disabled={!pixshopImage || isLoading} className="tool-btn">Blur BG</button>
-                                            <button onClick={() => handlePixshopEdit("restore this damaged/faded old photo")} disabled={!pixshopImage || isLoading} className="tool-btn">Restore Photo</button>
-                                            <button onClick={() => handlePixshopEdit("remove the background")} disabled={!pixshopImage || isLoading} className="tool-btn">Remove BG</button>
-                                        </div>
-                                        {pixshopMode === 'crop' && <div className="grid grid-cols-2 gap-2 text-sm"><button onClick={handleApplyCrop} disabled={!cropRect || !cropRect.width || !cropRect.height} className="tool-btn bg-green-500 text-white hover:bg-green-600 disabled:opacity-50">Apply</button><button onClick={() => { setPixshopMode('idle'); setCropRect(null); }} className="tool-btn bg-red-500 text-white hover:bg-red-600">Cancel</button></div>}
-                                   </div>
-                                    <div className="space-y-2">
-                                        <h4 className="font-semibold text-sm">AI Tools</h4>
-                                        <div className="grid grid-cols-2 gap-2 text-sm">
-                                            <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Edit', title: 'What would you like to change?', onConfirm: p => handlePixshopEdit(p) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EditIcon className="w-4 h-4"/> Magic Edit</button>
-                                            <button onClick={() => setToolPrompt({ show: true, toolName: 'Magic Eraser', title: 'What would you like to remove?', onConfirm: p => handlePixshopEdit(`remove the ${p} from the image`) })} disabled={!pixshopImage || isLoading} className="tool-btn"><EraserIcon className="w-4 h-4"/> Magic Eraser</button>
-                                            <button onClick={handleBeautifulEffectClick} disabled={!pixshopImage || isLoading} className="tool-btn"><SparklesIcon className="w-4 h-4"/> Beautiful Effect</button>
-                                            <button onClick={() => setPixshopMode(m => m === 'draw' ? 'idle' : 'draw')} disabled={!pixshopImage || isLoading} className={`tool-btn ${pixshopMode === 'draw' ? '!bg-indigo-500 text-white' : ''}`}><PaintBrushIcon className="w-4 h-4"/> Hand Drawing</button>
-                                        </div>
-                                        {pixshopMode === 'draw' && (
-                                            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-2">
-                                                <div className="flex items-center gap-2"><label htmlFor="brush-color" className="text-xs">Color:</label><input type="color" id="brush-color" value={brushColor} onChange={e => setBrushColor(e.target.value)} className="w-8 h-8 p-0 border-none rounded cursor-pointer bg-transparent"/></div>
-                                                <Slider label="Brush Size" value={brushSize} min={1} max={50} step={1} onChange={setBrushSize} />
-                                                <div className="grid grid-cols-2 gap-2"><button onClick={() => setToolPrompt({ show: true, toolName: 'Apply Drawing', title: 'Describe what the drawing should become:', onConfirm: handleApplyHandDrawing })} className="tool-btn bg-green-500 text-white text-xs">Apply Drawing</button><button onClick={clearDrawingCanvas} className="tool-btn bg-yellow-500 text-white text-xs">Clear Drawing</button></div>
+                               {pixshopMode === 'idle' && (
+                                   <>
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <h4 className="font-semibold text-sm">Creative Tools</h4>
+                                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                                    <button onClick={() => setPixshopMode('crop')} disabled={!pixshopImage || isLoading} className="tool-btn"><CropIcon className="w-4 h-4"/> Crop</button>
+                                                    <button onClick={() => handlePixshopEdit("blur the background, keeping the subject sharp")} disabled={!pixshopImage || isLoading} className="tool-btn">Blur BG</button>
+                                                    <button onClick={() => handlePixshopEdit("restore this damaged/faded old photo")} disabled={!pixshopImage || isLoading} className="tool-btn">Restore Photo</button>
+                                                    <button onClick={() => handlePixshopEdit("remove the background")} disabled={!pixshopImage || isLoading} className="tool-btn">Remove BG</button>
+                                                </div>
                                             </div>
-                                        )}
-                                        <select onChange={(e) => { e.target.value && handlePixshopEdit(e.target.value); e.target.value = ''; }} disabled={!pixshopImage || isLoading} className="tool-btn w-full text-sm text-slate-900 dark:text-slate-100">
-                                            <option value="">Apply Artistic Style...</option>
-                                            {pixshopArtStyles.map(s => <option key={s.name} value={s.prompt}>{s.name}</option>)}
-                                        </select>
-                                   </div>
-                               </div>
-                               <div className="space-y-4">
-                                   <div className="space-y-2">
-                                        <h4 className="font-semibold text-sm">Color Filters</h4>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{pixshopColorFilters.map(f => <button key={f.name} onClick={() => { handlePixshopEdit(f.prompt); }} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}</div>
-                                   </div>
-                                   <div className="space-y-2">
-                                        <h4 className="font-semibold text-sm">Manual Adjustments</h4>
-                                        <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-lg space-y-2">
-                                            <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
-                                            <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
-                                            <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
-                                            <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
-                                            <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading || (pixshopAdjustments.vibrance === 0 && pixshopAdjustments.warmth === 0 && pixshopAdjustments.contrast === 0 && !pixshopAdjustments.isBW)} className="w-full p-2 text-xs bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
+                                            <div className="space-y-2">
+                                                <h4 className="font-semibold text-sm">AI Tools</h4>
+                                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                                    <button onClick={() => setPixshopMode('mask')} disabled={!pixshopImage || isLoading} className="tool-btn"><EditIcon className="w-4 h-4"/> Magic Edit</button>
+                                                    <button onClick={() => setPixshopMode('text')} disabled={!pixshopImage || isLoading} className="tool-btn"><TypeIcon className="w-4 h-4"/> Font Text</button>
+                                                    <button onClick={() => setPixshopMode('draw')} disabled={!pixshopImage || isLoading} className="tool-btn"><PaintBrushIcon className="w-4 h-4"/> Hand Drawing</button>
+                                                    <select onChange={(e) => { e.target.value && handlePixshopEdit(e.target.value); e.target.value = ''; }} disabled={!pixshopImage || isLoading} className="tool-btn w-full text-sm text-slate-900 dark:text-slate-100">
+                                                        <option value="">Apply Artistic Style...</option>
+                                                        {pixshopArtStyles.map(s => <option key={s.name} value={s.prompt}>{s.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
                                         </div>
-                                   </div>
-                               </div>
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <h4 className="font-semibold text-sm">Color Filters</h4>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{pixshopColorFilters.map(f => <button key={f.name} onClick={() => { handlePixshopEdit(f.prompt); }} disabled={!pixshopImage || isLoading} className="tool-btn text-xs">{f.name}</button>)}</div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <h4 className="font-semibold text-sm">Manual Adjustments</h4>
+                                                <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-lg space-y-2">
+                                                    <Slider label="Vibrance" value={pixshopAdjustments.vibrance} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, vibrance: v }))} disabled={!pixshopImage || isLoading} />
+                                                    <Slider label="Warmth" value={pixshopAdjustments.warmth} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, warmth: v }))} disabled={!pixshopImage || isLoading} />
+                                                    <Slider label="Contrast" value={pixshopAdjustments.contrast} min={-10} max={10} step={1} onChange={v => setPixshopAdjustments(s => ({ ...s, contrast: v }))} disabled={!pixshopImage || isLoading} />
+                                                    <label className="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" checked={pixshopAdjustments.isBW} onChange={e => setPixshopAdjustments(s => ({...s, isBW: e.target.checked}))} disabled={!pixshopImage || isLoading}/> Black & White</label>
+                                                    <button onClick={handlePixshopAdjustments} disabled={!pixshopImage || isLoading || (pixshopAdjustments.vibrance === 0 && pixshopAdjustments.warmth === 0 && pixshopAdjustments.contrast === 0 && !pixshopAdjustments.isBW)} className="w-full p-2 text-xs bg-indigo-500 text-white rounded-md font-semibold hover:bg-indigo-600 disabled:opacity-50">Apply Adjustments</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                               )}
+                               {pixshopMode === 'crop' && <div className="col-span-2 flex justify-center gap-4"><button onClick={handleApplyCrop} disabled={!cropRect || !cropRect.width || !cropRect.height} className="tool-btn flex-1 bg-green-500 text-white hover:bg-green-600 disabled:opacity-50">Apply Crop</button><button onClick={() => { setPixshopMode('idle'); setCropRect(null); }} className="tool-btn flex-1 bg-red-500 text-white hover:bg-red-600">Cancel</button></div>}
+                               {pixshopMode === 'draw' && (<div className="col-span-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-2"><div className="flex items-center gap-2"><label className="text-xs">Color:</label><input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} className="w-8 h-8 p-0 border-none rounded cursor-pointer bg-transparent"/></div><Slider label="Brush Size" value={brushSize} min={1} max={50} step={1} onChange={setBrushSize} /><div className="grid grid-cols-3 gap-2"><button onClick={() => setToolPrompt({ show: true, toolName: 'Apply Drawing', title: 'Describe what the drawing should become:', onConfirm: handleApplyHandDrawing })} className="tool-btn bg-green-500 text-white text-xs">Apply</button><button onClick={() => clearCanvas(drawingCanvasRef)} className="tool-btn bg-yellow-500 text-white text-xs">Clear</button><button onClick={() => setPixshopMode('idle')} className="tool-btn bg-red-500 text-white text-xs">Cancel</button></div></div>)}
+                               {pixshopMode === 'mask' && (<div className="col-span-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-2"><Slider label="Brush Size" value={maskBrushSize} min={10} max={100} step={5} onChange={setMaskBrushSize} /><div className="grid grid-cols-3 gap-2"><button onClick={() => setToolPrompt({ show: true, toolName: 'Apply Masked Edit', title: 'Describe your edit for the selected area:', onConfirm: handleApplyMask })} className="tool-btn bg-green-500 text-white text-xs">Apply</button><button onClick={() => clearCanvas(maskCanvasRef)} className="tool-btn bg-yellow-500 text-white text-xs">Clear</button><button onClick={() => setPixshopMode('idle')} className="tool-btn bg-red-500 text-white text-xs">Cancel</button></div></div>)}
+                               {pixshopMode === 'text' && (<div className="col-span-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg space-y-2"><input type="text" value={textToolState.text} onChange={e => setTextToolState(s => ({...s, text: e.target.value}))} placeholder="Your text..." className="input-style"/><input type="text" value={textToolState.stylePrompt} onChange={e => setTextToolState(s => ({...s, stylePrompt: e.target.value}))} placeholder="Font style prompt (e.g., disney font)" className="input-style"/><div className="grid grid-cols-2 gap-2"><button onClick={handleApplyText} className="tool-btn bg-green-500 text-white text-xs">Apply</button><button onClick={() => setPixshopMode('idle')} className="tool-btn bg-red-500 text-white text-xs">Cancel</button></div></div>)}
                            </div>
                        </div>
                     )}
