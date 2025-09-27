@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
 // --- Constants ---
 const NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-const OCTAVE_RANGE = [2, 3, 4, 5, 6];
 
 const SOUNDFONT_OPTIONS = [
     { value: 'acoustic_grand_piano', label: 'Acoustic Grand Piano' },
@@ -11,76 +10,37 @@ const SOUNDFONT_OPTIONS = [
     { value: 'honkytonk_piano', label: 'Honky-Tonk Piano' },
 ];
 
-// Map for converting note names (e.g., Db) to filename-compatible names (e.g., Cs for C-sharp)
 const NOTE_TO_FILENAME_MAP: { [note: string]: string } = {
     'C': 'C', 'Db': 'Cs', 'D': 'D', 'Eb': 'Ds', 'E': 'E',
     'F': 'F', 'Gb': 'Fs', 'G': 'G', 'Ab': 'Gs', 'A': 'A',
     'Bb': 'As', 'B': 'B'
 };
 
-const PIANO_KEYS = [
-    ...OCTAVE_RANGE.flatMap(octave =>
-        NOTES.map(note => ({
-            note: `${note}${octave}`,
-            type: note.includes('b') ? 'black' : 'white',
-        }))
-    ),
-    { note: 'C7', type: 'white' }
-];
-
-
-const KEY_TO_NOTE_MAP: { [key: string]: { note: string; octaveOffset: number } } = {
-  // --- WHITE KEYS ---
-  // Octave 0 (base)
-  'a': { note: 'C', octaveOffset: 0 },
-  's': { note: 'D', octaveOffset: 0 },
-  'd': { note: 'E', octaveOffset: 0 },
-  'f': { note: 'F', octaveOffset: 0 },
-  'g': { note: 'G', octaveOffset: 0 },
-  'h': { note: 'A', octaveOffset: 0 },
-  'j': { note: 'B', octaveOffset: 0 },
-  // Octave 1
-  'k': { note: 'C', octaveOffset: 1 },
-  'l': { note: 'D', octaveOffset: 1 },
-  ';': { note: 'E', octaveOffset: 1 },
-  "'": { note: 'F', octaveOffset: 1 },
-  'q': { note: 'G', octaveOffset: 1 },
-  'w': { note: 'A', octaveOffset: 1 },
-  'e': { note: 'B', octaveOffset: 1 },
-  // Octave 2
-  'r': { note: 'C', octaveOffset: 2 },
-  't': { note: 'D', octaveOffset: 2 },
-  'y': { note: 'E', octaveOffset: 2 },
-  'u': { note: 'F', octaveOffset: 2 },
-  'i': { note: 'G', octaveOffset: 2 },
-  'o': { note: 'A', octaveOffset: 2 },
-  'p': { note: 'B', octaveOffset: 2 },
-
-  // --- BLACK KEYS ---
-  // Octave 0 (base)
-  '`': { note: 'Db', octaveOffset: 0 },
-  '1': { note: 'Eb', octaveOffset: 0 },
-  '2': { note: 'Gb', octaveOffset: 0 },
-  '3': { note: 'Ab', octaveOffset: 0 },
-  '4': { note: 'Bb', octaveOffset: 0 },
-  // Octave 1
-  '5': { note: 'Db', octaveOffset: 1 },
-  '6': { note: 'Eb', octaveOffset: 1 },
-  '7': { note: 'Gb', octaveOffset: 1 },
-  '8': { note: 'Ab', octaveOffset: 1 },
-  '9': { note: 'Bb', octaveOffset: 1 },
-  // Octave 2
-  '0': { note: 'Db', octaveOffset: 2 },
-  '-': { note: 'Eb', octaveOffset: 2 },
-  '=': { note: 'Gb', octaveOffset: 2 },
-  'backspace': { note: 'Ab', octaveOffset: 2 },
-  '\\': { note: 'Bb', octaveOffset: 2 },
+const KEY_TO_NOTE_MAP: { [key: string]: string } = {
+  // White Keys
+  '1': 'C2', '2': 'D2', '3': 'E2', '4': 'F2', '5': 'G2', '6': 'A2', '7': 'B2',
+  '8': 'C3', '9': 'D3', '0': 'E3', 'q': 'F3', 'w': 'G3', 'e': 'A3', 'r': 'B3',
+  't': 'C4', 'y': 'D4', 'u': 'E4', 'i': 'F4', 'o': 'G4', 'p': 'A4', 'a': 'B4',
+  's': 'C5', 'd': 'D5', 'f': 'E5', 'g': 'F5', 'h': 'G5', 'j': 'A5', 'k': 'B5',
+  'l': 'C6', 'z': 'D6', 'x': 'E6', 'c': 'F6', 'v': 'G6', 'b': 'A6', 'n': 'B6',
+  'm': 'C7',
+  // Black Keys (Shift)
+  '!': 'Db2', '@': 'Eb2', '$': 'Gb2', '%': 'Ab2', '^': 'Bb2',
+  '*': 'Db3', '(': 'Eb3', 'Q': 'Gb3', 'W': 'Ab3', 'E': 'Bb3',
+  'T': 'Db4', 'Y': 'Eb4', 'I': 'Gb4', 'O': 'Ab4', 'P': 'Bb4',
+  'S': 'Db5', 'D': 'Eb5', 'G': 'Gb5', 'H': 'Ab5', 'J': 'Bb5',
+  'L': 'Db6', 'Z': 'Eb6', 'C': 'Gb6', 'V': 'Ab6', 'B': 'Bb6',
 };
+
+const NOTE_TO_KEY_LABEL_MAP: { [note: string]: string } = Object.fromEntries(
+  Object.entries(KEY_TO_NOTE_MAP).map(([key, note]) => [note, key.toUpperCase()])
+);
+
 
 const generateNoteFiles = (soundfont: string) => {
     const SOUND_BASE_URL = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${soundfont}-mp3/`;
     const files: { [note: string]: string } = {};
-    const OCTAVES_TO_LOAD = [2, 3, 4, 5, 6, 7];
+    const OCTAVES_TO_LOAD = [1, 2, 3, 4, 5, 6, 7, 8];
     OCTAVES_TO_LOAD.forEach(octave => {
         NOTES.forEach(note => {
             const noteName = `${note}${octave}`;
@@ -168,10 +128,23 @@ const Piano: React.FC = () => {
   const [soundfont, setSoundfont] = useState('acoustic_grand_piano');
   const { playNote, stopNote, isLoaded } = usePianoSound(soundfont);
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
-  const [octave, setOctave] = useState(4);
+  const [baseOctave, setBaseOctave] = useState(2);
   const [sustain, setSustain] = useState(false);
 
-  const whiteKeys = PIANO_KEYS.filter(k => k.type === 'white');
+  const pianoKeys = useMemo(() => {
+    const octaves = [baseOctave, baseOctave + 1, baseOctave + 2, baseOctave + 3, baseOctave + 4];
+    return [
+      ...octaves.flatMap(octave =>
+        NOTES.map(note => ({
+          note: `${note}${octave}`,
+          type: note.includes('b') ? 'black' : 'white',
+        }))
+      ),
+      { note: `C${baseOctave + 5}`, type: 'white' }
+    ];
+  }, [baseOctave]);
+
+  const whiteKeys = pianoKeys.filter(k => k.type === 'white');
   const whiteKeyCount = whiteKeys.length;
 
   const handleInteractionStart = useCallback((note: string) => {
@@ -189,48 +162,31 @@ const Piano: React.FC = () => {
       return newSet;
     });
   }, [stopNote, sustain]);
-  
-  const noteToKeyMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const [key, value] of Object.entries(KEY_TO_NOTE_MAP)) {
-        const noteName = `${value.note}${octave + value.octaveOffset}`;
-        let displayKey = key;
-        if (key === '`') displayKey = '~';
-        if (key === ';') displayKey = ':';
-        if (key === "'") displayKey = '"';
-        if (key === 'backspace') displayKey = '⌫';
-        if (key === '\\') displayKey = '|';
-        if (key === '-') displayKey = '_';
-        if (key === '=') displayKey = '+';
-        map.set(noteName, displayKey.toUpperCase());
-    }
-    return map;
-  }, [octave]);
-
 
   const handleKeyboardEvent = useCallback((event: KeyboardEvent, isDown: boolean) => {
     if (event.repeat) return;
-    let keyForMap = event.key.toLowerCase();
-    // Special handling for Backspace since event.key is 'Backspace'
-    if (event.code === 'Backspace') keyForMap = 'backspace';
+    
+    // For shift keys like '!', '@', etc., event.key is correct.
+    // For regular keys, we use toLowerCase().
+    const keyForMap = event.shiftKey ? event.key : event.key.toLowerCase();
+    
+    const noteToPlay = KEY_TO_NOTE_MAP[keyForMap];
 
-    const keyInfo = KEY_TO_NOTE_MAP[keyForMap];
-
-    if (keyInfo) {
+    if (noteToPlay) {
       event.preventDefault();
-      const targetOctave = octave + keyInfo.octaveOffset;
-      const noteToPlay = `${keyInfo.note}${targetOctave}`;
       
-      const allNoteFiles = generateNoteFiles(soundfont);
-      if (allNoteFiles[noteToPlay]) {
-        if (isDown) {
-            handleInteractionStart(noteToPlay);
-        } else {
-            handleInteractionEnd(noteToPlay);
-        }
+      const isNoteOnCurrentPiano = pianoKeys.some(k => k.note === noteToPlay);
+
+      if (isNoteOnCurrentPiano) {
+          if (isDown) {
+              handleInteractionStart(noteToPlay);
+          } else {
+              handleInteractionEnd(noteToPlay);
+          }
       }
     }
-  }, [octave, soundfont, handleInteractionStart, handleInteractionEnd]);
+  }, [pianoKeys, handleInteractionStart, handleInteractionEnd]);
+
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => handleKeyboardEvent(e, true);
@@ -262,9 +218,9 @@ const Piano: React.FC = () => {
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="flex items-center gap-1 sm:gap-2">
             <span className="font-semibold text-sm sm:text-base">Oct</span>
-            <button onClick={() => setOctave(o => Math.max(2, o - 1))} className="control-btn" aria-label="Decrease octave">-</button>
-            <span className="font-bold w-4 text-center text-sm sm:text-base">{octave}</span>
-            <button onClick={() => setOctave(o => Math.min(5, o + 1))} className="control-btn" aria-label="Increase octave">+</button>
+            <button onClick={() => setBaseOctave(o => Math.max(1, o - 1))} className="control-btn" aria-label="Decrease octave">-</button>
+            <span className="font-bold w-4 text-center text-sm sm:text-base">{baseOctave}</span>
+            <button onClick={() => setBaseOctave(o => Math.min(3, o + 1))} className="control-btn" aria-label="Increase octave">+</button>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm sm:text-base">Sustain</span>
@@ -285,12 +241,12 @@ const Piano: React.FC = () => {
               onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd(keyInfo.note); }}
               className={`key white-key relative flex flex-col justify-end items-center pb-1 ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
             >
-                <span className="text-gray-500 text-[10px] sm:text-xs font-semibold">{noteToKeyMap.get(keyInfo.note)}</span>
+                <span className="text-gray-500 text-[10px] sm:text-xs font-semibold">{NOTE_TO_KEY_LABEL_MAP[keyInfo.note]}</span>
             </div>
           ))}
-          {PIANO_KEYS.map((keyInfo, index) => {
+          {pianoKeys.map((keyInfo, index) => {
             if (keyInfo.type === 'black') {
-              const precedingWhiteKeys = PIANO_KEYS.slice(0, index).filter(k => k.type === 'white').length;
+              const precedingWhiteKeys = pianoKeys.slice(0, index).filter(k => k.type === 'white').length;
               const whiteKeyWidthPercent = 100 / whiteKeyCount;
               const blackKeyWidthPercent = whiteKeyWidthPercent * 0.58;
               const leftPosition = `${precedingWhiteKeys * whiteKeyWidthPercent - blackKeyWidthPercent / 2}%`;
@@ -306,7 +262,7 @@ const Piano: React.FC = () => {
                   className={`key black-key flex flex-col justify-end items-center pb-1 ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
                   style={{ left: leftPosition, width: `${blackKeyWidthPercent}%` }}
                 >
-                    <span className="text-white text-[10px] sm:text-xs font-semibold">{noteToKeyMap.get(keyInfo.note)}</span>
+                    <span className="text-white text-[10px] sm:text-xs font-semibold">{NOTE_TO_KEY_LABEL_MAP[keyInfo.note]}</span>
                 </div>
               );
             }
