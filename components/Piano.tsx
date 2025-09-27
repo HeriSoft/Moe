@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 // --- Constants ---
 const NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -29,40 +29,59 @@ const PIANO_KEYS = [
 ];
 
 
-const KEYBOARD_TO_NOTE_MAP: { [key: string]: string } = {
-  // --- WHITE KEYS from image ---
-  '1': 'C2', '2': 'D2', '3': 'E2', '4': 'F2', '5': 'G2', '6': 'A2', '7': 'B2',
-  '8': 'C3', '9': 'D3', '0': 'E3',
-  'q': 'F3', 'w': 'G3', 'e': 'A3', 'r': 'B3',
-  't': 'C4', 'y': 'D4', 'u': 'E4',
-  'i': 'F4', 'o': 'G4', 'p': 'A4', 'a': 'B4',
-  's': 'C5', 'd': 'D5', 'f': 'E5',
-  'g': 'F5', 'h': 'G5', 'j': 'A5', 'k': 'B5',
-  'l': 'C6', 'z': 'D6', 'x': 'E6',
-  'c': 'F6', 'v': 'G6', 'b': 'A6', 'n': 'B6',
-  'm': 'C7',
+const KEY_TO_NOTE_MAP: { [key: string]: { note: string; octaveOffset: number } } = {
+  // --- WHITE KEYS ---
+  // Octave 0 (base)
+  'a': { note: 'C', octaveOffset: 0 },
+  's': { note: 'D', octaveOffset: 0 },
+  'd': { note: 'E', octaveOffset: 0 },
+  'f': { note: 'F', octaveOffset: 0 },
+  'g': { note: 'G', octaveOffset: 0 },
+  'h': { note: 'A', octaveOffset: 0 },
+  'j': { note: 'B', octaveOffset: 0 },
+  // Octave 1
+  'k': { note: 'C', octaveOffset: 1 },
+  'l': { note: 'D', octaveOffset: 1 },
+  ';': { note: 'E', octaveOffset: 1 },
+  "'": { note: 'F', octaveOffset: 1 },
+  'q': { note: 'G', octaveOffset: 1 },
+  'w': { note: 'A', octaveOffset: 1 },
+  'e': { note: 'B', octaveOffset: 1 },
+  // Octave 2
+  'r': { note: 'C', octaveOffset: 2 },
+  't': { note: 'D', octaveOffset: 2 },
+  'y': { note: 'E', octaveOffset: 2 },
+  'u': { note: 'F', octaveOffset: 2 },
+  'i': { note: 'G', octaveOffset: 2 },
+  'o': { note: 'A', octaveOffset: 2 },
+  'p': { note: 'B', octaveOffset: 2 },
 
-  // --- BLACK KEYS from image ---
-  '!': 'Db2', '@': 'Eb2', '$': 'Gb2', '%': 'Ab2', '^': 'Bb2',
-  '*': 'Db3', '(': 'Eb3',
-  'Q': 'Gb3', 'W': 'Ab3', 'E': 'Bb3',
-  'T': 'Db4', 'Y': 'Eb4',
-  'I': 'Gb4', 'O': 'Ab4', 'P': 'Bb4',
-  'S': 'Db5', 'D': 'Eb5',
-  'G': 'Gb5', 'H': 'Ab5', 'J': 'Bb5',
-  'L': 'Db6', 'Z': 'Eb6',
-  'C': 'Gb6', 'V': 'Ab6', 'B': 'Bb6',
+  // --- BLACK KEYS ---
+  // Octave 0 (base)
+  '`': { note: 'Db', octaveOffset: 0 },
+  '1': { note: 'Eb', octaveOffset: 0 },
+  '2': { note: 'Gb', octaveOffset: 0 },
+  '3': { note: 'Ab', octaveOffset: 0 },
+  '4': { note: 'Bb', octaveOffset: 0 },
+  // Octave 1
+  '5': { note: 'Db', octaveOffset: 1 },
+  '6': { note: 'Eb', octaveOffset: 1 },
+  '7': { note: 'Gb', octaveOffset: 1 },
+  '8': { note: 'Ab', octaveOffset: 1 },
+  '9': { note: 'Bb', octaveOffset: 1 },
+  // Octave 2
+  '0': { note: 'Db', octaveOffset: 2 },
+  '-': { note: 'Eb', octaveOffset: 2 },
+  '=': { note: 'Gb', octaveOffset: 2 },
+  'backspace': { note: 'Ab', octaveOffset: 2 },
+  '\\': { note: 'Bb', octaveOffset: 2 },
 };
-
-const NOTE_TO_KEYBOARD_MAP: { [note: string]: string } = Object.fromEntries(
-  Object.entries(KEYBOARD_TO_NOTE_MAP).map(([key, note]) => [note, key])
-);
-
 
 const generateNoteFiles = (soundfont: string) => {
     const SOUND_BASE_URL = `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/${soundfont}-mp3/`;
     const files: { [note: string]: string } = {};
-    [...OCTAVE_RANGE, 7].forEach(octave => { // Preload up to C7 and octave 7
+    const OCTAVES_TO_LOAD = [2, 3, 4, 5, 6, 7];
+    OCTAVES_TO_LOAD.forEach(octave => {
         NOTES.forEach(note => {
             const noteName = `${note}${octave}`;
             const fileNote = NOTE_TO_FILENAME_MAP[note];
@@ -119,13 +138,6 @@ const usePianoSound = (soundfont: string) => {
 
         if (audioContext.state === 'suspended') { audioContext.resume(); }
 
-        // Stop any currently playing sound for this note before starting a new one
-        const existingSource = activeSourcesRef.current.get(note);
-        if (existingSource) {
-            existingSource.source.stop();
-            activeSourcesRef.current.delete(note);
-        }
-
         const gainNode = audioContext.createGain();
         gainNode.connect(audioContext.destination);
 
@@ -137,7 +149,7 @@ const usePianoSound = (soundfont: string) => {
         activeSourcesRef.current.set(note, { source, gainNode });
     }, []);
     
-    const stopNote = useCallback((note: string, fadeOutDuration = 0.1) => {
+    const stopNote = useCallback((note: string, fadeOutDuration = 0.05) => {
         const activeSource = activeSourcesRef.current.get(note);
         const audioContext = audioContextRef.current;
 
@@ -156,6 +168,8 @@ const Piano: React.FC = () => {
   const [soundfont, setSoundfont] = useState('acoustic_grand_piano');
   const { playNote, stopNote, isLoaded } = usePianoSound(soundfont);
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
+  const [octave, setOctave] = useState(4);
+  const [sustain, setSustain] = useState(false);
 
   const whiteKeys = PIANO_KEYS.filter(k => k.type === 'white');
   const whiteKeyCount = whiteKeys.length;
@@ -166,28 +180,57 @@ const Piano: React.FC = () => {
   }, [playNote]);
 
   const handleInteractionEnd = useCallback((note: string) => {
-    stopNote(note);
+    if (!sustain) {
+        stopNote(note);
+    }
     setActiveNotes(prev => {
       const newSet = new Set(prev);
       newSet.delete(note);
       return newSet;
     });
-  }, [stopNote]);
+  }, [stopNote, sustain]);
   
-  const handleKeyboardEvent = useCallback((event: KeyboardEvent, isDown: boolean) => {
-    if (event.repeat && isDown) return;
-    const key = event.key;
-    const noteToPlay = KEYBOARD_TO_NOTE_MAP[key];
+  const noteToKeyMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [key, value] of Object.entries(KEY_TO_NOTE_MAP)) {
+        const noteName = `${value.note}${octave + value.octaveOffset}`;
+        let displayKey = key;
+        if (key === '`') displayKey = '~';
+        if (key === ';') displayKey = ':';
+        if (key === "'") displayKey = '"';
+        if (key === 'backspace') displayKey = '⌫';
+        if (key === '\\') displayKey = '|';
+        if (key === '-') displayKey = '_';
+        if (key === '=') displayKey = '+';
+        map.set(noteName, displayKey.toUpperCase());
+    }
+    return map;
+  }, [octave]);
 
-    if (noteToPlay) {
+
+  const handleKeyboardEvent = useCallback((event: KeyboardEvent, isDown: boolean) => {
+    if (event.repeat) return;
+    let keyForMap = event.key.toLowerCase();
+    // Special handling for Backspace since event.key is 'Backspace'
+    if (event.code === 'Backspace') keyForMap = 'backspace';
+
+    const keyInfo = KEY_TO_NOTE_MAP[keyForMap];
+
+    if (keyInfo) {
       event.preventDefault();
-      if (isDown) {
-        handleInteractionStart(noteToPlay);
-      } else {
-        handleInteractionEnd(noteToPlay);
+      const targetOctave = octave + keyInfo.octaveOffset;
+      const noteToPlay = `${keyInfo.note}${targetOctave}`;
+      
+      const allNoteFiles = generateNoteFiles(soundfont);
+      if (allNoteFiles[noteToPlay]) {
+        if (isDown) {
+            handleInteractionStart(noteToPlay);
+        } else {
+            handleInteractionEnd(noteToPlay);
+        }
       }
     }
-  }, [handleInteractionStart, handleInteractionEnd]);
+  }, [octave, soundfont, handleInteractionStart, handleInteractionEnd]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => handleKeyboardEvent(e, true);
@@ -203,7 +246,7 @@ const Piano: React.FC = () => {
   
   return (
     <div className="w-full">
-      <div className="flex items-center justify-center p-2 sm:p-4 bg-gray-900 rounded-t-lg text-white">
+      <div className="flex items-center justify-between p-2 sm:p-4 bg-gray-900 rounded-t-lg text-white">
         <div className="flex items-center gap-2 sm:gap-4">
             <label htmlFor="soundfont-select" className="text-sm sm:text-base font-semibold hidden sm:inline">Instrument:</label>
              <select 
@@ -216,10 +259,22 @@ const Piano: React.FC = () => {
                 {SOUNDFONT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
         </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="font-semibold text-sm sm:text-base">Oct</span>
+            <button onClick={() => setOctave(o => Math.max(2, o - 1))} className="control-btn" aria-label="Decrease octave">-</button>
+            <span className="font-bold w-4 text-center text-sm sm:text-base">{octave}</span>
+            <button onClick={() => setOctave(o => Math.min(5, o + 1))} className="control-btn" aria-label="Increase octave">+</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm sm:text-base">Sustain</span>
+            <button onClick={() => setSustain(s => !s)} className={`sustain-toggle ${sustain ? 'active' : ''}`} aria-pressed={sustain}></button>
+          </div>
+        </div>
       </div>
 
-      <div className="relative w-full h-48 sm:h-64 select-none bg-gray-800 p-2 rounded-b-lg overflow-x-auto">
-        <div className="relative flex h-full" style={{ width: `${whiteKeyCount * 3.5}rem`}}>
+      <div className="relative w-full h-48 sm:h-64 select-none bg-gray-800 p-2 rounded-b-lg">
+        <div className="relative w-full h-full flex">
           {whiteKeys.map(keyInfo => (
             <div
               key={keyInfo.note}
@@ -228,16 +283,16 @@ const Piano: React.FC = () => {
               onMouseLeave={() => activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note)}
               onTouchStart={(e) => { e.preventDefault(); handleInteractionStart(keyInfo.note); }}
               onTouchEnd={(e) => { e.preventDefault(); handleInteractionEnd(keyInfo.note); }}
-              className={`key white-key relative flex flex-col justify-end items-center p-1 ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
+              className={`key white-key relative flex flex-col justify-end items-center pb-1 ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
             >
-              <span className="text-gray-500 text-sm font-semibold">{NOTE_TO_KEYBOARD_MAP[keyInfo.note]}</span>
+                <span className="text-gray-500 text-[10px] sm:text-xs font-semibold">{noteToKeyMap.get(keyInfo.note)}</span>
             </div>
           ))}
           {PIANO_KEYS.map((keyInfo, index) => {
             if (keyInfo.type === 'black') {
               const precedingWhiteKeys = PIANO_KEYS.slice(0, index).filter(k => k.type === 'white').length;
               const whiteKeyWidthPercent = 100 / whiteKeyCount;
-              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.6;
+              const blackKeyWidthPercent = whiteKeyWidthPercent * 0.58;
               const leftPosition = `${precedingWhiteKeys * whiteKeyWidthPercent - blackKeyWidthPercent / 2}%`;
               
               return (
@@ -248,10 +303,10 @@ const Piano: React.FC = () => {
                   onMouseLeave={(e) => { e.stopPropagation(); activeNotes.has(keyInfo.note) && handleInteractionEnd(keyInfo.note); }}
                   onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); handleInteractionStart(keyInfo.note); }}
                   onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); handleInteractionEnd(keyInfo.note); }}
-                  className={`key black-key flex flex-col justify-end items-center p-1 ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
+                  className={`key black-key flex flex-col justify-end items-center pb-1 ${activeNotes.has(keyInfo.note) ? 'key-active' : ''}`}
                   style={{ left: leftPosition, width: `${blackKeyWidthPercent}%` }}
                 >
-                    <span className="text-gray-300 text-sm font-semibold">{NOTE_TO_KEYBOARD_MAP[keyInfo.note]}</span>
+                    <span className="text-white text-[10px] sm:text-xs font-semibold">{noteToKeyMap.get(keyInfo.note)}</span>
                 </div>
               );
             }
@@ -301,6 +356,28 @@ const Piano: React.FC = () => {
           background: #222;
           transform: translateY(1px);
           box-shadow: inset 0 2px 3px rgba(0,0,0,0.4);
+        }
+        .control-btn {
+            background-color: #4a5568;
+            border-radius: 4px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .sustain-toggle {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #718096;
+            background-color: #4a5568;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .sustain-toggle.active {
+            background-color: #a0aec0;
+            border-color: #fff;
         }
       `}</style>
     </div>
