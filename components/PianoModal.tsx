@@ -30,7 +30,7 @@ export const PianoModal: React.FC<PianoModalProps> = ({ isOpen, onClose }) => {
       aria-labelledby="piano-modal-title"
     >
       <div
-        className={`bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-xl text-slate-800 dark:text-slate-200 transform transition-all duration-300 ${isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
+        className={`bg-white dark:bg-[#171725] rounded-xl shadow-2xl w-full max-w-7xl text-slate-800 dark:text-slate-200 transform transition-all duration-300 ${isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
