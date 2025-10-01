@@ -537,6 +537,15 @@ export default async function handler(req, res) {
                 await logAction(userEmail, `chatted using ${payload.model}`);
                 const { model, history, newMessage, attachments, isWebSearchEnabled, isDeepThinkEnabled, systemInstruction } = payload;
 
+                const historyForProcessing = [...history];
+                const lastMessageInHistory = historyForProcessing[historyForProcessing.length - 1];
+            
+                // Check if the frontend already included the new message in the history array.
+                // This handles an inconsistency in how the frontend calls this endpoint.
+                if (lastMessageInHistory && lastMessageInHistory.role === 'user' && lastMessageInHistory.text === newMessage) {
+                    historyForProcessing.pop();
+                }
+
                 if (isWebSearchEnabled && !model.startsWith('gemini')) {
                    throw new Error(`Web Search is not supported for the '${model}' model.`);
                 }
@@ -592,7 +601,7 @@ export default async function handler(req, res) {
                     if (isWebSearchEnabled) res.write(`data: ${JSON.stringify({ status: "Researching..." })}\n\n`);
                     else if (attachments && attachments.length > 0) res.write(`data: ${JSON.stringify({ status: "Processing files..." })}\n\n`);
                     
-                    let conversationHistory = [ ...history ].filter(m => (m.role === 'user' || m.role === 'model') && (m.text?.trim() || (m.attachments && m.attachments.length > 0)));
+                    let conversationHistory = [ ...historyForProcessing ].filter(m => (m.role === 'user' || m.role === 'model') && (m.text?.trim() || (m.attachments && m.attachments.length > 0)));
                     const sdkHistory = conversationHistory.map(msg => {
                         const parts = [];
                         if (msg.text) parts.push({ text: msg.text });
@@ -637,12 +646,12 @@ export default async function handler(req, res) {
 
                 } else if (openAICompatibleModels.includes(model)) {
                     if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
-                    const updatedPayload = { ...payload, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
+                    const updatedPayload = { ...payload, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
                     await handleOpenAIStream(res, OPENAI_API_URL, OPENAI_API_KEY, updatedPayload, isWebSearchEnabled, false);
                     return;
                 } else if (model.startsWith('deepseek')) {
                     if (!DEEPSEEK_API_KEY) throw new Error("DeepSeek API key not configured.");
-                    const updatedPayload = { ...payload, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
+                    const updatedPayload = { ...payload, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
                     await handleOpenAIStream(res, DEEPSEEK_API_URL, DEEPSEEK_API_KEY, updatedPayload, isWebSearchEnabled, isDeepThinkEnabled);
                     return;
                 } else {
@@ -740,7 +749,7 @@ export default async function handler(req, res) {
             case 'swapFace': {
                 await logAction(userEmail, 'played Swapface');
                 const { targetImage, sourceImage } = payload;
-                const GRADIO_PUBLIC_URL = "https://65979c9594c34759e3.gradio.live";
+                const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
                 
                 const uploadFileAndGetRef = async (image) => {
                     const buffer = Buffer.from(image.data, 'base64');
