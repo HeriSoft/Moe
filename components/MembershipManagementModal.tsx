@@ -15,6 +15,7 @@ interface RenewalPlan {
   days: number;
   price: number;
   name: string;
+  credits: number;
 }
 
 interface PaymentSettings {
@@ -111,9 +112,9 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
   };
 
   const plans: RenewalPlan[] = [
-    { days: 30, price: paymentSettings?.price30 || 250000, name: '1 Month' },
-    { days: 90, price: paymentSettings?.price90 || 700000, name: '3 Months' },
-    { days: 360, price: paymentSettings?.price360 || 2500000, name: '1 Year' },
+    { days: 30, price: paymentSettings?.price30 || 250000, name: '1 Month', credits: 500 },
+    { days: 90, price: paymentSettings?.price90 || 700000, name: '3 Months', credits: 1500 },
+    { days: 360, price: paymentSettings?.price360 || 2500000, name: '1 Year', credits: 6000 },
   ];
 
   const renderRenewPayment = () => {
@@ -174,6 +175,7 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
                                         <button key={plan.days} onClick={() => startRenewal(plan)} className="p-4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg text-center hover:ring-2 hover:ring-indigo-500">
                                             <p className="font-bold">{plan.name}</p>
                                             <p className="text-xl font-bold text-indigo-500">{plan.price.toLocaleString('vi-VN')} VNĐ</p>
+                                            <p className="text-xs text-slate-400">+{plan.credits} Credits</p>
                                         </button>
                                     ))}
                                </div>
