@@ -275,24 +275,25 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                 </div>
 
                 <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
-                    {/* Left: Calculator & Form */}
-                    <div className="flex flex-col gap-6">
-                        {/* Calculator */}
-                        <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
-                            <div className="bg-white dark:bg-slate-900 rounded p-2 text-right text-3xl font-mono mb-4">{calculatorDisplay}</div>
-                            <div className="grid grid-cols-4 gap-2">
-                                {['AC', '+/-', '%', '/'].map(op => <button key={op} onClick={() => { if (op === 'AC') handleClearCalculator(); else handleOperator(op); }} className="calc-btn bg-slate-300 dark:bg-slate-600">{op}</button>)}
-                                {['7', '8', '9', '*'].map(op => <button key={op} onClick={() => (Number.isInteger(parseInt(op)) ? handleCalculatorInput(op) : handleOperator(op))} className={`calc-btn ${Number.isInteger(parseInt(op)) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-indigo-500 text-white'}`}>{op}</button>)}
-                                {['4', '5', '6', '-'].map(op => <button key={op} onClick={() => (Number.isInteger(parseInt(op)) ? handleCalculatorInput(op) : handleOperator(op))} className={`calc-btn ${Number.isInteger(parseInt(op)) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-indigo-500 text-white'}`}>{op}</button>)}
-                                {['1', '2', '3', '+'].map(op => <button key={op} onClick={() => (Number.isInteger(parseInt(op)) ? handleCalculatorInput(op) : handleOperator(op))} className={`calc-btn ${Number.isInteger(parseInt(op)) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-indigo-500 text-white'}`}>{op}</button>)}
-                                <button onClick={() => handleCalculatorInput('0')} className="calc-btn bg-slate-200 dark:bg-slate-700 col-span-2">0</button>
-                                <button onClick={() => handleCalculatorInput('.')} className="calc-btn bg-slate-200 dark:bg-slate-700">.</button>
-                                <button onClick={() => handleOperator('=')} className="calc-btn bg-indigo-500 text-white">=</button>
-                            </div>
-                            <button onClick={() => setFormState(s => ({...s, amount: calculatorDisplay}))} className="w-full mt-4 p-2 bg-slate-300 dark:bg-slate-600 rounded-md text-sm font-semibold hover:bg-slate-400 dark:hover:bg-slate-500">Use this amount</button>
+                    {/* Left Column: Calculator */}
+                    <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg flex flex-col">
+                        <div className="bg-white dark:bg-slate-900 rounded p-2 text-right text-3xl font-mono mb-4">{calculatorDisplay}</div>
+                        <div className="grid grid-cols-4 gap-2">
+                            {['AC', '+/-', '%', '/'].map(op => <button key={op} onClick={() => { if (op === 'AC') handleClearCalculator(); else handleOperator(op); }} className="calc-btn bg-slate-300 dark:bg-slate-600">{op}</button>)}
+                            {['7', '8', '9', '*'].map(op => <button key={op} onClick={() => (Number.isInteger(parseInt(op)) ? handleCalculatorInput(op) : handleOperator(op))} className={`calc-btn ${Number.isInteger(parseInt(op)) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-indigo-500 text-white'}`}>{op}</button>)}
+                            {['4', '5', '6', '-'].map(op => <button key={op} onClick={() => (Number.isInteger(parseInt(op)) ? handleCalculatorInput(op) : handleOperator(op))} className={`calc-btn ${Number.isInteger(parseInt(op)) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-indigo-500 text-white'}`}>{op}</button>)}
+                            {['1', '2', '3', '+'].map(op => <button key={op} onClick={() => (Number.isInteger(parseInt(op)) ? handleCalculatorInput(op) : handleOperator(op))} className={`calc-btn ${Number.isInteger(parseInt(op)) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-indigo-500 text-white'}`}>{op}</button>)}
+                            <button onClick={() => handleCalculatorInput('0')} className="calc-btn bg-slate-200 dark:bg-slate-700 col-span-2">0</button>
+                            <button onClick={() => handleCalculatorInput('.')} className="calc-btn bg-slate-200 dark:bg-slate-700">.</button>
+                            <button onClick={() => handleOperator('=')} className="calc-btn bg-indigo-500 text-white">=</button>
                         </div>
-                        {/* Form */}
-                        <form onSubmit={handleSaveTransaction} className="space-y-4">
+                        <button onClick={() => setFormState(s => ({...s, amount: calculatorDisplay}))} className="w-full mt-4 p-2 bg-slate-300 dark:bg-slate-600 rounded-md text-sm font-semibold hover:bg-slate-400 dark:hover:bg-slate-500">Use this amount</button>
+                    </div>
+
+                    {/* Right Column: Form & History */}
+                    <div className="flex flex-col min-h-0 gap-4">
+                         {/* Form */}
+                        <form onSubmit={handleSaveTransaction} className="space-y-4 flex-shrink-0">
                             <div className="grid grid-cols-2 gap-2">
                                 <button type="button" onClick={() => setFormState(s => ({...s, type: 'income'}))} className={`p-3 rounded-lg font-semibold ${formState.type === 'income' ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Thu</button>
                                 <button type="button" onClick={() => setFormState(s => ({...s, type: 'expense'}))} className={`p-3 rounded-lg font-semibold ${formState.type === 'expense' ? 'bg-red-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Chi</button>
@@ -307,36 +308,37 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                             </div>
                             <button type="submit" className="w-full p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Save Transaction</button>
                         </form>
-                    </div>
-                    {/* Right: History */}
-                    <div className="flex flex-col min-h-0">
-                        <div className="flex justify-between items-center mb-2 flex-shrink-0">
-                            <h3 className="text-lg font-semibold">History</h3>
-                             <div className="flex gap-2">
-                                <input type="file" ref={importInputRef} onChange={handleFileImport} className="hidden" accept=".json"/>
-                                <button onClick={() => importInputRef.current?.click()} className="text-xs font-semibold p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Import</button>
-                                <button onClick={() => handleExport('json')} className="text-xs font-semibold p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Export JSON</button>
-                                <button onClick={() => handleExport('txt')} className="text-xs font-semibold p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Export TXT</button>
+                        
+                        {/* History */}
+                        <div className="flex flex-col min-h-0 flex-grow">
+                            <div className="flex justify-between items-center mb-2 flex-shrink-0">
+                                <h3 className="text-lg font-semibold">History</h3>
+                                 <div className="flex gap-2">
+                                    <input type="file" ref={importInputRef} onChange={handleFileImport} className="hidden" accept=".json"/>
+                                    <button onClick={() => importInputRef.current?.click()} className="text-xs font-semibold p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Import</button>
+                                    <button onClick={() => handleExport('json')} className="text-xs font-semibold p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Export JSON</button>
+                                    <button onClick={() => handleExport('txt')} className="text-xs font-semibold p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Export TXT</button>
+                                </div>
                             </div>
-                        </div>
-                        <div className="flex-grow overflow-y-auto bg-slate-100 dark:bg-slate-800 rounded-lg p-2 space-y-2">
-                           {paginatedTransactions.length > 0 ? paginatedTransactions.map(t => (
-                               <div key={t.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-700 rounded-md">
-                                   <div>
-                                       <p className="font-semibold">{t.description}</p>
-                                       <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(t.date).toLocaleString()}</p>
+                            <div className="flex-grow overflow-y-auto bg-slate-100 dark:bg-slate-800 rounded-lg p-2 space-y-2">
+                               {paginatedTransactions.length > 0 ? paginatedTransactions.map(t => (
+                                   <div key={t.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-700 rounded-md">
+                                       <div>
+                                           <p className="font-semibold">{t.description}</p>
+                                           <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(t.date).toLocaleString()}</p>
+                                       </div>
+                                       <p className={`font-bold ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString('vi-VN')} VNĐ</p>
                                    </div>
-                                   <p className={`font-bold ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString('vi-VN')} VNĐ</p>
-                               </div>
-                           )) : <p className="text-center text-slate-500 p-4">No transactions yet.</p>}
-                        </div>
-                        {totalPages > 1 && (
-                            <div className="flex justify-center items-center gap-2 mt-2 flex-shrink-0">
-                                <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="p-2 disabled:opacity-50">‹</button>
-                                <span className="text-sm">Page {currentPage} of {totalPages}</span>
-                                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages} className="p-2 disabled:opacity-50">›</button>
+                               )) : <p className="text-center text-slate-500 p-4">No transactions yet.</p>}
                             </div>
-                        )}
+                            {totalPages > 1 && (
+                                <div className="flex justify-center items-center gap-2 mt-2 flex-shrink-0">
+                                    <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="p-2 disabled:opacity-50">‹</button>
+                                    <span className="text-sm">Page {currentPage} of {totalPages}</span>
+                                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages} className="p-2 disabled:opacity-50">›</button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </>
