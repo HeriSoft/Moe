@@ -215,8 +215,9 @@ export async function generateImage(prompt: string, settings: any, user: UserPro
 // New function for image editing
 export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
     
-    // Create a base config object
-    const config: any = {};
+    // Create a config object from settings, excluding properties we don't want to send.
+    const config: any = { ...settings };
+    delete config.model; // model is passed separately.
 
     // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images (e.g. when applying outfits).
     // The Gemini API expects an `output` object within the `config`.
@@ -225,6 +226,12 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
             width: settings.outputSize.width,
             height: settings.outputSize.height,
         };
+    }
+    delete config.outputSize; // clean up
+
+    // Let's also handle the 'auto' aspect ratio here on the client-side to be safe.
+    if (config.aspectRatio === 'auto' || !config.aspectRatio) {
+        delete config.aspectRatio;
     }
 
     const response = await fetch('/api/proxy', {
@@ -236,7 +243,7 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
                 model: settings.model,
                 prompt,
                 images,
-                config: config, // Use the dynamically created config object
+                config: config, // Pass the constructed config object
                 user, // Pass user profile for logging
             }
         })
