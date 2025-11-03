@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CloseIcon, CheckCircleIcon, SparklesIcon } from './icons';
 import type { UserProfile } from '../types';
@@ -15,6 +16,7 @@ interface PaymentSettings {
   bankQrId?: string;
   momoQrId?: string;
   memoFormat?: string;
+  price30?: number;
 }
 
 const FeatureListItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -88,11 +90,14 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
     <>
       <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 sm:p-6 rounded-lg">
         <div className="text-center mb-6">
-          <p className="text-4xl font-bold text-slate-900 dark:text-white">250.000 VNĐ</p>
-          <p className="text-slate-500 dark:text-slate-400">/ tháng</p>
+          <p className="text-4xl font-bold text-slate-900 dark:text-white">{(settings?.price30 || 250000).toLocaleString('vi-VN')} VNĐ</p>
+          <p className="text-slate-500 dark:text-slate-400">/ tháng (~$10) + 500 Credits</p>
         </div>
 
         <ul className="space-y-4 text-sm sm:text-base">
+          <FeatureListItem>
+            Nhận ngay **500 Credits** để sử dụng cho các công cụ sáng tạo (Tạo ảnh, sửa ảnh, swap face).
+          </FeatureListItem>
           <FeatureListItem>
             Tạo hình ảnh với các mô hình **tiên tiến** (Imagen 4, DALL-E 3. Flux.1).
           </FeatureListItem>
@@ -148,7 +153,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
             {qrUrl ? <img src={qrUrl} alt={`${type} QR Code`} className="w-full h-full object-contain rounded-lg"/> : <p className="text-xs p-4">Admin has not set a QR code yet.</p>}
         </div>
         <div className="mt-4 space-y-2 text-sm">
-            <p>Số tiền: <strong className="text-lg">250.000 VNĐ</strong></p>
+            <p>Số tiền: <strong className="text-lg">{(settings?.price30 || 250000).toLocaleString('vi-VN')} VNĐ</strong></p>
             <p>Nội dung chuyển khoản:</p>
             <p className="font-mono text-base bg-slate-200 dark:bg-slate-900 inline-block px-3 py-1 rounded-md">{transferMemo}</p>
         </div>
