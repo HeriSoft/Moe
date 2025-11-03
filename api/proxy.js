@@ -65,6 +65,7 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS exp INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
 
@@ -135,6 +136,21 @@ async function invalidateUserProCache(email) {
         } catch (e) {
             console.error("Redis cache invalidation error:", e);
         }
+    }
+}
+
+// --- New Credit Deduction Helper ---
+async function deductCredits(email, amount) {
+    if (!email || amount <= 0) return false;
+    try {
+        const { rowCount } = await pool.query(
+            `UPDATE users SET credits = credits - $1 WHERE email = $2 AND credits >= $1;`,
+            [amount, email]
+        );
+        return rowCount > 0;
+    } catch (e) {
+        console.error(`Credit deduction error for ${email}:`, e);
+        return false;
     }
 }
 
@@ -344,7 +360,7 @@ export default async function handler(req, res) {
 
                     // Fetch the complete, updated profile from the database
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner FROM users WHERE email = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner FROM users WHERE email = $1;`,
                         [user.email]
                     );
                     
@@ -361,6 +377,7 @@ export default async function handler(req, res) {
                             level: dbUser.level,
                             exp: dbUser.exp,
                             points: dbUser.points,
+                            credits: dbUser.credits,
                             hasPermanentNameColor: dbUser.has_permanent_name_color,
                             hasSakuraBanner: dbUser.has_sakura_banner,
                         };
@@ -480,11 +497,11 @@ export default async function handler(req, res) {
                         case 'exp_500': expToAdd = 500; break;
                         case 'exp_2000': expToAdd = 2000; break;
                         case 'premium_1m':
-                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '30 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
+                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '30 days'::interval, subscription_status = 'active', credits = credits + 500, updated_at = NOW() WHERE id = $1;`, [id]);
                             await invalidateUserProCache(userEmail);
                             break;
                         case 'premium_1y':
-                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '365 days'::interval, subscription_status = 'active', updated_at = NOW() WHERE id = $1;`, [id]);
+                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '365 days'::interval, subscription_status = 'active', credits = credits + 6000, updated_at = NOW() WHERE id = $1;`, [id]);
                             await invalidateUserProCache(userEmail);
                             break;
                         case 'ticket_1':
@@ -512,7 +529,7 @@ export default async function handler(req, res) {
                     await client.query('COMMIT');
 
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, has_permanent_name_color, has_sakura_banner FROM users WHERE id = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner FROM users WHERE id = $1;`,
                         [id]
                     );
                     const dbUser = rows[0];
@@ -521,6 +538,7 @@ export default async function handler(req, res) {
                         subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
+                        credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
                     };
                     result = { success: true, user: fullUserProfile };
@@ -693,7 +711,14 @@ export default async function handler(req, res) {
             }
 
             case 'generateImages': {
-                await logAction(userEmail, `generated an image with ${payload.model}`);
+                const GENERATE_COST = 4;
+                if (!isAdmin) {
+                    const canAfford = await deductCredits(userEmail, GENERATE_COST);
+                    if (!canAfford) {
+                        return res.status(403).json({ error: 'Forbidden', details: 'Not enough credits to generate images.' });
+                    }
+                }
+                await logAction(userEmail, `generated an image with ${payload.model} (cost: ${GENERATE_COST} credits)`);
                 const { model, prompt, config } = payload;
                 if (model === 'dall-e-3') {
                     if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
@@ -719,7 +744,14 @@ export default async function handler(req, res) {
             }
 
             case 'editImage': {
-                await logAction(userEmail, 'edited an image');
+                const EDIT_COST = 4;
+                if (!isAdmin) {
+                    const canAfford = await deductCredits(userEmail, EDIT_COST);
+                    if (!canAfford) {
+                        return res.status(403).json({ error: 'Forbidden', details: 'Not enough credits to edit this image.' });
+                    }
+                }
+                await logAction(userEmail, `edited an image (cost: ${EDIT_COST} credits)`);
                 if (!ai) throw new Error("Gemini API key not configured.");
                 const { prompt, images, config: payloadConfig } = payload;
                 const imageParts = images.map(img => ({
@@ -747,7 +779,14 @@ export default async function handler(req, res) {
             }
 
             case 'swapFace': {
-                await logAction(userEmail, 'played Swapface');
+                const SWAP_COST = 2;
+                if (!isAdmin) {
+                    const canAfford = await deductCredits(userEmail, SWAP_COST);
+                    if (!canAfford) {
+                        return res.status(403).json({ error: 'Forbidden', details: 'Not enough credits for face swap.' });
+                    }
+                }
+                await logAction(userEmail, `played Swapface (cost: ${SWAP_COST} credits)`);
                 const { targetImage, sourceImage } = payload;
                 const GRADIO_PUBLIC_URL = "https://87dfe633f24cc394a3.gradio.live";
                 
