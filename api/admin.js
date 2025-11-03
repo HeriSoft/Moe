@@ -68,6 +68,7 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0;');
 
 
         console.log("Table 'users' is ready.");
@@ -167,7 +168,7 @@ export default async function handler(req, res) {
                 }
                 if (actionQuery === 'get_all_users') {
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points FROM users ORDER BY name;`
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points, credits FROM users ORDER BY name;`
                     );
                     const users = rows.map(user => ({
                         ...user,
@@ -216,7 +217,7 @@ export default async function handler(req, res) {
                         id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
                         subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
-                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
                     };
 
@@ -255,22 +256,24 @@ export default async function handler(req, res) {
                 }
                 if (action === 'set_subscription') {
                     if (!email || !days) return res.status(400).json({ error: 'Email and days are required.' });
+                    const creditsToAdd = Math.floor(parseInt(days, 10) / 30) * 500;
                     await pool.query(
-                        `UPDATE users SET subscription_expires_at = NOW() + ($1 * interval '1 day'), subscription_status = 'active', updated_at = NOW() WHERE email = $2;`,
-                        [days, email]
+                        `UPDATE users SET subscription_expires_at = NOW() + ($1 * interval '1 day'), subscription_status = 'active', credits = credits + $3, updated_at = NOW() WHERE email = $2;`,
+                        [days, email, creditsToAdd]
                     );
                     await invalidateUserProCache(email);
-                    await logAction(ADMIN_EMAIL, `set membership for ${email} to ${days} days.`);
+                    await logAction(ADMIN_EMAIL, `set membership for ${email} to ${days} days and added ${creditsToAdd} credits.`);
                     return res.status(200).json({ success: true });
                 }
                 if (action === 'extend_subscription') {
                     if (!email || !days) return res.status(400).json({ error: 'Email and days are required.' });
+                    const creditsToExtend = Math.floor(parseInt(days, 10) / 30) * 500;
                     await pool.query(
-                       `UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + ($1 * interval '1 day'), subscription_status = 'active', updated_at = NOW() WHERE email = $2;`,
-                       [days, email]
+                       `UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + ($1 * interval '1 day'), subscription_status = 'active', credits = credits + $3, updated_at = NOW() WHERE email = $2;`,
+                       [days, email, creditsToExtend]
                     );
                     await invalidateUserProCache(email);
-                    await logAction(ADMIN_EMAIL, `extended membership for ${email} by ${days} days.`);
+                    await logAction(ADMIN_EMAIL, `extended membership for ${email} by ${days} days and added ${creditsToExtend} credits.`);
                     return res.status(200).json({ success: true });
                 }
                 if (action === 'remove_subscription') {
@@ -292,6 +295,28 @@ export default async function handler(req, res) {
                     await logAction(ADMIN_EMAIL, `set moderator status for ${email} to ${isModerator}.`);
                     return res.status(200).json({ success: true });
                 }
+                if (action === 'add_credits_admin') {
+                    if (!email || amount === undefined) return res.status(400).json({ error: 'Email and amount are required.' });
+                    const amountNum = parseInt(amount, 10);
+                    if (isNaN(amountNum)) return res.status(400).json({ error: 'Amount must be a valid number.' });
+
+                    const { rows } = await pool.query(
+                        `UPDATE users SET credits = credits + $1 WHERE email = $2 RETURNING *;`,
+                        [amountNum, email]
+                    );
+                    if (rows.length === 0) throw new Error('Target user not found.');
+
+                    const dbUser = rows[0];
+                    const fullUserProfile = {
+                        id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                        subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                        isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
+                        hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                    };
+                    await logAction(ADMIN_EMAIL, `${amountNum >= 0 ? 'added' : 'removed'} ${Math.abs(amountNum)} credits ${amountNum >= 0 ? 'to' : 'from'} ${email}.`);
+                    return res.status(200).json({ success: true, user: fullUserProfile });
+                }
                 if (action === 'add_points_admin') {
                     if (!email || !amount) return res.status(400).json({ error: 'Email and amount are required.' });
                     const amountNum = parseInt(amount, 10);
@@ -309,7 +334,7 @@ export default async function handler(req, res) {
                         id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
                         subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
-                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
                     };
 
