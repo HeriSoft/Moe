@@ -174,7 +174,7 @@ export async function streamModelResponse(
 
 
 // Updated to handle different models and settings
-export async function generateImage(prompt: string, settings: any, user: UserProfile | undefined): Promise<Attachment[]> {
+export async function generateImage(prompt: string, settings: any, user: UserProfile | undefined): Promise<{ attachments: Attachment[], newCreditBalance: number }> {
     const response = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -202,18 +202,27 @@ export async function generateImage(prompt: string, settings: any, user: UserPro
     const data = await response.json();
 
     if (data.generatedImages && data.generatedImages.length > 0) {
-        return data.generatedImages.map((img: any) => ({
-             data: img.image.imageBytes,
-             mimeType: 'image/png',
-             fileName: `${prompt.substring(0, 20)}.png`
-        }));
-    } else {
+        return {
+            attachments: data.generatedImages.map((img: any) => ({
+                 data: img.image.imageBytes,
+                 mimeType: 'image/png',
+                 fileName: `${prompt.substring(0, 20)}.png`
+            })),
+            newCreditBalance: data.newCreditBalance,
+        };
+    } else if (data.attachments) { // Handle Gemini Flash Image response
+        return {
+            attachments: data.attachments,
+            newCreditBalance: data.newCreditBalance,
+        };
+    }
+    else {
         throw new Error("Image generation failed.");
     }
 }
 
 // New function for image editing
-export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
+export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[], newCreditBalance: number }> {
     
     // Create a config object from settings, excluding properties we don't want to send.
     const config: any = { ...settings };
@@ -290,7 +299,7 @@ export async function generateSpeech(text: string, user: UserProfile | undefined
 }
 
 // New function for face swapping using a Gradio API
-export async function swapFace(targetImage: Attachment, sourceImage: Attachment, user: UserProfile | undefined): Promise<Attachment> {
+export async function swapFace(targetImage: Attachment, sourceImage: Attachment, user: UserProfile | undefined): Promise<{ attachment: Attachment, newCreditBalance: number }> {
     console.log("Calling local proxy for face swap...");
 
     const response = await fetch('/api/proxy', {
@@ -322,7 +331,7 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment,
         const result = await response.json();
         console.log("Proxy API response for swapFace:", JSON.stringify(result, null, 2));
 
-        if (!result || !result.data || !result.mimeType) {
+        if (!result || !result.attachment || !result.attachment.data || !result.attachment.mimeType) {
             console.error("Invalid response from proxy for face swap. Missing image data.", result);
             throw new Error("Invalid response from proxy for face swap. Missing image data.");
         }
