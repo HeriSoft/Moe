@@ -102,7 +102,7 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
             Tạo hình ảnh với các mô hình **tiên tiến** (Imagen 4, DALL-E 3. Flux.1).
           </FeatureListItem>
           <FeatureListItem>
-            Truy cập vào công cụ **chỉnh sửa hình ảnh** mạnh mẽ của mô hình: Banana Gemini và Flux Kontext.
+            Truy cập vào công cụ **chỉnh sửa hình ảnh** mạnh mẽ của mô hình: Banana Gemini, Flux Kontext, QWen..
           </FeatureListItem>
           <FeatureListItem>
             Mở khóa tính năng **Face Swap** để thỏa sức sáng tạo.
@@ -111,13 +111,13 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
             Tạo âm thanh **Chuyển văn bản thành giọng nói** chất lượng cao.
           </FeatureListItem>
            <FeatureListItem>
-            Truy cập các mô hình **độc quyền** như GPT-5, Claude và GPT-o3.
+            Truy cập các mô hình LLM **mạnh mẽ** như GPT-5, o3.
           </FeatureListItem>
           <FeatureListItem>
-            Tạo video bằng tính năng **Tạo video mô hình**: Veo, Kling sắp ra mắt.
+            Tạo video bằng tính năng **Tạo video mạnh mẽ**: Veo3, Kling, Wan (2.1 + 2.2 Lora), Sora 2 (sắp ra mắt).
           </FeatureListItem>
           <FeatureListItem>
-            Quyền truy cập ưu tiên vào tất cả **Tính năng mới** khi chúng được phát hành.
+            Quyền truy cập ưu tiên vào tất cả **Tính năng mới** khi được phát hành.
           </FeatureListItem>
         </ul>
       </div>
@@ -229,4 +229,5 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
     </div>
   );
 };
+
 
