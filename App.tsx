@@ -17,6 +17,7 @@ import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal';
 import { MusicBoxModal } from './components/MusicBoxModal'; 
 import { AdminMusicModal } from './components/AdminMusicModal'; 
 import { PianoModal } from './components/PianoModal';
+import { ExpenseTrackerModal } from './components/ExpenseTrackerModal';
 import {
   streamModelResponse,
   addExp,
@@ -127,6 +128,9 @@ const App: React.FC = () => {
 
   // --- New Piano Modal State ---
   const [isPianoModalOpen, setIsPianoModalOpen] = useState(false);
+
+  // --- NEW: Expense Tracker Modal State ---
+  const [isExpenseTrackerOpen, setIsExpenseTrackerOpen] = useState(false);
 
   // --- New Welcome Modal State ---
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(() => {
@@ -1046,6 +1050,7 @@ const App: React.FC = () => {
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
+          onOpenExpenseTracker={() => setIsExpenseTrackerOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
           musicBoxState={musicBoxState}
@@ -1182,6 +1187,11 @@ const App: React.FC = () => {
       <PianoModal 
         isOpen={isPianoModalOpen}
         onClose={() => setIsPianoModalOpen(false)}
+      />
+      <ExpenseTrackerModal
+        isOpen={isExpenseTrackerOpen}
+        onClose={() => setIsExpenseTrackerOpen(false)}
+        userProfile={userProfile}
       />
     </div>
   );
