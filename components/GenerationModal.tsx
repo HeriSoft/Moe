@@ -133,6 +133,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [isMixOutfit, setIsMixOutfit] = useState(false);
     const [customPosePrompt, setCustomPosePrompt] = useState('');
     const [isCustomPose, setIsCustomPose] = useState(false);
+    const [usePoseRefImage, setUsePoseRefImage] = useState(false);
+    const [poseRefImage, setPoseRefImage] = useState<Attachment | null>(null);
     const [backgroundPrompt, setBackgroundPrompt] = useState('');
     const [selectedPose, setSelectedPose] = useState<string | null>(null);
     const [selectedExpression, setSelectedExpression] = useState<string | null>(null);
@@ -148,6 +150,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const pixshopImageRef = useRef<HTMLImageElement>(null);
     const [toolPrompt, setToolPrompt] = useState<ToolPromptState | null>(null);
     const [selectedEffect, setSelectedEffect] = useState<string>('handle_sketch');
+    const poseRefInputRef = useRef<HTMLInputElement>(null);
 
     // Canvas tools state
     const [isDrawing, setIsDrawing] = useState(false);
@@ -169,6 +172,14 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const textRef = useRef<HTMLDivElement>(null);
     const [isDraggingText, setIsDraggingText] = useState(false);
     const textDragStartOffset = useRef({ x: 0, y: 0 });
+
+    const cost = useMemo(() => {
+        if (activeMode === 'image') return 4;
+        if (activeMode === 'edit' || activeMode === 'pixshop') return 4;
+        if (activeMode === 'faceSwap') return 2;
+        return 0;
+    }, [activeMode]);
+    const isAdmin = userProfile?.email === 'heripixiv@gmail.com';
 
 
     const handleSetImage = (
@@ -239,6 +250,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setIsLoading(false); setError(null); setActiveMode('image');
             setIsAdvancedStyle(false); setSelectedOutfits([]); setIsMixOutfit(false);
             setSelectedPose(null); setSelectedExpression(null); setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
+            setUsePoseRefImage(false); setPoseRefImage(null);
             setPixshopImage(null); setPixshopOutput(null); setPixshopAdjustments({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
             setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
             setToolPrompt(null);
@@ -254,7 +266,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
       setToolPrompt(null);
     }, [activeMode]);
     
-    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
+    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt && !usePoseRefImage) || (isCustomPose && usePoseRefImage && poseRefImage) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, usePoseRefImage, poseRefImage, selectedExpression, selectedOutfits, backgroundPrompt]);
 
     const handleGenericApiCall = async (apiCall: () => Promise<Attachment[]>) => {
         setIsLoading(true);
@@ -331,8 +343,18 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!inputImage1) { setError("Please upload an image to edit first."); return; }
         const promptParts: string[] = [];
         const additionalImages: Attachment[] = [];
-        if (selectedPose) promptParts.push(`Change the person's pose to: ${selectedPose}.`);
-        else if (isCustomPose && customPosePrompt) promptParts.push(`Change the person's pose to: ${customPosePrompt}.`);
+        
+        if (isCustomPose) {
+            if (usePoseRefImage && poseRefImage) {
+                promptParts.push("Change the person's pose to match the pose in the provided reference image.");
+                additionalImages.push(poseRefImage);
+            } else if (customPosePrompt) {
+                promptParts.push(`Change the person's pose to: ${customPosePrompt}.`);
+            }
+        } else if (selectedPose) {
+            promptParts.push(`Change the person's pose to: ${selectedPose}.`);
+        }
+
         if (selectedExpression) promptParts.push(`Change the person's facial expression to: ${selectedExpression}.`);
         const outfitsToApply = userOutfits.filter(o => selectedOutfits.includes(o.fileName));
         if (outfitsToApply.length > 0) {
@@ -352,6 +374,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
              const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], finalEditSettings, userProfile);
              setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
              setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
+             setUsePoseRefImage(false); setPoseRefImage(null);
              return attachments;
         });
     };
@@ -903,7 +926,29 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
                                                             <h4 className="text-sm font-semibold mb-2">Pose</h4>
-                                                            {isCustomPose ? <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className="input-style w-full"/> : <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 text-xs">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>}
+                                                            {isCustomPose ? (
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-center gap-2 text-xs">
+                                                                        <input type="checkbox" id="pose-ref-toggle" checked={usePoseRefImage} onChange={e => { setUsePoseRefImage(e.target.checked); if (!e.target.checked) setPoseRefImage(null); }}/>
+                                                                        <label htmlFor="pose-ref-toggle">Pose Ref</label>
+                                                                    </div>
+                                                                    {usePoseRefImage && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <input type="file" ref={poseRefInputRef} onChange={e => e.target.files && handleSetImage(setPoseRefImage)(e.target.files[0])} className="hidden" accept="image/*"/>
+                                                                            <button type="button" onClick={() => poseRefInputRef.current?.click()} className="text-xs p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600">Upload</button>
+                                                                            {poseRefImage && (
+                                                                                <div className="relative">
+                                                                                    <img src={`data:${poseRefImage.mimeType};base64,${poseRefImage.data}`} className="w-10 h-10 rounded object-cover"/>
+                                                                                    <button onClick={() => setPoseRefImage(null)} className="absolute -top-1 -right-1 p-0.5 bg-black/60 text-white rounded-full"><CloseIcon className="w-3 h-3"/></button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                    <input type="text" value={customPosePrompt} onChange={e => setCustomPosePrompt(e.target.value)} placeholder="e.g., dancing in the rain" className={`input-style w-full ${usePoseRefImage ? 'bg-slate-100 dark:bg-slate-800 opacity-50' : ''}`} disabled={usePoseRefImage}/>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 text-xs">{POSES.map(p => <button key={p.label} onClick={() => handlePoseClick(p.prompt)} className={`p-2 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 ${selectedPose === p.prompt ? 'ring-2 ring-indigo-500' : ''}`}>{p.label}</button>)}</div>
+                                                            )}
                                                             <div className="flex items-center gap-2 mt-2 text-xs"><input type="checkbox" id="custom-pose" checked={isCustomPose} onChange={e => setIsCustomPose(e.target.checked)}/><label htmlFor="custom-pose">Custom Pose</label></div>
                                                         </div>
                                                         <div>
@@ -922,6 +967,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 )}
                             </div>
                             <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
+                                <div className="text-center text-sm text-slate-500 dark:text-slate-400 mb-2">
+                                    Cost: <span className="font-semibold">{isAdmin ? 'Free for Admin' : `${cost} Credits`}</span>
+                                </div>
                                 {activeMode === 'edit' && isAdvancedStyle ? (
                                     <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Applying...' : 'Apply Advanced Styles'}</button>
                                 ) : (
@@ -965,6 +1013,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                </div>
                            </div>
                            <div className="flex flex-col sm:grid sm:grid-cols-2 gap-4 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+                                <div className="col-span-full text-center text-xs text-slate-400 -mb-2">
+                                    Each Pixshop action costs <span className="font-semibold">{isAdmin ? '0 (Admin)' : `${cost} Credits`}</span>.
+                                </div>
                                {pixshopMode === 'idle' && (
                                    <>
                                         <div className="space-y-4">
