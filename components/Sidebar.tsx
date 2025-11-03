@@ -129,7 +129,12 @@ const UserProfileSection: React.FC<{
                         style={{ width: `${progress}%` }}
                     ></div>
                 </div>
-                 <div className="text-right text-xs mt-1 text-slate-400">{progress}%</div>
+                 <div className="text-right text-xs mt-1 flex justify-between">
+                    <span className="bg-gradient-to-r from-green-400 to-orange-400 bg-clip-text text-transparent font-bold">
+                        Credits: {userProfile.credits?.toLocaleString() ?? 0}
+                    </span>
+                    <span className="text-slate-400">{progress}%</span>
+                </div>
             </div>
 
             <div className="w-full mt-2 space-y-2">
