@@ -9,6 +9,7 @@ type AdminUser = UserProfile & {
     isModerator?: boolean;
     isPro?: boolean;
     points?: number;
+    credits?: number;
     hasPermanentNameColor?: boolean;
     hasSakuraBanner?: boolean;
 };
@@ -319,6 +320,7 @@ const MembershipManagement: React.FC<{ users: AdminUser[], userProfile: UserProf
 const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, onUpdate: () => void, setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>> }> = ({ users, userProfile, onUpdate, setUserProfile }) => {
      const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
      const [pointsToAdd, setPointsToAdd] = useState<Record<string, string>>({});
+     const [creditsToAdd, setCreditsToAdd] = useState<Record<string, string>>({});
 
     const handleToggleMod = async (email: string, currentStatus: boolean) => {
         setIsSubmitting(email + '_mod');
@@ -389,6 +391,32 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
         }
     };
 
+    const handleCreditAction = async (email: string) => {
+        const amount = parseInt(creditsToAdd[email] || '0', 10);
+        if (!amount) return;
+
+        setIsSubmitting(email + '_credits');
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'add_credits_admin', email, amount }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Failed to update credits.');
+            
+            if (email === userProfile.email) {
+                setUserProfile(result.user);
+            }
+            onUpdate();
+            setCreditsToAdd(prev => ({ ...prev, [email]: '' }));
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
+
     return (
         <div className="space-y-2">
             {users.map(user => (
@@ -402,10 +430,31 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
                                 {user.isPro && <VipTag />}
                             </p>
                             <p className="text-sm text-slate-500 truncate">{user.email}</p>
-                            <p className="text-xs text-slate-400 mt-1">Points: {user.points?.toLocaleString() || 0}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                Points: {user.points?.toLocaleString() || 0} | Credits: {user.credits?.toLocaleString() || 0}
+                            </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                         <div className="flex items-center gap-1">
+                            <input
+                                type="number"
+                                placeholder="Credits"
+                                value={creditsToAdd[user.email] || ''}
+                                onChange={(e) => setCreditsToAdd(p => ({ ...p, [user.email]: e.target.value }))}
+                                className="w-20 p-1 text-sm rounded-md bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600"
+                                disabled={isSubmitting?.startsWith(user.email)}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => handleCreditAction(user.email)}
+                                disabled={isSubmitting?.startsWith(user.email) || !creditsToAdd[user.email] || parseInt(creditsToAdd[user.email]) === 0}
+                                className="p-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"
+                                title="Add/Remove Credits"
+                            >
+                                <PlusIcon className="w-4 h-4" />
+                            </button>
+                        </div>
                          <div className="flex items-center gap-1">
                             <input
                                 type="number"
@@ -485,6 +534,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 email: user.email,
                 imageUrl: user.image_url,
                 points: user.points,
+                credits: user.credits,
                 isPro: user.isPro,
                 subscriptionExpiresAt: user.subscriptionExpiresAt,
                 isModerator: user.isModerator,
