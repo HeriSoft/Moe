@@ -611,7 +611,9 @@ const App: React.FC = () => {
       console.error("Error sending message:", error);
       const detailedError = error instanceof Error ? error.message : String(error);
 
-      if (detailedError.includes('This is a Pro feature')) {
+      if (detailedError.includes('Not enough credits')) {
+            setNotifications(prev => [`You don't have enough credits for this action. Please top up.`, ...prev.slice(0, 19)]);
+      } else if (detailedError.includes('This is a Pro feature')) {
           if (userProfile?.email !== ADMIN_EMAIL) {
             handleProFeatureBlock();
           }
@@ -1099,6 +1101,7 @@ const App: React.FC = () => {
         setNotifications={setNotifications}
         onProFeatureBlock={handleProFeatureBlock}
         handleExpGain={handleExpGain}
+        setUserProfile={setUserProfile}
       />
       <MediaGalleryModal
           isOpen={isMediaGalleryOpen}
