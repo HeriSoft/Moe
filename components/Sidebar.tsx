@@ -117,7 +117,7 @@ const UserProfileSection: React.FC<{
                 </div>
             </button>
 
-            {/* EXP BAR */}
+            {/* EXP BAR & CREDITS */}
             <div className="w-full mt-2 px-2">
                 <div className="flex justify-between items-center text-xs mb-1">
                     <span className="font-bold text-slate-300">Lv. {level}</span>
@@ -129,7 +129,15 @@ const UserProfileSection: React.FC<{
                         style={{ width: `${progress}%` }}
                     ></div>
                 </div>
-                 <div className="text-right text-xs mt-1 text-slate-400">{progress}%</div>
+                <div className="flex justify-between items-center text-xs mt-1">
+                    <div className="flex items-center gap-1">
+                        <TicketIcon className="w-4 h-4 text-green-400" />
+                        <span className="font-bold bg-gradient-to-r from-green-400 to-amber-400 bg-clip-text text-transparent">
+                            {(userProfile.credits ?? 0).toLocaleString()} Credits
+                        </span>
+                    </div>
+                    <div className="text-slate-400">{progress}%</div>
+                </div>
             </div>
 
             <div className="w-full mt-2 space-y-2">
