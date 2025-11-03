@@ -47,6 +47,7 @@ export interface UserProfile {
     level?: number; // For user level
     exp?: number; // For user experience points
     points?: number; // For game portal points
+    credits: number; // For creative tools
     hasPermanentNameColor?: boolean; // For lucky wheel reward
     hasSakuraBanner?: boolean; // For lucky wheel reward
 }
