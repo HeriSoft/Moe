@@ -1099,7 +1099,6 @@ const App: React.FC = () => {
         setNotifications={setNotifications}
         onProFeatureBlock={handleProFeatureBlock}
         handleExpGain={handleExpGain}
-        setUserProfile={setUserProfile}
       />
       <MediaGalleryModal
           isOpen={isMediaGalleryOpen}
