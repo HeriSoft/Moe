@@ -10,10 +10,22 @@ interface ExpenseTrackerModalProps {
 
 const ITEMS_PER_PAGE = 5;
 
-const StatDisplay: React.FC<{ title: string, data: { diff: number, percent: number } }> = ({ title, data }) => {
+const StatDisplay: React.FC<{ title: string; data: { diff: number; percent: number }; type: 'income' | 'expense' }> = ({ title, data, type }) => {
     const isIncrease = data.diff > 0;
     const isDecrease = data.diff < 0;
-    const colorClass = isIncrease ? 'text-red-500' : isDecrease ? 'text-green-500' : 'text-slate-500 dark:text-slate-400';
+    const noChange = data.diff === 0;
+
+    let colorClass = 'text-slate-500 dark:text-slate-400';
+    if (!noChange) {
+        if (type === 'income') {
+            // For income: increase is good (green), decrease is bad (red)
+            colorClass = isIncrease ? 'text-green-500' : 'text-red-500';
+        } else { // expense
+            // For expense: increase is bad (red), decrease is good (green)
+            colorClass = isIncrease ? 'text-red-500' : 'text-green-500';
+        }
+    }
+    
     const arrow = isIncrease ? '▲' : isDecrease ? '▼' : '';
 
     return (
@@ -31,6 +43,7 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [formState, setFormState] = useState({ type: 'expense' as 'income' | 'expense', amount: '', description: '' });
   const [currentPage, setCurrentPage] = useState(1);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [calculatorDisplay, setCalculatorDisplay] = useState('0');
   const [calculatorState, setCalculatorState] = useState({ value: null as number | null, waitingForOperand: false, operator: null as string | null });
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -151,22 +164,68 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
     setCalculatorState({ value: null, waitingForOperand: false, operator: null });
   };
   
-  const handleSaveTransaction = (e: React.FormEvent) => {
+  const handleSelectTransaction = (transaction: Transaction) => {
+    const transactionDate = new Date(transaction.date);
+    const year = transactionDate.getFullYear();
+    const month = String(transactionDate.getMonth() + 1).padStart(2, '0');
+    const day = String(transactionDate.getDate()).padStart(2, '0');
+
+    setEditingId(transaction.id);
+    setDate(`${year}-${month}-${day}`);
+    setFormState({
+      type: transaction.type,
+      amount: String(transaction.amount),
+      description: transaction.description,
+    });
+    setCalculatorDisplay(String(transaction.amount));
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormState({ type: 'expense', amount: '', description: '' });
+    setDate(new Date().toISOString().split('T')[0]);
+  };
+
+  const handleDeleteTransaction = () => {
+    if (!editingId) return;
+    if (window.confirm("Are you sure you want to delete this transaction? This action cannot be undone.")) {
+        setTransactions(prev => prev.filter(t => t.id !== editingId));
+        handleCancelEdit();
+    }
+  };
+
+  const handleSubmitTransaction = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(formState.amount);
     if (!amount || amount <= 0 || !formState.description) {
       alert("Please enter a valid amount and description.");
       return;
     }
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
-      date: new Date(date).toISOString(),
-      type: formState.type,
-      amount: amount,
-      description: formState.description
-    };
-    setTransactions(prev => [newTransaction, ...prev]);
-    setFormState({ type: 'expense', amount: '', description: '' });
+
+    // By appending T00:00:00, we tell the Date constructor to parse it in the local timezone,
+    // not UTC. This prevents the timezone shift issue.
+    const localDate = new Date(`${date}T00:00:00`);
+
+    if (editingId) {
+        const updatedTransaction: Transaction = {
+            id: editingId,
+            date: localDate.toISOString(),
+            type: formState.type,
+            amount,
+            description: formState.description
+        };
+        setTransactions(prev => prev.map(t => t.id === editingId ? updatedTransaction : t));
+    } else {
+        const newTransaction: Transaction = {
+          id: Date.now().toString(),
+          date: localDate.toISOString(),
+          type: formState.type,
+          amount,
+          description: formState.description
+        };
+        setTransactions(prev => [newTransaction, ...prev]);
+    }
+    handleCancelEdit();
   };
 
   const handleExport = (format: 'json' | 'txt') => {
@@ -256,7 +315,7 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
         {!userProfile ? (
             <div className="flex-grow flex items-center justify-center text-center"><p>Please sign in to use the expense tracker.</p></div>
         ) : (
-            <>
+            <div className="flex flex-col flex-grow min-h-0">
                 <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg mb-4 flex flex-col sm:flex-row justify-between items-center flex-shrink-0 gap-4">
                     <div className="flex items-center gap-4">
                         <div>
@@ -269,8 +328,8 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                         </div>
                     </div>
                      <div className="flex items-center gap-4 text-xs p-2 rounded-md bg-white dark:bg-slate-700/50">
-                        <StatDisplay title="Thu tháng này" data={monthlyStats.income} />
-                        <StatDisplay title="Chi tháng này" data={monthlyStats.expense} />
+                        <StatDisplay title="Thu tháng này" data={monthlyStats.income} type="income" />
+                        <StatDisplay title="Chi tháng này" data={monthlyStats.expense} type="expense" />
                     </div>
                 </div>
 
@@ -293,7 +352,7 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                     {/* Right Column: Form & History */}
                     <div className="flex flex-col min-h-0 gap-4">
                          {/* Form */}
-                        <form onSubmit={handleSaveTransaction} className="space-y-4 flex-shrink-0">
+                        <form onSubmit={handleSubmitTransaction} className="space-y-4 flex-shrink-0">
                             <div className="grid grid-cols-2 gap-2">
                                 <button type="button" onClick={() => setFormState(s => ({...s, type: 'income'}))} className={`p-3 rounded-lg font-semibold ${formState.type === 'income' ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Thu</button>
                                 <button type="button" onClick={() => setFormState(s => ({...s, type: 'expense'}))} className={`p-3 rounded-lg font-semibold ${formState.type === 'expense' ? 'bg-red-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Chi</button>
@@ -306,7 +365,17 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                                 <label htmlFor="description" className="label-style">Nội dung</label>
                                 <input id="description" type="text" value={formState.description} onChange={e => setFormState(s => ({...s, description: e.target.value}))} required className="input-style mt-1" placeholder="e.g., Coffee with friends"/>
                             </div>
-                            <button type="submit" className="w-full p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Save Transaction</button>
+                            {editingId ? (
+                                <div className="grid grid-cols-1 gap-2">
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button type="submit" className="w-full p-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 col-span-2">Save</button>
+                                        <button type="button" onClick={handleDeleteTransaction} className="w-full p-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700">Delete</button>
+                                    </div>
+                                    <button type="button" onClick={handleCancelEdit} className="w-full p-2 bg-slate-500 text-white font-semibold rounded-lg hover:bg-slate-600">Cancel</button>
+                                </div>
+                            ) : (
+                                <button type="submit" className="w-full p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Save Transaction</button>
+                            )}
                         </form>
                         
                         {/* History */}
@@ -322,13 +391,13 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                             </div>
                             <div className="flex-grow overflow-y-auto bg-slate-100 dark:bg-slate-800 rounded-lg p-2 space-y-2">
                                {paginatedTransactions.length > 0 ? paginatedTransactions.map(t => (
-                                   <div key={t.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-700 rounded-md">
+                                   <button key={t.id} onClick={() => handleSelectTransaction(t)} className={`w-full text-left flex justify-between items-center p-3 bg-white dark:bg-slate-700 rounded-md transition-all ${editingId === t.id ? 'ring-2 ring-indigo-500' : 'hover:bg-slate-50 dark:hover:bg-slate-600'}`}>
                                        <div>
                                            <p className="font-semibold">{t.description}</p>
-                                           <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(t.date).toLocaleString()}</p>
+                                           <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(t.date).toLocaleString('vi-VN')}</p>
                                        </div>
                                        <p className={`font-bold ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString('vi-VN')} VNĐ</p>
-                                   </div>
+                                   </button>
                                )) : <p className="text-center text-slate-500 p-4">No transactions yet.</p>}
                             </div>
                             {totalPages > 1 && (
@@ -341,7 +410,7 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                         </div>
                     </div>
                 </div>
-            </>
+            </div>
         )}
       </div>
       <style>{`
