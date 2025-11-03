@@ -112,9 +112,9 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
   };
 
   const plans: RenewalPlan[] = [
-    { days: 30, price: paymentSettings?.price30 || 250000, name: '1 Month', credits: 500 },
-    { days: 90, price: paymentSettings?.price90 || 700000, name: '3 Months', credits: 1500 },
-    { days: 360, price: paymentSettings?.price360 || 2500000, name: '1 Year', credits: 6000 },
+    { days: 30, price: paymentSettings?.price30 || 260000, name: '1 Month', credits: 500 },
+    { days: 90, price: paymentSettings?.price90 || 750000, name: '3 Months', credits: 1500 },
+    { days: 360, price: paymentSettings?.price360 || 3000000, name: '1 Year', credits: 6000 },
   ];
 
   const renderRenewPayment = () => {
@@ -200,3 +200,4 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
     </div>
   );
 };
+
