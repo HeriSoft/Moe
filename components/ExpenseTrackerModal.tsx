@@ -274,7 +274,7 @@ export const ExpenseTrackerModal: React.FC<ExpenseTrackerModalProps> = ({ isOpen
                     </div>
                 </div>
 
-                <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
+                <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0 overflow-y-auto">
                     {/* Left Column: Calculator */}
                     <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg flex flex-col">
                         <div className="bg-white dark:bg-slate-900 rounded p-2 text-right text-3xl font-mono mb-4">{calculatorDisplay}</div>
