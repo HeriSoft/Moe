@@ -496,13 +496,11 @@ export default async function handler(req, res) {
                         case 'exp_100': expToAdd = 100; break;
                         case 'exp_500': expToAdd = 500; break;
                         case 'exp_2000': expToAdd = 2000; break;
-                        case 'premium_1m':
-                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '30 days'::interval, subscription_status = 'active', credits = credits + 500, updated_at = NOW() WHERE id = $1;`, [id]);
-                            await invalidateUserProCache(userEmail);
+                        case 'credits_2':
+                            await client.query('UPDATE users SET credits = credits + 2, updated_at = NOW() WHERE id = $1;', [id]);
                             break;
-                        case 'premium_1y':
-                            await client.query(`UPDATE users SET subscription_expires_at = COALESCE(subscription_expires_at, NOW()) + '365 days'::interval, subscription_status = 'active', credits = credits + 6000, updated_at = NOW() WHERE id = $1;`, [id]);
-                            await invalidateUserProCache(userEmail);
+                        case 'credits_10':
+                            await client.query('UPDATE users SET credits = credits + 10, updated_at = NOW() WHERE id = $1;', [id]);
                             break;
                         case 'ticket_1':
                             await client.query('UPDATE users SET points = points + 1000, updated_at = NOW() WHERE id = $1;', [id]);
