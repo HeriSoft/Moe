@@ -72,6 +72,8 @@ interface GenerationModalProps {
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   onProFeatureBlock: () => void;
   handleExpGain: (amount: number) => void;
+  // FIX: Add missing setUserProfile prop to fix TypeScript error in App.tsx
+  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>;
 }
 
 const POSES = [
@@ -111,7 +113,7 @@ const effectOptions = [
 ];
 
 
-export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain }) => {
+export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain, setUserProfile }) => {
     const [activeMode, setActiveMode] = useState<CreativeMode>('image');
     const [prompt, setPrompt] = useState('');
     const [inputImage1, setInputImage1] = useState<Attachment | null>(null);
@@ -259,6 +261,27 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         setError(null);
         setOutput([]);
         setPixshopOutput(null);
+
+        // --- NEW: Credit cost logic ---
+        let cost = 0;
+        if (activeMode === 'image') cost = 4;
+        else if (activeMode === 'edit' || activeMode === 'pixshop') cost = 4;
+        else if (activeMode === 'faceSwap') cost = 2;
+
+        const isAdmin = userProfile?.email === 'heripixiv@gmail.com';
+
+        if (!isAdmin && userProfile && (userProfile.credits ?? 0) < cost) {
+            setError(`Not enough credits. This action requires ${cost} credits.`);
+            setIsLoading(false); // Stop loading animation
+            return;
+        }
+
+        // Optimistic update of credits
+        if (!isAdmin && cost > 0) {
+            setUserProfile(prev => prev ? { ...prev, credits: (prev.credits ?? 0) - cost } : undefined);
+        }
+        // --- End Credit logic ---
+
         try {
             const result = await apiCall();
             handleExpGain(50);
@@ -269,6 +292,12 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             }
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
+            
+            // Revert optimistic update on error
+            if (!isAdmin && cost > 0) {
+                setUserProfile(prev => prev ? { ...prev, credits: (prev.credits ?? 0) + cost } : undefined);
+            }
+
             if (errorMessage.includes('This is a Pro feature')) {
                 onProFeatureBlock();
                 onClose();
