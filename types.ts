@@ -189,3 +189,12 @@ export interface TienLenGameModalProps {
   handlePointsGain: (amount: number) => void;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
 }
+
+// --- NEW TYPES for EXPENSE TRACKER ---
+export interface Transaction {
+  id: string;
+  type: 'income' | 'expense';
+  amount: number;
+  description: string;
+  date: string; // ISO string date
+}
