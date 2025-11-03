@@ -14,7 +14,8 @@ export interface ImageGenerationSettings {
 }
 
 export interface ImageEditingSettings {
-    model: 'gemini-2.5-flash-image-preview';
+    model: 'gemini-2.5-flash-image';
+    aspectRatio?: 'auto' | '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
     outputSize?: { width: number; height: number };
 }
 
@@ -120,7 +121,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [error, setError] = useState<string | null>(null);
 
     const [genSettings, setGenSettings] = useState<ImageGenerationSettings>({ model: 'imagen-4.0-generate-001', aspectRatio: '1:1', numImages: 1, quality: 'standard', style: 'vivid' });
-    const [editSettings, setEditSettings] = useState<ImageEditingSettings>({ model: 'gemini-2.5-flash-image-preview' });
+    const [editSettings, setEditSettings] = useState<ImageEditingSettings>({ model: 'gemini-2.5-flash-image', aspectRatio: 'auto' });
     const [inputImageDimensions, setInputImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
     // Advanced Editing State
@@ -784,14 +785,29 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 </div>
                             </>)}
                         </>)}
-                        {(activeMode === 'edit' || activeMode === 'pixshop') && (
+                        {(activeMode === 'edit' || activeMode === 'pixshop') && (<>
                             <div>
                                 <label className="label-style mb-1">Model</label>
                                 <select value={editSettings.model} onChange={(e) => setEditSettings(s => ({ ...s, model: e.target.value as ImageEditingSettings['model'] }))} className="w-full input-style text-slate-900 dark:text-slate-100">
-                                    <option value="gemini-2.5-flash-image-preview">Gemini 2.5 Flash</option>
+                                    <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
                                 </select>
                             </div>
-                        )}
+                            <div>
+                                <label className="label-style mb-1">Aspect Ratio</label>
+                                <select 
+                                    value={editSettings.aspectRatio || 'auto'} 
+                                    onChange={e => setEditSettings(s => ({ ...s, aspectRatio: e.target.value as ImageEditingSettings['aspectRatio'] }))} 
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100"
+                                >
+                                    <option value="auto">Auto (Original)</option>
+                                    <option value="1:1">1:1 (Square)</option>
+                                    <option value="16:9">16:9 (Widescreen)</option>
+                                    <option value="9:16">9:16 (Portrait)</option>
+                                    <option value="4:3">4:3 (Standard)</option>
+                                    <option value="3:4">3:4 (Vertical)</option>
+                                </select>
+                            </div>
+                        </>)}
                         {activeMode === 'faceSwap' && (
                             <div>
                                 <h3 className="font-semibold text-lg">Face Swap Info</h3>
