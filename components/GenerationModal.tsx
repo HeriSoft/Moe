@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon, EraserIcon, TypeIcon } from './icons';
-import { generateImage, editImage } from '../services/geminiService';
-import { SwapFaceModal } from './SwapFaceModal';
+import { generateImage, editImage, swapFace } from '../services/geminiService';
 import type { Attachment, UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -73,7 +72,6 @@ interface GenerationModalProps {
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   onProFeatureBlock: () => void;
   handleExpGain: (amount: number) => void;
-  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>;
 }
 
 const POSES = [
@@ -113,14 +111,14 @@ const effectOptions = [
 ];
 
 
-export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain, setUserProfile }) => {
+export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClose, userProfile, setNotifications, onProFeatureBlock, handleExpGain }) => {
     const [activeMode, setActiveMode] = useState<CreativeMode>('image');
     const [prompt, setPrompt] = useState('');
     const [inputImage1, setInputImage1] = useState<Attachment | null>(null);
+    const [inputImage2, setInputImage2] = useState<Attachment | null>(null);
     const [output, setOutput] = useState<Attachment[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isSwapFaceModalOpen, setIsSwapFaceModalOpen] = useState(false);
 
     const [genSettings, setGenSettings] = useState<ImageGenerationSettings>({ model: 'imagen-4.0-generate-001', aspectRatio: '1:1', numImages: 1, quality: 'standard', style: 'vivid' });
     const [editSettings, setEditSettings] = useState<ImageEditingSettings>({ model: 'gemini-2.5-flash-image', aspectRatio: 'auto' });
@@ -235,7 +233,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
-            setPrompt(''); setInputImage1(null); setOutput([]);
+            setPrompt(''); setInputImage1(null); setInputImage2(null); setOutput([]);
             setIsLoading(false); setError(null); setActiveMode('image');
             setIsAdvancedStyle(false); setSelectedOutfits([]); setIsMixOutfit(false);
             setSelectedPose(null); setSelectedExpression(null); setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
@@ -248,37 +246,30 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     }, [isOpen]);
     
     useEffect(() => {
-      setInputImage1(null); setOutput([]); setError(null);
+      setInputImage1(null); setInputImage2(null); setOutput([]); setError(null);
       setIsAdvancedStyle(false); setPixshopImage(null); setPixshopOutput(null);
       setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
       setToolPrompt(null);
-      if (activeMode === 'faceSwap') {
-          setIsSwapFaceModalOpen(true);
-      } else {
-          setIsSwapFaceModalOpen(false);
-      }
     }, [activeMode]);
     
     const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, selectedExpression, selectedOutfits, backgroundPrompt]);
 
-    const handleGenericApiCall = async (apiCall: () => Promise<{ attachments: Attachment[], cost: number }>) => {
+    const handleGenericApiCall = async (apiCall: () => Promise<Attachment[]>) => {
         setIsLoading(true);
         setError(null);
         setOutput([]);
         setPixshopOutput(null);
         try {
-            const { attachments, cost } = await apiCall();
+            const result = await apiCall();
             handleExpGain(50);
             if (activeMode === 'pixshop') {
-                setPixshopOutput(attachments[0] || null);
+                setPixshopOutput(result[0] || null);
             } else {
-                setOutput(attachments);
+                setOutput(result);
             }
-            setNotifications(prev => [`-${cost} Credits used.`, ...prev.slice(0, 19)]);
-
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-            if (errorMessage.includes('This is a Pro feature') || errorMessage.includes('Insufficient credits')) {
+            if (errorMessage.includes('This is a Pro feature')) {
                 onProFeatureBlock();
                 onClose();
             } else { setError(errorMessage); }
@@ -289,14 +280,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     
     const handleGenerate = () => {
         if (!prompt) { setError("A prompt is required."); return; }
-        const cost = genSettings.numImages * 4;
-        handleGenericApiCall(async () => {
-            const result = await generateImage(prompt, genSettings, userProfile);
-            if (result.newCreditBalance !== undefined) {
-                setUserProfile(prev => prev ? { ...prev, credits: result.newCreditBalance } : undefined);
-            }
-            return { attachments: result.attachments, cost };
-        });
+        handleGenericApiCall(() => generateImage(prompt, genSettings, userProfile));
     };
 
     const handleEdit = () => {
@@ -304,12 +288,14 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!inputImage1) { setError("An image is required."); return; }
         handleGenericApiCall(async () => {
             const finalEditSettings = getOriginalOutputSettings();
-            const result = await editImage(prompt, [inputImage1], finalEditSettings, userProfile);
-            if (result.newCreditBalance !== undefined) {
-                setUserProfile(prev => prev ? { ...prev, credits: result.newCreditBalance } : undefined);
-            }
-            return { attachments: result.attachments, cost: 4 };
+            const { attachments } = await editImage(prompt, [inputImage1], finalEditSettings, userProfile);
+            return attachments;
         });
+    };
+
+    const handleSwap = () => {
+        if (!inputImage1 || !inputImage2) { setError("Target image and source face are required."); return; }
+        handleGenericApiCall(async () => [await swapFace(inputImage1, inputImage2, userProfile)]);
     };
 
     const handleApplyAdvancedStyles = () => {
@@ -329,17 +315,15 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (promptParts.length === 0) { setError("Please select at least one style to apply."); return; }
         
         let constructedPrompt = promptParts.join(' ');
+        // Add the negative prompt as requested by the user to prevent cropping.
         constructedPrompt += " Important: Do not crop the image, do not cut off feet, do not cut the image, keep full body visible. (Quan trọng: Không được crop ảnh, mất chân, cắt ảnh).";
         
         handleGenericApiCall(async () => {
              const finalEditSettings = getOriginalOutputSettings();
-             const result = await editImage(constructedPrompt, [inputImage1, ...additionalImages], finalEditSettings, userProfile);
-             if (result.newCreditBalance !== undefined) {
-                setUserProfile(prev => prev ? { ...prev, credits: result.newCreditBalance } : undefined);
-             }
+             const { attachments } = await editImage(constructedPrompt, [inputImage1, ...additionalImages], finalEditSettings, userProfile);
              setSelectedPose(null); setSelectedExpression(null); setSelectedOutfits([]);
              setBackgroundPrompt(''); setCustomPosePrompt(''); setIsCustomPose(false);
-             return { attachments: result.attachments, cost: 4 };
+             return attachments;
         });
     };
     
@@ -347,11 +331,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!pixshopImage) { setError("Please upload an image to edit first."); return; }
         const imagesToSend = [pixshopImage, ...additionalImages];
         handleGenericApiCall(async () => {
-            const result = await editImage(editPrompt, imagesToSend, editSettings, userProfile);
-            if (result.newCreditBalance !== undefined) {
-                setUserProfile(prev => prev ? { ...prev, credits: result.newCreditBalance } : undefined);
-            }
-            return { attachments: result.attachments, cost: 4 };
+            const { attachments } = await editImage(editPrompt, imagesToSend, editSettings, userProfile);
+            return attachments;
         });
     };
     
@@ -725,16 +706,12 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
     if (!isOpen) return null;
 
-    if (isSwapFaceModalOpen) {
-        return <SwapFaceModal isOpen={true} onClose={() => { setIsSwapFaceModalOpen(false); setActiveMode('image'); }} userProfile={userProfile} setNotifications={setNotifications} onProFeatureBlock={onProFeatureBlock} setUserProfile={setUserProfile} />
-    }
-
     const isDalle = genSettings.model === 'dall-e-3';
     const isImagen = genSettings.model === 'imagen-4.0-generate-001';
     const imagenRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
     const dalleRatios = ["1:1", "16:9", "9:16"];
     const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
-    const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
+    const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
     
     const pixshopColorFilters = [
         { name: 'Vintage', prompt: 'apply a warm, vintage color filter with slightly faded colors' }, { name: 'B&W', prompt: 'convert to a high-contrast black and white image' },
@@ -834,7 +811,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                         {activeMode === 'faceSwap' && (
                             <div>
                                 <h3 className="font-semibold text-lg">Face Swap Info</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">This tool uses a separate interface. Click the button to open it.</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Upload a target image and an image with the source face. The model will swap the face from the source onto the target.</p>
                             </div>
                         )}
                     </div>
@@ -854,6 +831,16 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                         {activeMode === 'edit' && (
                                             <div className="aspect-square w-full">
                                                 <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1, { captureDimensionsForEdit: true })} title="" textSize="text-sm" objectFit="contain" />
+                                            </div>
+                                        )}
+                                        {activeMode === 'faceSwap' && (
+                                            <div className="w-full grid grid-cols-2 gap-4">
+                                                <div className="aspect-square">
+                                                    <ImageUploader image={inputImage1} onImageSet={handleSetImage(setInputImage1)} title="Target Image" objectFit="cover"/>
+                                                </div>
+                                                <div className="aspect-square">
+                                                    <ImageUploader image={inputImage2} onImageSet={handleSetImage(setInputImage2)} title="Source Face" objectFit="cover"/>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -907,9 +894,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                             </div>
                             <div className="flex-shrink-0 pt-4 mt-auto border-t border-slate-200 dark:border-slate-700">
                                 {activeMode === 'edit' && isAdvancedStyle ? (
-                                    <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Applying... (4 Credits)' : 'Apply Advanced Styles (4 Credits)'}</button>
+                                    <button onClick={handleApplyAdvancedStyles} disabled={!isAnyStyleSelected || isLoading || !inputImage1} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Applying...' : 'Apply Advanced Styles'}</button>
                                 ) : (
-                                    <button onClick={activeMode === 'image' ? handleGenerate : handleEdit} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Generating...' : `Generate (${activeMode === 'image' ? 4 * genSettings.numImages : 4} Credits)`}</button>
+                                    <button onClick={activeMode === 'image' ? handleGenerate : activeMode === 'edit' ? handleEdit : handleSwap} disabled={!canGenerate || isLoading} className="w-full flex items-center justify-center gap-2 px-8 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors">{isLoading ? 'Generating...' : 'Generate'}</button>
                                 )}
                             </div>
                         </div>

@@ -14,7 +14,6 @@ interface MembershipManagementModalProps {
 interface RenewalPlan {
   days: number;
   price: number;
-  priceDisplay: string;
   name: string;
 }
 
@@ -112,9 +111,9 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
   };
 
   const plans: RenewalPlan[] = [
-    { days: 30, price: paymentSettings?.price30 || 250000, priceDisplay: '$10', name: '1 Month' },
-    { days: 90, price: paymentSettings?.price90 || 700000, priceDisplay: '$25', name: '3 Months' },
-    { days: 360, price: paymentSettings?.price360 || 2500000, priceDisplay: '$100', name: '1 Year' },
+    { days: 30, price: paymentSettings?.price30 || 250000, name: '1 Month' },
+    { days: 90, price: paymentSettings?.price90 || 700000, name: '3 Months' },
+    { days: 360, price: paymentSettings?.price360 || 2500000, name: '1 Year' },
   ];
 
   const renderRenewPayment = () => {
@@ -174,7 +173,7 @@ export const MembershipManagementModal: React.FC<MembershipManagementModalProps>
                                     {plans.map(plan => (
                                         <button key={plan.days} onClick={() => startRenewal(plan)} className="p-4 bg-slate-100 dark:bg-[#2d2d40] rounded-lg text-center hover:ring-2 hover:ring-indigo-500">
                                             <p className="font-bold">{plan.name}</p>
-                                            <p className="text-xl font-bold text-indigo-500">{plan.priceDisplay}</p>
+                                            <p className="text-xl font-bold text-indigo-500">{plan.price.toLocaleString('vi-VN')} VNĐ</p>
                                         </button>
                                     ))}
                                </div>

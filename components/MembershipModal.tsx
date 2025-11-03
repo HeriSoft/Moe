@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CloseIcon, CheckCircleIcon, SparklesIcon } from './icons';
 import type { UserProfile } from '../types';
@@ -87,14 +88,11 @@ export const MembershipModal: React.FC<MembershipModalProps> = ({ isOpen, onClos
     <>
       <div className="bg-slate-100 dark:bg-[#2d2d40] p-4 sm:p-6 rounded-lg">
         <div className="text-center mb-6">
-          <p className="text-4xl font-bold text-slate-900 dark:text-white">$10</p>
-          <p className="text-slate-500 dark:text-slate-400">/ Monthly</p>
+          <p className="text-4xl font-bold text-slate-900 dark:text-white">250.000 VNĐ</p>
+          <p className="text-slate-500 dark:text-slate-400">/ tháng</p>
         </div>
 
         <ul className="space-y-4 text-sm sm:text-base">
-          <FeatureListItem>
-            Receive **500 Credits** upon subscription to use in Creative Tools.
-          </FeatureListItem>
           <FeatureListItem>
             Tạo hình ảnh với các mô hình **tiên tiến** (Imagen 4, DALL-E 3. Flux.1).
           </FeatureListItem>

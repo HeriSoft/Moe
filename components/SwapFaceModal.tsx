@@ -50,10 +50,9 @@ interface SwapFaceModalProps {
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   userProfile: UserProfile | undefined;
   onProFeatureBlock: () => void;
-  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>;
 }
 
-export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, setNotifications, userProfile, onProFeatureBlock, setUserProfile }) => {
+export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, setNotifications, userProfile, onProFeatureBlock }) => {
   const [targetImage, setTargetImage] = useState<Attachment | null>(null);
   const [sourceImage, setSourceImage] = useState<Attachment | null>(null);
   const [resultImage, setResultImage] = useState<Attachment | null>(null);
@@ -95,14 +94,10 @@ export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, s
     setResultImage(null);
     try {
       const result = await swapFace(targetImage, sourceImage, userProfile);
-      setResultImage(result.attachment);
-      if (result.newCreditBalance !== undefined) {
-        setUserProfile(prev => prev ? { ...prev, credits: result.newCreditBalance } : undefined);
-        setNotifications(prev => [`-2 Credits for Face Swap.`, ...prev.slice(0, 19)]);
-      }
+      setResultImage(result);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : "An unknown error occurred during face swap.";
-      if (errorMessage.includes('This is a Pro feature') || errorMessage.includes('Insufficient credits')) {
+      if (errorMessage.includes('This is a Pro feature')) {
           onProFeatureBlock();
           onClose(); // Close the swap modal to show the membership one
       } else {
@@ -161,7 +156,7 @@ export const SwapFaceModal: React.FC<SwapFaceModalProps> = ({ isOpen, onClose, s
                         ) : (
                         <>
                             <ArrowPathIcon className="w-5 h-5" />
-                            <span>Swap Face (2 Credits)</span>
+                            <span>Swap Face</span>
                         </>
                         )}
                     </button>
