@@ -346,7 +346,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         
         if (isCustomPose) {
             if (usePoseRefImage && poseRefImage) {
-                promptParts.push("Change the person's pose to match the pose in the provided reference image.");
+                promptParts.push("Recreate the pose of the person in the main image to perfectly match the pose of the person in the reference image. Pay extremely close attention to the position of all limbs, especially the legs, the angle of the torso, and the head tilt. The final image should have the original person but in the new pose from the reference.");
                 additionalImages.push(poseRefImage);
             } else if (customPosePrompt) {
                 promptParts.push(`Change the person's pose to: ${customPosePrompt}.`);
