@@ -50,6 +50,7 @@ export interface UserProfile {
     credits?: number; // For creative tools
     hasPermanentNameColor?: boolean; // For lucky wheel reward
     hasSakuraBanner?: boolean; // For lucky wheel reward
+    unlocked_starter_languages?: string[]; // For Study Zone progression
 }
 
 // --- NEW TYPES FOR VIDEO CINEMA ---
@@ -207,6 +208,19 @@ export interface QuizQuestion {
   explanation?: string;
 }
 
+export interface AlphabetCharacter {
+    character: string;
+    pronunciation: string;
+    example_word: string;
+    example_translation: string;
+}
+
+export interface StarterTask {
+    alphabet_name: string;
+    characters_to_learn: AlphabetCharacter[];
+    quiz: QuizQuestion[];
+}
+
 export interface ReadingTask {
   passage: string;
   passage_translation: string;
@@ -229,20 +243,38 @@ export interface WritingTask {
 }
 
 export interface FullLesson {
-  reading: ReadingTask;
-  listening: ListeningTask[];
-  speaking: SpeakingTask;
-  writing: WritingTask;
-  general_questions: QuizQuestion[];
+  reading?: ReadingTask;
+  listening?: ListeningTask[];
+  speaking?: SpeakingTask;
+  writing?: WritingTask;
+  general_questions?: QuizQuestion[];
+  starter?: StarterTask;
 }
 
 export interface SkillResult {
-    skill: 'Reading' | 'Listening' | 'Writing' | 'Quiz';
+    skill: 'Reading' | 'Listening' | 'Writing' | 'Quiz' | 'Starter';
     score: number;
     feedback: string;
+    rewrite?: boolean; // For writing task
 }
 
 export interface FullQuizResult {
     totalScore: number;
     skillResults: SkillResult[];
+}
+
+export interface UserAnswers {
+    reading: number[];
+    listening: number[];
+    writing: string;
+    writingImage?: string; // base64 image data
+    quiz: number[];
+    starter?: number[];
+}
+
+export interface StudyStats {
+    total_exp_earned: number;
+    total_lessons_completed: number;
+    today_lessons_completed: number;
+    languages_studied: string[];
 }
