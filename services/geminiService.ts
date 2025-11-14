@@ -1,5 +1,5 @@
 import { client } from '@gradio/client';
-import type { Message, Attachment, UserProfile, ReadingLesson, QuizResult } from '../types';
+import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult } from '../types';
 
 /**
  * A robust error handler for fetch requests to the proxy.
@@ -336,12 +336,12 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment,
 
 // --- NEW functions for Study Zone ---
 
-export async function generateReadingLesson(language: string, level: string, user: UserProfile | undefined): Promise<ReadingLesson> {
+export async function generateFullLesson(language: string, level: string, user: UserProfile | undefined): Promise<FullLesson> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'generateReadingLesson',
+            action: 'generateReadingLesson', // Still uses the old action name in the proxy
             payload: { language, level, user }
         })
     });
@@ -352,12 +352,12 @@ export async function generateReadingLesson(language: string, level: string, use
     return data.lesson;
 }
 
-export async function gradeReadingAnswers(lesson: ReadingLesson, userAnswers: (string|number)[], user: UserProfile | undefined): Promise<QuizResult> {
+export async function gradeFullLesson(lesson: FullLesson, userAnswers: any, user: UserProfile | undefined): Promise<FullQuizResult> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'gradeReadingAnswers',
+            action: 'gradeReadingAnswers', // Still uses the old action name in the proxy
             payload: { lesson, userAnswers, user }
         })
     });
