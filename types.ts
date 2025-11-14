@@ -198,3 +198,22 @@ export interface Transaction {
   description: string;
   date: string; // ISO string date
 }
+
+// --- NEW TYPES for Study Zone ---
+export interface StudyZoneQuestion {
+  question_text: string;
+  options: string[];
+  correct_answer_index: number;
+  explanation?: string;
+}
+
+export interface ReadingLesson {
+  passage: string;
+  passage_translation: string;
+  questions: StudyZoneQuestion[];
+}
+
+export interface QuizResult {
+  score: number;
+  feedback: string;
+}
