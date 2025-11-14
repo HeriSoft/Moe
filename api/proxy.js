@@ -441,7 +441,17 @@ export default async function handler(req, res) {
                     let { id, level, exp } = rows[0];
                     if (level >= 100) {
                         await client.query('COMMIT');
-                        return res.status(200).json({ success: true, user: { level, exp } });
+                         const { rows: finalRows } = await client.query('SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner, unlocked_starter_languages FROM users WHERE id = $1;', [id]);
+                        const dbUser = finalRows[0];
+                        const fullUserProfile = {
+                            id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                            subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                            isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                            level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
+                            hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                            unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
+                        };
+                        return res.status(200).json({ success: true, user: fullUserProfile });
                     }
 
                     exp += amount;
@@ -460,7 +470,29 @@ export default async function handler(req, res) {
                     await client.query('UPDATE users SET level = $1, exp = $2, updated_at = NOW() WHERE id = $3;', [level, exp, id]);
                     await client.query('COMMIT');
                     
-                    result = { success: true, user: { level, exp } };
+                    const { rows: updatedRows } = await client.query(
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner, unlocked_starter_languages FROM users WHERE id = $1;`,
+                        [id]
+                    );
+                    const dbUser = updatedRows[0];
+                    const fullUserProfile = {
+                        id: dbUser.id,
+                        name: dbUser.name,
+                        email: dbUser.email,
+                        imageUrl: dbUser.image_url,
+                        subscriptionExpiresAt: dbUser.subscription_expires_at,
+                        isModerator: dbUser.is_moderator,
+                        isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                        level: dbUser.level,
+                        exp: dbUser.exp,
+                        points: dbUser.points,
+                        credits: dbUser.credits,
+                        hasPermanentNameColor: dbUser.has_permanent_name_color,
+                        hasSakuraBanner: dbUser.has_sakura_banner,
+                        unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
+                    };
+
+                    result = { success: true, user: fullUserProfile };
                 } catch (dbError) {
                     await client.query('ROLLBACK');
                     console.error("Database error during EXP update:", dbError);
@@ -922,12 +954,27 @@ export default async function handler(req, res) {
                     }
                     `;
                 } else {
+                    let starterPromptSection = '';
+                    if (level === 'Beginner') {
+                        starterPromptSection = `
+                        "starter": {
+                          "alphabet_name": "Name of the alphabet for the language",
+                          "characters_to_learn": [
+                            { "character": "あ", "pronunciation": "a", "example_word": "あさ (asa)", "example_translation": "morning" }
+                          ],
+                          "quiz": [
+                            { "question_text": "Which character is 'ka'?", "options": ["か", "き", "く", "け"], "correct_answer_index": 0, "explanation": "'か' is pronounced 'ka'." }
+                          ]
+                        },
+                        `;
+                    }
                     prompt = `
                     Generate a comprehensive, multi-skill language lesson for a '${level}' level student learning '${language}'.
                     The lesson should be engaging and cover Reading, Listening, Speaking, Writing, and general knowledge.
                     The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting like \`\`\`json.
                 
                     {
+                      ${starterPromptSection}
                       "reading": {
                         "passage": "A short reading passage in ${language}, approximately 100-200 words.",
                         "passage_translation": "The full Vietnamese translation of the passage.",
