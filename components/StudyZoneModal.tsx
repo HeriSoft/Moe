@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon } from './icons';
-import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult } from '../types';
-import { generateFullLesson, gradeFullLesson, generateSpeech } from '../services/geminiService';
+import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon, AcademicCapIcon } from './icons';
+import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult, StudyStats } from '../types';
+import { generateFullLesson, gradeFullLesson, generateSpeech, getStudyStats } from '../services/geminiService';
+import DrawingCanvas, { DrawingCanvasRef } from './DrawingCanvas';
+
 
 interface StudyZoneModalProps {
   isOpen: boolean;
@@ -21,7 +23,8 @@ type View = 'lobby' | 'lesson' | 'results';
 const INITIAL_ANSWERS = {
     reading: [],
     listening: [],
-    writing: '',
+    writing: '', // This will be unused, but kept for type consistency
+    writingImage: '',
     quiz: [],
 };
 
@@ -34,6 +37,12 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const [userAnswers, setUserAnswers] = useState<any>(INITIAL_ANSWERS);
     const [quizResult, setQuizResult] = useState<FullQuizResult | null>(null);
     const [activeTab, setActiveTab] = useState<Skill>('Reading');
+    const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
+
+    // Canvas state
+    const drawingCanvasRef = useRef<DrawingCanvasRef>(null);
+    const [brushColor, setBrushColor] = useState('#000000');
+    const [brushSize, setBrushSize] = useState(5);
 
     // State for Listening feature
     const [listeningAudioUrl, setListeningAudioUrl] = useState<string | null>(null);
@@ -63,15 +72,23 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         if (isOpen) {
             document.body.style.overflow = 'hidden';
             setView('lobby');
-            // Other state resets
             setCurrentLesson(null);
             setQuizResult(null);
             setUserAnswers(INITIAL_ANSWERS);
             setIsRecording(false);
             setRecordedSpeakingUrl(null);
+            
+            if (userProfile) {
+                getStudyStats(userProfile)
+                    .then(setStudyStats)
+                    .catch(err => {
+                        console.error("Failed to fetch study stats:", err);
+                        setNotifications(prev => ["Could not load your study profile.", ...prev]);
+                    });
+            }
+
         } else {
             document.body.style.overflow = 'auto';
-            // Cleanup audio
             if (audioRef.current) audioRef.current.pause();
             if (listeningAudioUrl) {
                 URL.revokeObjectURL(listeningAudioUrl);
@@ -83,19 +100,19 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 mediaRecorderRef.current.stop();
             }
         }
-    }, [isOpen, listeningAudioUrl]);
+    }, [isOpen, listeningAudioUrl, userProfile, setNotifications]);
 
     const handleStartLesson = async () => {
         setIsLoading(true);
         try {
-            // FIX: Pass the missing 'isStarterOnly' boolean argument, defaulting to 'false'.
             const lesson = await generateFullLesson(selectedLanguage, selectedLevel, false, userProfile);
             setCurrentLesson(lesson);
             setUserAnswers({
-                reading: new Array(lesson.reading.questions.length).fill(-1),
-                listening: new Array(lesson.listening.length).fill(-1),
+                reading: new Array(lesson.reading?.questions.length || 0).fill(-1),
+                listening: new Array(lesson.listening?.length || 0).fill(-1),
                 writing: '',
-                quiz: new Array(lesson.general_questions.length).fill(-1),
+                writingImage: '',
+                quiz: new Array(lesson.general_questions?.length || 0).fill(-1),
             });
             setActiveTab('Reading');
             setView('lesson');
@@ -107,7 +124,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     };
 
     const handleAnswerChange = (skill: 'reading' | 'listening' | 'quiz', qIndex: number, aIndex: number) => {
-        setUserAnswers(prev => ({ ...prev, [skill]: prev[skill].map((ans: any, i: number) => (i === qIndex ? aIndex : ans)) }));
+        setUserAnswers((prev: any) => ({ ...prev, [skill]: prev[skill].map((ans: any, i: number) => (i === qIndex ? aIndex : ans)) }));
     };
 
     const handleSubmitLesson = async () => {
@@ -119,9 +136,16 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         }
         setIsLoading(true);
         try {
-            const result = await gradeFullLesson(currentLesson, userAnswers, userProfile);
+            const writingImage = drawingCanvasRef.current?.toDataURL().split(',')[1] || '';
+            const finalAnswers = { ...userAnswers, writingImage };
+
+            const result = await gradeFullLesson(currentLesson, finalAnswers, userProfile);
             setQuizResult(result);
             handleExpGain(Math.round(result.totalScore));
+
+            if (result.skillResults.find(r => r.skill === 'Writing' && r.rewrite)) {
+                setNotifications(prev => ["Your handwriting score is below 70%. Please try again to improve!", ...prev]);
+            }
             setView('results');
         } catch (e) {
             setNotifications(prev => [e instanceof Error ? e.message : 'Failed to grade answers', ...prev.slice(0, 19)]);
@@ -131,7 +155,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     };
     
     const handleGenerateListeningAudio = useCallback(async (text: string) => {
-        if (!userProfile) return;
+        if (!userProfile || !text) return;
         setIsAudioLoading(true);
         setIsAudioPlaying(false);
         if (listeningAudioUrl) URL.revokeObjectURL(listeningAudioUrl);
@@ -198,7 +222,26 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
 
     const renderLobby = () => (
         <div className="flex flex-col items-center justify-center h-full text-center">
-            <h3 className="text-3xl font-bold mb-6">Welcome to the Study Zone</h3>
+             {userProfile && studyStats && (
+                <div className="w-full max-w-md p-4 bg-slate-100 dark:bg-slate-800 rounded-lg mb-6 text-left">
+                    <div className="flex items-center gap-4">
+                        <img src={userProfile.imageUrl} alt={userProfile.name} className="w-16 h-16 rounded-full" />
+                        <div className="min-w-0">
+                            <p className="font-bold text-lg truncate">{userProfile.name}</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                <AcademicCapIcon className="w-4 h-4" /> Language Learner
+                            </p>
+                        </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <div><p className="font-semibold text-slate-500 dark:text-slate-400">EXP Earned:</p><p className="font-semibold text-indigo-500 dark:text-indigo-400">{studyStats.total_exp_earned.toLocaleString()}</p></div>
+                        <div><p className="font-semibold text-slate-500 dark:text-slate-400">Total Lessons:</p><p>{studyStats.total_lessons_completed}</p></div>
+                        <div><p className="font-semibold text-slate-500 dark:text-slate-400">Learned Today:</p><p>{studyStats.today_lessons_completed}</p></div>
+                        <div><p className="font-semibold text-slate-500 dark:text-slate-400">Skills Studied:</p><p className="truncate" title={studyStats.languages_studied.join(', ') || 'None'}>{studyStats.languages_studied.join(', ') || 'None'}</p></div>
+                    </div>
+                </div>
+            )}
+            <h3 className="text-2xl font-bold mb-6">Start a New Lesson</h3>
             <div className="space-y-4 max-w-sm w-full">
                 <div>
                     <label htmlFor="language-select" className="block text-sm font-medium mb-1">Choose a language</label>
@@ -213,7 +256,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                     </select>
                 </div>
                 <button onClick={handleStartLesson} disabled={isLoading} className="w-full p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
-                    {isLoading ? 'Generating Lesson...' : 'Start New Lesson'}
+                    {isLoading ? 'Generating Lesson...' : 'Start Now'}
                 </button>
             </div>
         </div>
@@ -245,11 +288,11 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 </nav>
             </div>
             <div className="flex-grow overflow-y-auto p-4">
-                {currentLesson && (
+                {currentLesson?.reading && (
                     <div style={{ display: activeTab === 'Reading' ? 'block' : 'none' }}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-4">
-                                <h4 className="font-semibold flex items-center gap-2">Passage ({selectedLanguage}) <button onClick={() => handleGenerateListeningAudio(currentLesson.reading.passage)} className="text-slate-500 hover:text-indigo-500"><SpeakerWaveIcon className="w-5 h-5"/></button></h4>
+                                <h4 className="font-semibold flex items-center gap-2">Passage ({selectedLanguage}) <button onClick={() => handleGenerateListeningAudio(currentLesson.reading!.passage)} className="text-slate-500 hover:text-indigo-500"><SpeakerWaveIcon className="w-5 h-5"/></button></h4>
                                 <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-3 rounded-md">{currentLesson.reading.passage}</p>
                                 <h4 className="font-semibold">Translation (Vietnamese)</h4>
                                 <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-3 rounded-md">{currentLesson.reading.passage_translation}</p>
@@ -261,7 +304,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                         </div>
                     </div>
                 )}
-                {currentLesson && (
+                {currentLesson?.listening && (
                     <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Listening' ? 'block' : 'none' }}>
                        {currentLesson.listening.map((task, index) => (
                            <div key={index}>
@@ -274,7 +317,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                        ))}
                     </div>
                 )}
-                {currentLesson && (
+                {currentLesson?.speaking && (
                      <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Speaking' ? 'block' : 'none' }}>
                         <h4 className="font-semibold text-xl">Speaking Practice</h4>
                         <p className="text-sm text-slate-500">Read the following prompt out loud. Record yourself and play it back to check your fluency and pronunciation.</p>
@@ -287,14 +330,31 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                         </div>
                     </div>
                 )}
-                {currentLesson && (
+                {currentLesson?.writing && (
                      <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Writing' ? 'block' : 'none' }}>
                         <h4 className="font-semibold text-xl">Writing Challenge</h4>
                         <p className="p-4 bg-slate-100 dark:bg-slate-800 rounded-md font-semibold">{currentLesson.writing.prompt}</p>
-                        <textarea value={userAnswers.writing} onChange={(e) => setUserAnswers(prev => ({...prev, writing: e.target.value}))} rows={8} className="w-full p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Your answer here..."/>
+                        
+                        <div className="flex flex-wrap items-center justify-center gap-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
+                            <label htmlFor="brush-color" className="text-sm font-medium">Color:</label>
+                            <input id="brush-color" type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} />
+                            
+                            <label htmlFor="brush-size" className="text-sm font-medium">Size: {brushSize}</label>
+                            <input id="brush-size" type="range" min="1" max="30" value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} className="w-24 sm:w-32" />
+
+                            <button onClick={() => drawingCanvasRef.current?.clear()} className="px-3 py-1 bg-slate-300 dark:bg-slate-600 text-sm font-semibold rounded-md hover:bg-slate-400 dark:hover:bg-slate-500">Clear</button>
+                        </div>
+
+                        <div className="w-full aspect-video border border-slate-300 dark:border-slate-600 rounded-md overflow-hidden">
+                            <DrawingCanvas
+                                ref={drawingCanvasRef}
+                                brushColor={brushColor}
+                                brushSize={brushSize}
+                            />
+                        </div>
                     </div>
                 )}
-                {currentLesson && (
+                {currentLesson?.general_questions && (
                      <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Quiz' ? 'block' : 'none' }}>
                         <h4 className="font-semibold text-xl">General Quiz</h4>
                         {currentLesson.general_questions.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.quiz[qIndex]} onAnswer={(i,a)=>handleAnswerChange('quiz', i, a)}/>)}
