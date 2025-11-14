@@ -1,5 +1,5 @@
 import { client } from '@gradio/client';
-import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats } from '../types';
+import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats, SkillResult, Skill } from '../types';
 
 /**
  * A robust error handler for fetch requests to the proxy.
@@ -366,6 +366,21 @@ export async function gradeFullLesson(lesson: FullLesson, userAnswers: UserAnswe
     }
     const data = await response.json();
     return data.result;
+}
+
+export async function gradeSingleSkill(lesson: FullLesson, userAnswers: UserAnswers, skill: Skill, user: UserProfile | undefined): Promise<SkillResult> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'gradeSkill',
+            payload: { lesson, userAnswers, skill, user }
+        })
+    });
+    if (!response.ok) {
+        await handleProxyError(response);
+    }
+    return await response.json();
 }
 
 export async function unlockStarterLanguage(language: string, user: UserProfile): Promise<UserProfile> {
