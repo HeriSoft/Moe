@@ -273,13 +273,13 @@ export async function getTranslation(text: string, targetLanguage: string, user:
 }
 
 
-export async function generateSpeech(text: string, user: UserProfile | undefined): Promise<string> {
+export async function generateSpeech(text: string, user: UserProfile | undefined, voice?: string, speed?: number): Promise<string> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             action: 'generateSpeech',
-            payload: { text, user }
+            payload: { text, user, voice, speed }
         })
     });
     if (!response.ok) {
