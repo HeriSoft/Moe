@@ -88,7 +88,8 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const handleStartLesson = async () => {
         setIsLoading(true);
         try {
-            const lesson = await generateFullLesson(selectedLanguage, selectedLevel, userProfile);
+            // FIX: Pass the missing 'isStarterOnly' boolean argument, defaulting to 'false'.
+            const lesson = await generateFullLesson(selectedLanguage, selectedLevel, false, userProfile);
             setCurrentLesson(lesson);
             setUserAnswers({
                 reading: new Array(lesson.reading.questions.length).fill(-1),
