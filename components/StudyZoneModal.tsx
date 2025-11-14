@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon } from './icons';
+import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon } from './icons';
 import type { UserProfile, ReadingLesson, StudyZoneQuestion, QuizResult } from '../types';
 import { generateReadingLesson, gradeReadingAnswers, generateSpeech } from '../services/geminiService';
 
@@ -13,8 +13,8 @@ interface StudyZoneModalProps {
 
 const LANGUAGES = ['Japanese', 'English', 'Vietnamese', 'Korean', 'Chinese'];
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
-type Skill = 'Reading' | 'Listening' | 'Speaking' | 'Writing' | 'Questions';
-const SKILLS: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing', 'Questions'];
+type Skill = 'Reading' | 'Listening' | 'Speaking' | 'Writing';
+const SKILLS: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing'];
 
 type View = 'lobby' | 'lesson' | 'results';
 
@@ -33,6 +33,15 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const [isAudioLoading, setIsAudioLoading] = useState(false);
     const [isAudioPlaying, setIsAudioPlaying] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // State for Speaking feature
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordedSpeakingUrl, setRecordedSpeakingUrl] = useState<string | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordedChunksRef = useRef<Blob[]>([]);
+
+    // State for Writing feature
+    const [writingInput, setWritingInput] = useState('');
 
     useEffect(() => {
         // Setup audio element once on mount
@@ -57,6 +66,9 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             setCurrentLesson(null);
             setQuizResult(null);
             setUserAnswers([]);
+            setWritingInput('');
+            setIsRecording(false);
+            setRecordedSpeakingUrl(null);
         } else {
             document.body.style.overflow = 'auto';
             // Cleanup audio when modal closes
@@ -69,6 +81,9 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             }
             setIsAudioPlaying(false);
             setIsAudioLoading(false);
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                mediaRecorderRef.current.stop();
+            }
         }
     }, [isOpen, listeningAudioUrl]);
 
@@ -163,6 +178,49 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         }
     };
 
+    // Speaking tab functions
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorderRef.current = new MediaRecorder(stream);
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunksRef.current.push(event.data);
+                }
+            };
+            mediaRecorderRef.current.onstop = () => {
+                const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                setRecordedSpeakingUrl(url);
+                recordedChunksRef.current = [];
+                // Stop all tracks to release the microphone
+                stream.getTracks().forEach(track => track.stop());
+            };
+            recordedChunksRef.current = [];
+            mediaRecorderRef.current.start();
+            setIsRecording(true);
+            setRecordedSpeakingUrl(null);
+        } catch (err) {
+            console.error("Error starting recording:", err);
+            setNotifications(prev => ["Microphone access denied or not available.", ...prev]);
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+        }
+    };
+
+    const handleToggleRecording = () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    };
+
     const renderLobby = () => (
         <div className="flex flex-col items-center justify-center h-full text-center">
             <h3 className="text-3xl font-bold mb-6">Welcome to the Study Zone</h3>
@@ -182,10 +240,6 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 <button onClick={handleStartLesson} disabled={isLoading} className="w-full p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
                     {isLoading ? 'Generating Lesson...' : 'Start New Lesson'}
                 </button>
-            </div>
-            <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-full max-w-sm">
-                <h4 className="font-semibold mb-2">Coming Soon</h4>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Weekly tests, statistics, and leaderboards are on the way!</p>
             </div>
         </div>
     );
@@ -258,7 +312,42 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                         <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-4 rounded-md text-base">{currentLesson.passage}</p>
                     </div>
                 )}
-                {activeTab !== 'Reading' && activeTab !== 'Listening' && <p className="text-center text-slate-500 mt-8">{activeTab} exercises are coming soon!</p>}
+                {activeTab === 'Speaking' && currentLesson && (
+                    <div className="space-y-4 max-w-3xl mx-auto">
+                        <h4 className="font-semibold text-xl">Practice Speaking</h4>
+                        <p className="text-sm text-slate-500">Read the passage below out loud. Record yourself to check your pronunciation and fluency.</p>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={handleToggleRecording}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold transition-colors ${
+                                    isRecording
+                                        ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                                        : 'bg-indigo-600 hover:bg-indigo-700'
+                                }`}
+                            >
+                                {isRecording ? <StopCircleIcon className="w-5 h-5" /> : <SpeakerWaveIcon className="w-5 h-5" />}
+                                <span>{isRecording ? 'Stop Recording' : 'Start Recording'}</span>
+                            </button>
+                            {recordedSpeakingUrl && (
+                                <audio src={recordedSpeakingUrl} controls />
+                            )}
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-4 rounded-md text-base">{currentLesson.passage}</p>
+                    </div>
+                )}
+                {activeTab === 'Writing' && currentLesson && (
+                    <div className="space-y-4 max-w-3xl mx-auto">
+                        <h4 className="font-semibold text-xl">Practice Writing</h4>
+                        <p className="text-sm text-slate-500">Summarize the passage in your own words, or write about your thoughts on the topic.</p>
+                        <textarea
+                            value={writingInput}
+                            onChange={(e) => setWritingInput(e.target.value)}
+                            rows={10}
+                            className="w-full p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            placeholder="Start writing here..."
+                        />
+                    </div>
+                )}
             </div>
             <div className="flex-shrink-0 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between">
                 <button onClick={() => setView('lobby')} className="p-3 bg-slate-200 dark:bg-slate-700 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Back to Lobby</button>
