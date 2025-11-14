@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useImperativeHandle, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, useState } from 'react';
 
 interface DrawingCanvasProps {
   brushColor: string;
@@ -29,23 +29,36 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         return canvas ? canvas.toDataURL('image/png') : '';
       }
     }));
-    
+
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
-        const parent = canvas.parentElement;
-        if (!parent) return;
+        const parent = canvas?.parentElement;
+        if (!canvas || !parent) return;
 
-        const resizeObserver = new ResizeObserver(() => {
-            canvas.width = parent.clientWidth;
-            canvas.height = parent.clientHeight;
+        const resizeObserver = new ResizeObserver(entries => {
+            const entry = entries[0];
+            if (entry) {
+                const { width, height } = entry.contentRect;
+                if (canvas.width !== width || canvas.height !== height) {
+                    // Save the current drawing
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = canvas.width;
+                    tempCanvas.height = canvas.height;
+                    const tempCtx = tempCanvas.getContext('2d');
+                    if(tempCtx) tempCtx.drawImage(canvas, 0, 0);
+
+                    // Resize
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    // Restore the drawing
+                    const ctx = canvas.getContext('2d');
+                    if(ctx) ctx.drawImage(tempCanvas, 0, 0);
+                }
+            }
         });
+
         resizeObserver.observe(parent);
-
-        // Initial resize
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-
         return () => resizeObserver.disconnect();
     }, []);
 
