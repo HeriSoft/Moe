@@ -1,5 +1,5 @@
 import { client } from '@gradio/client';
-import type { Message, Attachment, UserProfile } from '../types';
+import type { Message, Attachment, UserProfile, ReadingLesson, QuizResult } from '../types';
 
 /**
  * A robust error handler for fetch requests to the proxy.
@@ -332,4 +332,38 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment,
         console.error("Failed to parse successful proxy response as JSON", e);
         throw new Error("Proxy returned a successful status, but the response body was not valid JSON.");
     }
+}
+
+// --- NEW functions for Study Zone ---
+
+export async function generateReadingLesson(language: string, level: string, user: UserProfile | undefined): Promise<ReadingLesson> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'generateReadingLesson',
+            payload: { language, level, user }
+        })
+    });
+    if (!response.ok) {
+        await handleProxyError(response);
+    }
+    const data = await response.json();
+    return data.lesson;
+}
+
+export async function gradeReadingAnswers(lesson: ReadingLesson, userAnswers: (string|number)[], user: UserProfile | undefined): Promise<QuizResult> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'gradeReadingAnswers',
+            payload: { lesson, userAnswers, user }
+        })
+    });
+    if (!response.ok) {
+        await handleProxyError(response);
+    }
+    const data = await response.json();
+    return data.result;
 }
