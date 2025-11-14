@@ -60,9 +60,10 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         [selectedLevel, selectedLanguage, userProfile]
     );
     
+    // User request: Reorder tabs to Speaking -> Writing -> Listening
     const TABS: Skill[] = useMemo(() => {
         const hasStarter = currentLesson && 'starter' in currentLesson && currentLesson.starter;
-        const baseTabs: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'];
+        const baseTabs: Skill[] = ['Reading', 'Speaking', 'Writing', 'Listening', 'Quiz'];
         if (selectedLevel === 'Beginner' || hasStarter) {
             return ['Starter', ...baseTabs];
         }
@@ -169,38 +170,48 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         setIsLoading(true);
         try {
             const result = await gradeSingleSkill(currentLesson, finalAnswers, skill, userProfile);
-
-            handleExpGain(result.score);
-            setNotifications(prev => [`${skill} Score: ${result.score}/100. You earned ${result.score} EXP!`, ...prev.slice(0,19)]);
-
+            
+            // For Starter, it's a special case for unlocking content
             if (skill === 'Starter') {
                 if (result.score === 100) {
                     setNotifications(prev => ["Perfect score! Unlocking full lesson...", ...prev.slice(0, 19)]);
+                    
+                    // Update user profile atomically for both EXP and language unlock
                     const updatedProfile = await unlockStarterLanguage(selectedLanguage, userProfile);
                     setUserProfile(updatedProfile);
+                    handleExpGain(result.score); // This updates EXP/Level in sidebar
+                    
+                    // Mark starter as done and record result
                     setCompletedTabs(prev => new Set(prev).add(skill));
                     setSkillResults(prev => [...prev, result]);
                     
-                    // Fetch the full lesson content now, which includes the starter part again
+                    // Fetch the full lesson now that the user is unlocked
                     const fullLesson = await generateFullLesson(selectedLanguage, selectedLevel, false, updatedProfile);
                     setCurrentLesson(fullLesson);
                     
                     // Reset answers for the newly fetched lesson parts
                     setUserAnswers(prev => ({
-                        ...prev,
+                        ...prev, // Keep starter answers
                         reading: new Array(fullLesson.reading?.questions.length || 0).fill(-1),
                         listening: new Array(fullLesson.listening?.length || 0).fill(-1),
                         writing: '', writingImage: '',
                         quiz: new Array(fullLesson.general_questions?.length || 0).fill(-1),
                     }));
 
+                    // Seamlessly move to the next tab
                     setActiveTab('Reading');
                 } else {
+                    // If they fail, show results immediately
+                    handleExpGain(result.score);
                     setQuizResult({ totalScore: result.score, skillResults: [result] });
                     setView('results');
                 }
-                return;
+                return; // End execution for Starter skill
             }
+
+            // For all other skills
+            handleExpGain(result.score);
+            setNotifications(prev => [`${skill} Score: ${result.score}/100. You earned ${result.score} EXP!`, ...prev.slice(0,19)]);
 
             setCompletedTabs(prev => new Set(prev).add(skill));
             const updatedResults = [...skillResults, result];
@@ -208,8 +219,24 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             
             const currentIndex = TABS.findIndex(t => t === skill);
             if (currentIndex < TABS.length - 1) {
-                setActiveTab(TABS[currentIndex + 1]);
+                // Find the next available, non-completed tab
+                let nextIndex = currentIndex + 1;
+                while (nextIndex < TABS.length && completedTabs.has(TABS[nextIndex])) {
+                    nextIndex++;
+                }
+                if (nextIndex < TABS.length) {
+                    setActiveTab(TABS[nextIndex]);
+                } else {
+                    // All remaining tabs were already complete, so finish.
+                     const totalScore = Math.round(updatedResults.reduce((acc, r) => acc + r.score, 0) / updatedResults.length);
+                    setQuizResult({ totalScore, skillResults: updatedResults });
+                    await logLessonCompletion(selectedLanguage, totalScore, userProfile);
+                    const newStats = await getStudyStats(userProfile);
+                    setStudyStats(newStats);
+                    setView('results');
+                }
             } else {
+                // This was the last tab, finish the lesson
                 const totalScore = Math.round(updatedResults.reduce((acc, r) => acc + r.score, 0) / updatedResults.length);
                 setQuizResult({ totalScore, skillResults: updatedResults });
                 await logLessonCompletion(selectedLanguage, totalScore, userProfile);
@@ -355,20 +382,32 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto">
                     {TABS.map(skill => {
                         const isCompleted = completedTabs.has(skill);
-                        const isUnlocked = !isLanguageLocked;
-                        const isDisabled = selectedLevel === 'Beginner' && !isUnlocked && skill !== 'Starter';
+                        const isDisabledByLock = isLanguageLocked && skill !== 'Starter';
+                        const isHighlighted = isLanguageLocked && skill === 'Starter';
+
+                        let stateClasses = '';
+                        if (isDisabledByLock) {
+                            stateClasses = 'opacity-50 cursor-not-allowed text-slate-400';
+                        } else if (isCompleted) {
+                            stateClasses = 'text-green-500 cursor-default';
+                        } else if (activeTab === skill) {
+                            stateClasses = 'border-b-2 border-indigo-500 text-indigo-500';
+                        } else {
+                            stateClasses = 'border-transparent text-slate-500 hover:text-indigo-500';
+                        }
+                        
+                        if (isHighlighted && activeTab === skill) {
+                             stateClasses = 'border-b-2 border-yellow-500 text-yellow-900 dark:text-yellow-100 bg-yellow-300/50 dark:bg-yellow-600/50';
+                        } else if (isHighlighted) {
+                            stateClasses = 'text-yellow-900 dark:text-yellow-100 bg-yellow-300/50 dark:bg-yellow-600/50';
+                        }
+
 
                         return (
-                             <button key={skill} onClick={() => !isDisabled && !isCompleted && setActiveTab(skill)} 
-                                className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap rounded-t-md flex items-center gap-1.5 ${
-                                    isDisabled ? 'opacity-50 cursor-not-allowed text-slate-400' :
-                                    isCompleted ? 'text-green-500 cursor-default' :
-                                    (activeTab === skill ? 'border-b-2 text-indigo-500' : 'text-slate-500 hover:text-indigo-500')
-                                } ${
-                                    skill === 'Starter' && selectedLevel === 'Beginner' && !isUnlocked ? 'bg-yellow-300 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 border-yellow-500' : 
-                                    (activeTab === skill ? 'border-indigo-500' : 'border-transparent')
-                                }`}
-                                disabled={isDisabled || isCompleted}>
+                             <button key={skill} onClick={() => setActiveTab(skill)} 
+                                disabled={isDisabledByLock || isCompleted}
+                                className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap rounded-t-md flex items-center gap-1.5 transition-colors ${stateClasses}`}
+                             >
                                 {isCompleted && <CheckIcon className="w-4 h-4"/>}
                                 {skill}
                             </button>
