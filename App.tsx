@@ -146,7 +146,6 @@ const App: React.FC = () => {
   }, [chatSessions]);
 
 
-  // New state for new features
   const [promptForNewChat, setPromptForNewChat] = useState<string | null>(null);
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
 
@@ -658,7 +657,7 @@ const App: React.FC = () => {
             setPromptForNewChat(null);
         }
     }
-  }, [promptForNewChat, activeChatId]);
+  }, [promptForNewChat, activeChatId, sendMessage]);
 
 
   const handleEditMessage = async (messageIndex: number, newText: string) => {
@@ -722,7 +721,7 @@ const App: React.FC = () => {
         const errorMessage = error instanceof Error ? error.message : "Could not delete message.";
         setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     }
-  }, [activeChatId, isLoggedIn]);
+  }, [activeChatId, isLoggedIn, setNotifications]);
 
   const recentMedia = useMemo(() => {
     return chatSessions
@@ -1208,6 +1207,7 @@ const App: React.FC = () => {
         userProfile={userProfile}
         setNotifications={setNotifications}
         handleExpGain={handleExpGain}
+        setUserProfile={setUserProfile}
       />
     </div>
   );
