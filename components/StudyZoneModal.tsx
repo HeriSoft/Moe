@@ -60,12 +60,14 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         [selectedLevel, selectedLanguage, userProfile]
     );
     
-    const TABS: Skill[] = useMemo(() => 
-        selectedLevel === 'Beginner'
-            ? ['Starter', 'Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'] 
-            : ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'],
-        [selectedLevel]
-    );
+    const TABS: Skill[] = useMemo(() => {
+        const hasStarter = currentLesson && 'starter' in currentLesson && currentLesson.starter;
+        const baseTabs: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'];
+        if (selectedLevel === 'Beginner' || hasStarter) {
+            return ['Starter', ...baseTabs];
+        }
+        return baseTabs;
+    }, [selectedLevel, currentLesson]);
 
 
     useEffect(() => {
@@ -179,10 +181,9 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                     setCompletedTabs(prev => new Set(prev).add(skill));
                     setSkillResults(prev => [...prev, result]);
                     
-                    // Fetch the full lesson content now
+                    // Fetch the full lesson content now, which includes the starter part again
                     const fullLesson = await generateFullLesson(selectedLanguage, selectedLevel, false, updatedProfile);
-                    const combinedLesson = { ...fullLesson, starter: currentLesson.starter };
-                    setCurrentLesson(combinedLesson);
+                    setCurrentLesson(fullLesson);
                     
                     // Reset answers for the newly fetched lesson parts
                     setUserAnswers(prev => ({
@@ -354,7 +355,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto">
                     {TABS.map(skill => {
                         const isCompleted = completedTabs.has(skill);
-                        const isUnlocked = userProfile?.unlocked_starter_languages?.includes(selectedLanguage);
+                        const isUnlocked = !isLanguageLocked;
                         const isDisabled = selectedLevel === 'Beginner' && !isUnlocked && skill !== 'Starter';
 
                         return (
