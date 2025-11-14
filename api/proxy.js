@@ -23,6 +23,7 @@ const isRedisConfigured = !!redis;
 const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const GROK_API_KEY = process.env.GROK_API_KEY;
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
 
@@ -31,6 +32,7 @@ const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const GROK_API_URL = 'https://api.xai.com/v1/chat/completions';
 
 // --- Database Connection Setup (with SSL fix) ---
 const { Pool } = pg;
@@ -203,7 +205,7 @@ function formatHistoryForOpenAI(messages) {
       });
 }
 
-async function handleOpenAIStream(res, apiUrl, apiKey, payload, isWebSearchEnabled, isDeepThink) {
+async function handleChatCompletionStream(res, apiUrl, apiKey, payload, isWebSearchEnabled, isDeepThink) {
     let history = formatHistoryForOpenAI(payload.history);
     if (payload.systemInstruction) {
         history.unshift({ role: 'system', content: payload.systemInstruction });
@@ -246,7 +248,7 @@ async function handleOpenAIStream(res, apiUrl, apiKey, payload, isWebSearchEnabl
 
     if (!apiResponse.ok) {
         const error = await apiResponse.json();
-        throw new Error(`[${apiResponse.status}] OpenAI/DeepSeek API Error: ${error.error?.message || 'Unknown error'}`);
+        throw new Error(`[${apiResponse.status}] Chat Completion API Error: ${error.error?.message || 'Unknown error'}`);
     }
 
     const reader = apiResponse.body.getReader();
@@ -314,7 +316,7 @@ export default async function handler(req, res) {
 
         // --- FEATURE GATING ---
         const proActions = ['swapFace', 'generateImages', 'editImage', 'generateSpeech'];
-        const proModels = ['gpt-4.1', 'gpt-5', 'o3'];
+        const proModels = ['gpt-4.1', 'gpt-5', 'o3', 'gemini-2.5-pro', 'grok-4'];
 
         const isProAction = proActions.includes(action);
         const isProModel = action === 'generateContentStream' && proModels.includes(payload.model);
@@ -556,14 +558,8 @@ export default async function handler(req, res) {
                 const historyForProcessing = [...history];
                 const lastMessageInHistory = historyForProcessing[historyForProcessing.length - 1];
             
-                // Check if the frontend already included the new message in the history array.
-                // This handles an inconsistency in how the frontend calls this endpoint.
                 if (lastMessageInHistory && lastMessageInHistory.role === 'user' && lastMessageInHistory.text === newMessage) {
                     historyForProcessing.pop();
-                }
-
-                if (isWebSearchEnabled && !model.startsWith('gemini')) {
-                   throw new Error(`Web Search is not supported for the '${model}' model.`);
                 }
                 
                 let finalNewMessage = newMessage;
@@ -605,16 +601,22 @@ export default async function handler(req, res) {
                     finalNewMessage = `${textContents.join('\n\n')}\n\nUser Prompt: ${newMessage}`;
                 }
         
-                const openAICompatibleModels = ['gpt-4.1', 'gpt-5-mini', 'gpt-5', 'o3', 'o3-mini'];
+                const openAIModels = ['gpt-4.1', 'gpt-5-mini', 'gpt-5', 'o3', 'o3-mini'];
+                const grokModels = ['grok-4'];
 
                 if (model.startsWith('gemini')) {
                     if (!ai) throw new Error("Gemini API key not configured.");
+                    if (isWebSearchEnabled && !model.startsWith('gemini')) {
+                        throw new Error(`Web Search is not supported for the '${model}' model.`);
+                    }
+
                     res.setHeader('Content-Type', 'text/event-stream');
                     res.setHeader('Cache-Control', 'no-cache');
                     res.setHeader('Connection', 'keep-alive');
                     res.flushHeaders();
 
                     if (isWebSearchEnabled) res.write(`data: ${JSON.stringify({ status: "Researching..." })}\n\n`);
+                    else if (isDeepThinkEnabled) res.write(`data: ${JSON.stringify({ status: "Đang suy nghĩ..." })}\n\n`);
                     else if (attachments && attachments.length > 0) res.write(`data: ${JSON.stringify({ status: "Processing files..." })}\n\n`);
                     
                     let conversationHistory = [ ...historyForProcessing ].filter(m => (m.role === 'user' || m.role === 'model') && (m.text?.trim() || (m.attachments && m.attachments.length > 0)));
@@ -659,19 +661,27 @@ export default async function handler(req, res) {
                     }
                     res.end();
                     return;
-
-                } else if (openAICompatibleModels.includes(model)) {
-                    if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
-                    const updatedPayload = { ...payload, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
-                    await handleOpenAIStream(res, OPENAI_API_URL, OPENAI_API_KEY, updatedPayload, isWebSearchEnabled, false);
-                    return;
-                } else if (model.startsWith('deepseek')) {
-                    if (!DEEPSEEK_API_KEY) throw new Error("DeepSeek API key not configured.");
-                    const updatedPayload = { ...payload, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
-                    await handleOpenAIStream(res, DEEPSEEK_API_URL, DEEPSEEK_API_KEY, updatedPayload, isWebSearchEnabled, isDeepThinkEnabled);
-                    return;
                 } else {
-                    throw new Error(`Unsupported model for streaming: ${model}`);
+                    let apiUrl, apiKey;
+                    if (openAIModels.includes(model)) {
+                        if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
+                        apiUrl = OPENAI_API_URL;
+                        apiKey = OPENAI_API_KEY;
+                    } else if (model.startsWith('deepseek')) {
+                        if (!DEEPSEEK_API_KEY) throw new Error("DeepSeek API key not configured.");
+                        apiUrl = DEEPSEEK_API_URL;
+                        apiKey = DEEPSEEK_API_KEY;
+                    } else if (grokModels.includes(model)) {
+                        if (!GROK_API_KEY) throw new Error("Grok API key not configured.");
+                        apiUrl = GROK_API_URL;
+                        apiKey = GROK_API_KEY;
+                    } else {
+                        throw new Error(`Unsupported model for streaming: ${model}`);
+                    }
+                    
+                    const updatedPayload = { ...payload, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
+                    await handleChatCompletionStream(res, apiUrl, apiKey, updatedPayload, isWebSearchEnabled, isDeepThinkEnabled);
+                    return;
                 }
             }
             
