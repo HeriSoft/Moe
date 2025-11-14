@@ -34,6 +34,33 @@ const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/generations';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 const GROK_API_URL = 'https://api.xai.com/v1/chat/completions';
 
+// --- NEW: Pre-defined alphabets for Starter lessons ---
+const ALPHABETS = {
+    'Japanese': {
+        name: 'Hiragana',
+        // Complete 46 basic hiragana characters
+        characters: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん'
+    },
+    'Vietnamese': {
+        name: 'Vietnamese Alphabet',
+        characters: 'aăâbcdđeêghiklmnoôơpqrstuưvxy'
+    },
+    'English': {
+        name: 'English Alphabet',
+        characters: 'abcdefghijklmnopqrstuvwxyz'
+    },
+    'Korean': {
+        name: 'Hangul (Basic Consonants & Vowels)',
+        // 14 basic consonants and 10 basic vowels
+        characters: 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎㅏㅑㅓㅕㅗㅛㅜㅠㅡㅣ'
+    },
+    'Chinese': {
+        name: 'Basic Radicals',
+        // A selection of common and simple radicals/characters for beginners
+        characters: '一丨丶丿乙亅人八入十厂力又口囗土大女孑子宀寸小山川工己巾干幺广弓彡彳心戈戶手支文斗斤方无日曰月木欠止歹水火爪父'
+    }
+};
+
 // --- Database Connection Setup (with SSL fix) ---
 const { Pool } = pg;
 let connectionString = process.env.POSTGRES_URL;
@@ -932,69 +959,158 @@ export default async function handler(req, res) {
                 if (!language || !level) return res.status(400).json({ error: "Language and level are required." });
 
                 let prompt;
-                if (isStarterOnly) {
-                    prompt = `
-                    Generate a starter lesson for a 'Beginner' level student learning '${language}'. The goal is to learn the basic alphabet/characters.
-                    The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting.
+                const needsStarter = isStarterOnly || level === 'Beginner';
+                const predefinedAlphabet = ALPHABETS[language];
 
-                    The "alphabet_name" should be the name of the primary alphabet for the language (e.g., Hiragana for Japanese, Hangul for Korean).
-                    "characters_to_learn" should be an array of 10-15 fundamental characters.
-                    "quiz" MUST contain exactly 10 multiple-choice questions to test character recognition.
-
-                    {
-                      "starter": {
-                        "alphabet_name": "Name of the alphabet",
-                        "characters_to_learn": [
-                          { "character": "あ", "pronunciation": "a", "example_word": "あさ (asa)", "example_translation": "morning" }
-                        ],
-                        "quiz": [
-                          { "question_text": "Which character is 'ka'?", "options": ["か", "き", "く", "け"], "correct_answer_index": 0, "explanation": "'か' is pronounced 'ka'." }
-                        ]
-                      }
-                    }
-                    `;
-                } else {
-                    let starterPromptSection = '';
-                    if (level === 'Beginner') {
-                        starterPromptSection = `
+                if (needsStarter && predefinedAlphabet) {
+                    const characterList = predefinedAlphabet.characters.split('').join(', ');
+                    
+                    if (isStarterOnly) {
+                        prompt = `
+                        Generate a starter lesson for a 'Beginner' level student learning '${language}'.
+                        The lesson is based on the following complete set of characters: ${characterList}.
+                        The response MUST be a single, valid JSON object. Do not include markdown formatting.
+                        Your task is to create content for this JSON structure:
+                        {
+                          "starter": {
+                            "alphabet_name": "${predefinedAlphabet.name}",
+                            "characters_to_learn": [
+                              // For EACH character in "${characterList}", create an object like this:
+                              // { "character": "...", "pronunciation": "...", "example_word": "...", "example_translation": "..." }
+                            ],
+                            "quiz": [
+                              // Create EXACTLY 10 multiple-choice questions to test character recognition from the provided list.
+                              // Follow this full 10-question example structure:
+                              { "question_text": "Question 1?", "options": ["A", "B", "C", "D"], "correct_answer_index": 0, "explanation": "Explanation 1." },
+                              { "question_text": "Question 2?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "Explanation 2." },
+                              { "question_text": "Question 3?", "options": ["A", "B", "C", "D"], "correct_answer_index": 2, "explanation": "Explanation 3." },
+                              { "question_text": "Question 4?", "options": ["A", "B", "C", "D"], "correct_answer_index": 3, "explanation": "Explanation 4." },
+                              { "question_text": "Question 5?", "options": ["A", "B", "C", "D"], "correct_answer_index": 0, "explanation": "Explanation 5." },
+                              { "question_text": "Question 6?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "Explanation 6." },
+                              { "question_text": "Question 7?", "options": ["A", "B", "C", "D"], "correct_answer_index": 2, "explanation": "Explanation 7." },
+                              { "question_text": "Question 8?", "options": ["A", "B", "C", "D"], "correct_answer_index": 3, "explanation": "Explanation 8." },
+                              { "question_text": "Question 9?", "options": ["A", "B", "C", "D"], "correct_answer_index": 0, "explanation": "Explanation 9." },
+                              { "question_text": "Question 10?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "Explanation 10." }
+                            ]
+                          }
+                        }`;
+                    } else { // Full 'Beginner' lesson with predefined alphabet
+                        const starterPromptSection = `
                         "starter": {
-                          "alphabet_name": "Name of the alphabet for the language",
+                          "alphabet_name": "${predefinedAlphabet.name}",
                           "characters_to_learn": [
-                            { "character": "あ", "pronunciation": "a", "example_word": "あさ (asa)", "example_translation": "morning" }
+                            // For EACH character in "${characterList}", create an object like this:
+                            // { "character": "...", "pronunciation": "...", "example_word": "...", "example_translation": "..." }
                           ],
                           "quiz": [
-                            { "question_text": "Which character is 'ka'?", "options": ["か", "き", "く", "け"], "correct_answer_index": 0, "explanation": "'か' is pronounced 'ka'." }
+                            // Create EXACTLY 10 multiple-choice questions to test character recognition from the provided list.
+                            // Example: { "question_text": "Which character is 'B'?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "'B' is for 'Ball'." }
                           ]
-                        },
-                        `;
+                        },`;
+                        prompt = `
+                        Generate a comprehensive, multi-skill language lesson for a 'Beginner' level student learning '${language}'.
+                        The lesson's "starter" section MUST be based on the following complete set of characters: ${characterList}.
+                        The response MUST be a single, valid JSON object. Do not include any markdown formatting.
+                        Fill out this entire JSON structure, ensuring the "starter.quiz" section contains EXACTLY 10 questions:
+                        {
+                          ${starterPromptSection}
+                          "reading": { "passage": "...", "passage_translation": "...", "questions": [ { "question_text": "...", "options": [], "correct_answer_index": 0, "explanation": "..." }, { "...": "..." }, { "...": "..." } ] },
+                          "listening": [ { "audio_text": "...", "question_text": "...", "options": [], "correct_answer_index": 0 } ],
+                          "speaking": { "prompt": "..." },
+                          "writing": { "prompt": "..." },
+                          "general_questions": [ { "question_text": "...", "options": [], "correct_answer_index": 0, "explanation": "..." }, { "...": "..." }, { "...": "..." } ]
+                        }`;
                     }
-                    prompt = `
-                    Generate a comprehensive, multi-skill language lesson for a '${level}' level student learning '${language}'.
-                    The lesson should be engaging and cover Reading, Listening, Speaking, Writing, and general knowledge.
-                    The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting like \`\`\`json.
-                
-                    {
-                      ${starterPromptSection}
-                      "reading": {
-                        "passage": "A short reading passage in ${language}, approximately 100-200 words.",
-                        "passage_translation": "The full Vietnamese translation of the passage.",
-                        "questions": [
-                          { "question_text": "A multiple-choice question in Vietnamese about the passage's main idea.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 0, "explanation": "A brief explanation in Vietnamese." },
-                          { "question_text": "A vocabulary question in Vietnamese based on a word from the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 2, "explanation": "A brief explanation in Vietnamese." },
-                          { "question_text": "A grammar or context question in Vietnamese related to the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 1, "explanation": "A brief explanation in Vietnamese." }
-                        ]
-                      },
-                      "listening": [
-                        { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
-                      ],
-                      "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
-                      "writing": { "prompt": "A simple writing task in Vietnamese that asks the user to correctly write a specific character or word from the lesson. For example: 'Hãy viết đúng ký tự cho: sa' (Write the correct character for: sa) or 'Hãy viết đúng chính tả từ sau: こんにちは' (Write the correct spelling for the following word: こんにちは)." },
-                      "general_questions": [
-                        { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
-                        { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
-                        { "question_text": "A cultural or common phrase question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0, "explanation": "Explanation in Vietnamese." }
-                      ]
-                    }`;
+                } else {
+                    // This is the fallback logic, which is the same as the original file's logic
+                    if (isStarterOnly) {
+                        prompt = `
+                        Generate a starter lesson for a 'Beginner' level student learning '${language}'. The goal is to learn the **complete** basic alphabet/characters.
+                        The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting.
+    
+                        - "alphabet_name" MUST be the name of the primary alphabet for the language (e.g., Hiragana for Japanese, Hangul for Korean, English Alphabet for English).
+                        - "characters_to_learn" MUST be an array containing the **COMPLETE** set of fundamental characters for the language's writing system. For example, for Japanese, this must include all 46 basic Hiragana characters. For English, all 26 letters. Do not provide a partial list.
+                        - "quiz" MUST contain **EXACTLY 10** multiple-choice questions to test character recognition.
+    
+                        Here is a full 10-question example structure to follow for the quiz:
+                        {
+                          "starter": {
+                            "alphabet_name": "Example Alphabet",
+                            "characters_to_learn": [
+                              { "character": "あ", "pronunciation": "a", "example_word": "あさ (asa)", "example_translation": "morning" },
+                              { "character": "い", "pronunciation": "i", "example_word": "いぬ (inu)", "example_translation": "dog" },
+                              // ... (and so on for the COMPLETE alphabet)
+                            ],
+                            "quiz": [
+                              { "question_text": "Question 1?", "options": ["A", "B", "C", "D"], "correct_answer_index": 0, "explanation": "Explanation 1." },
+                              { "question_text": "Question 2?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "Explanation 2." },
+                              { "question_text": "Question 3?", "options": ["A", "B", "C", "D"], "correct_answer_index": 2, "explanation": "Explanation 3." },
+                              { "question_text": "Question 4?", "options": ["A", "B", "C", "D"], "correct_answer_index": 3, "explanation": "Explanation 4." },
+                              { "question_text": "Question 5?", "options": ["A", "B", "C", "D"], "correct_answer_index": 0, "explanation": "Explanation 5." },
+                              { "question_text": "Question 6?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "Explanation 6." },
+                              { "question_text": "Question 7?", "options": ["A", "B", "C", "D"], "correct_answer_index": 2, "explanation": "Explanation 7." },
+                              { "question_text": "Question 8?", "options": ["A", "B", "C", "D"], "correct_answer_index": 3, "explanation": "Explanation 8." },
+                              { "question_text": "Question 9?", "options": ["A", "B", "C", "D"], "correct_answer_index": 0, "explanation": "Explanation 9." },
+                              { "question_text": "Question 10?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "Explanation 10." }
+                            ]
+                          }
+                        }
+                        `;
+                    } else {
+                        let starterPromptSection = '';
+                        if (level === 'Beginner') {
+                             starterPromptSection = `
+                            "starter": {
+                              "alphabet_name": "The name of the language's primary alphabet",
+                              "characters_to_learn": [
+                                // This array MUST include the COMPLETE set of fundamental characters.
+                                { "character": "A", "pronunciation": "a", "example_word": "Apple", "example_translation": "Táo" }
+                                // ... and so on for all characters
+                              ],
+                              "quiz": [
+                                // This array MUST contain EXACTLY 10 multiple-choice questions.
+                                { "question_text": "Which character is 'B'?", "options": ["A", "B", "C", "D"], "correct_answer_index": 1, "explanation": "'B' is for 'Ball'." },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 0 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 1 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 2 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 3 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 0 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 1 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 2 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 3 },
+                                { "question_text": "...", "options": [...], "correct_answer_index": 0 }
+                              ]
+                            },
+                            `;
+                        }
+                        prompt = `
+                        Generate a comprehensive, multi-skill language lesson for a '${level}' level student learning '${language}'.
+                        The lesson should be engaging and cover Reading, Listening, Speaking, Writing, and general knowledge.
+                        The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting like \`\`\`json.
+                    
+                        {
+                          ${starterPromptSection}
+                          "reading": {
+                            "passage": "A short reading passage in ${language}, approximately 100-200 words.",
+                            "passage_translation": "The full Vietnamese translation of the passage.",
+                            "questions": [
+                              { "question_text": "A multiple-choice question in Vietnamese about the passage's main idea.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 0, "explanation": "A brief explanation in Vietnamese." },
+                              { "question_text": "A vocabulary question in Vietnamese based on a word from the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 2, "explanation": "A brief explanation in Vietnamese." },
+                              { "question_text": "A grammar or context question in Vietnamese related to the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 1, "explanation": "A brief explanation in Vietnamese." }
+                            ]
+                          },
+                          "listening": [
+                            { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
+                          ],
+                          "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
+                          "writing": { "prompt": "A simple writing task in Vietnamese that asks the user to correctly write a specific character or word from the lesson. For example: 'Hãy viết đúng ký tự cho: sa' (Write the correct character for: sa) or 'Hãy viết đúng chính tả từ sau: こんにちは' (Write the correct spelling for the following word: こんにちは)." },
+                          "general_questions": [
+                            { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
+                            { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
+                            { "question_text": "A cultural or common phrase question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0, "explanation": "Explanation in Vietnamese." }
+                          ]
+                        }`;
+                    }
                 }
 
                 const response = await ai.models.generateContent({
