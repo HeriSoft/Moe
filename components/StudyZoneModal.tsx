@@ -59,13 +59,14 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         selectedLevel === 'Beginner' && !userProfile?.unlocked_starter_languages?.includes(selectedLanguage),
         [selectedLevel, selectedLanguage, userProfile]
     );
-
+    
     const TABS: Skill[] = useMemo(() => 
-        isLanguageLocked 
+        selectedLevel === 'Beginner'
             ? ['Starter', 'Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'] 
             : ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'],
-        [isLanguageLocked]
+        [selectedLevel]
     );
+
 
     useEffect(() => {
         audioRef.current = new Audio();
@@ -130,7 +131,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             });
             setCompletedTabs(new Set());
             setSkillResults([]);
-            setActiveTab(isLanguageLocked ? 'Starter' : 'Reading');
+            setActiveTab(selectedLevel === 'Beginner' ? 'Starter' : 'Reading');
             setView('lesson');
         } catch (e) {
             setNotifications(prev => [e instanceof Error ? e.message : 'Failed to generate lesson', ...prev.slice(0, 19)]);
@@ -172,10 +173,26 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
 
             if (skill === 'Starter') {
                 if (result.score === 100) {
+                    setNotifications(prev => ["Perfect score! Unlocking full lesson...", ...prev.slice(0, 19)]);
                     const updatedProfile = await unlockStarterLanguage(selectedLanguage, userProfile);
                     setUserProfile(updatedProfile);
                     setCompletedTabs(prev => new Set(prev).add(skill));
                     setSkillResults(prev => [...prev, result]);
+                    
+                    // Fetch the full lesson content now
+                    const fullLesson = await generateFullLesson(selectedLanguage, selectedLevel, false, updatedProfile);
+                    const combinedLesson = { ...fullLesson, starter: currentLesson.starter };
+                    setCurrentLesson(combinedLesson);
+                    
+                    // Reset answers for the newly fetched lesson parts
+                    setUserAnswers(prev => ({
+                        ...prev,
+                        reading: new Array(fullLesson.reading?.questions.length || 0).fill(-1),
+                        listening: new Array(fullLesson.listening?.length || 0).fill(-1),
+                        writing: '', writingImage: '',
+                        quiz: new Array(fullLesson.general_questions?.length || 0).fill(-1),
+                    }));
+
                     setActiveTab('Reading');
                 } else {
                     setQuizResult({ totalScore: result.score, skillResults: [result] });
@@ -337,7 +354,9 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto">
                     {TABS.map(skill => {
                         const isCompleted = completedTabs.has(skill);
-                        const isDisabled = isLanguageLocked && skill !== 'Starter';
+                        const isUnlocked = userProfile?.unlocked_starter_languages?.includes(selectedLanguage);
+                        const isDisabled = selectedLevel === 'Beginner' && !isUnlocked && skill !== 'Starter';
+
                         return (
                              <button key={skill} onClick={() => !isDisabled && !isCompleted && setActiveTab(skill)} 
                                 className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap rounded-t-md flex items-center gap-1.5 ${
@@ -345,7 +364,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                                     isCompleted ? 'text-green-500 cursor-default' :
                                     (activeTab === skill ? 'border-b-2 text-indigo-500' : 'text-slate-500 hover:text-indigo-500')
                                 } ${
-                                    skill === 'Starter' && isLanguageLocked ? 'bg-yellow-300 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 border-yellow-500' : 
+                                    skill === 'Starter' && selectedLevel === 'Beginner' && !isUnlocked ? 'bg-yellow-300 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 border-yellow-500' : 
                                     (activeTab === skill ? 'border-indigo-500' : 'border-transparent')
                                 }`}
                                 disabled={isDisabled || isCompleted}>
@@ -458,7 +477,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     );
 
     const renderResults = () => {
-        const isStarterFailure = isLanguageLocked && quizResult?.skillResults.some(r => r.skill === 'Starter' && r.score < 100);
+        const isStarterFailure = quizResult?.skillResults.some(r => r.skill === 'Starter' && r.score < 100);
 
         return (
             <div className="flex flex-col items-center justify-center h-full text-center">
