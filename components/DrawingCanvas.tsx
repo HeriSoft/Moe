@@ -39,21 +39,31 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
             const entry = entries[0];
             if (entry) {
                 const { width, height } = entry.contentRect;
-                if (canvas.width !== width || canvas.height !== height) {
-                    // Save the current drawing
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = canvas.width;
-                    tempCanvas.height = canvas.height;
-                    const tempCtx = tempCanvas.getContext('2d');
-                    if(tempCtx) tempCtx.drawImage(canvas, 0, 0);
 
-                    // Resize
-                    canvas.width = width;
-                    canvas.height = height;
+                // Prevent operations on a zero-sized canvas or if size is unchanged
+                if (width === 0 || height === 0 || (canvas.width === width && canvas.height === height)) {
+                    return;
+                }
 
-                    // Restore the drawing
-                    const ctx = canvas.getContext('2d');
-                    if(ctx) ctx.drawImage(tempCanvas, 0, 0);
+                // Create a temporary canvas to hold the current drawing
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+
+                // Only copy if the canvas had a previous size > 0, preventing the error.
+                if (tempCtx && canvas.width > 0 && canvas.height > 0) {
+                    tempCtx.drawImage(canvas, 0, 0);
+                }
+                
+                // Resize the main canvas
+                canvas.width = width;
+                canvas.height = height;
+
+                // Restore the drawing onto the resized canvas
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(tempCanvas, 0, 0);
                 }
             }
         });
