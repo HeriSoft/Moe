@@ -25,7 +25,7 @@ async function handleProxyError(response: Response): Promise<never> {
 }
 
 
-export async function addExp(amount: number, user: UserProfile): Promise<{level: number, exp: number}> {
+export async function addExp(amount: number, user: UserProfile): Promise<UserProfile> {
     if (!user || !user.email) {
         throw new Error("User must be logged in to gain EXP.");
     }
