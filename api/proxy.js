@@ -663,6 +663,7 @@ export default async function handler(req, res) {
                     return;
                 } else {
                     let apiUrl, apiKey;
+                    let finalModel = model;
                     if (openAIModels.includes(model)) {
                         if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
                         apiUrl = OPENAI_API_URL;
@@ -675,11 +676,14 @@ export default async function handler(req, res) {
                         if (!GROK_API_KEY) throw new Error("Grok API key not configured.");
                         apiUrl = GROK_API_URL;
                         apiKey = GROK_API_KEY;
+                        if (model === 'grok-4') {
+                            finalModel = 'grok-4-latest';
+                        }
                     } else {
                         throw new Error(`Unsupported model for streaming: ${model}`);
                     }
                     
-                    const updatedPayload = { ...payload, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
+                    const updatedPayload = { ...payload, model: finalModel, history: historyForProcessing, newMessage: finalNewMessage, attachments: imageAttachments, systemInstruction };
                     await handleChatCompletionStream(res, apiUrl, apiKey, updatedPayload, isWebSearchEnabled, isDeepThinkEnabled);
                     return;
                 }
