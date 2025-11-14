@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon } from './icons';
-import type { UserProfile, ReadingLesson, StudyZoneQuestion, QuizResult } from '../types';
-import { generateReadingLesson, gradeReadingAnswers, generateSpeech } from '../services/geminiService';
+import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult } from '../types';
+import { generateFullLesson, gradeFullLesson, generateSpeech } from '../services/geminiService';
 
 interface StudyZoneModalProps {
   isOpen: boolean;
@@ -13,19 +13,26 @@ interface StudyZoneModalProps {
 
 const LANGUAGES = ['Japanese', 'English', 'Vietnamese', 'Korean', 'Chinese'];
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
-type Skill = 'Reading' | 'Listening' | 'Speaking' | 'Writing';
-const SKILLS: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing'];
+type Skill = 'Reading' | 'Listening' | 'Speaking' | 'Writing' | 'Quiz';
+const SKILLS: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'];
 
 type View = 'lobby' | 'lesson' | 'results';
+
+const INITIAL_ANSWERS = {
+    reading: [],
+    listening: [],
+    writing: '',
+    quiz: [],
+};
 
 export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose, userProfile, setNotifications, handleExpGain }) => {
     const [view, setView] = useState<View>('lobby');
     const [isLoading, setIsLoading] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState('Japanese');
     const [selectedLevel, setSelectedLevel] = useState('Beginner');
-    const [currentLesson, setCurrentLesson] = useState<ReadingLesson | null>(null);
-    const [userAnswers, setUserAnswers] = useState<(string|number)[]>([]);
-    const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
+    const [currentLesson, setCurrentLesson] = useState<FullLesson | null>(null);
+    const [userAnswers, setUserAnswers] = useState<any>(INITIAL_ANSWERS);
+    const [quizResult, setQuizResult] = useState<FullQuizResult | null>(null);
     const [activeTab, setActiveTab] = useState<Skill>('Reading');
 
     // State for Listening feature
@@ -40,20 +47,14 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
 
-    // State for Writing feature
-    const [writingInput, setWritingInput] = useState('');
-
     useEffect(() => {
-        // Setup audio element once on mount
         audioRef.current = new Audio();
-        const audioEl = audioRef.current;
         const onEnded = () => setIsAudioPlaying(false);
-        audioEl.addEventListener('ended', onEnded);
-        
+        audioRef.current.addEventListener('ended', onEnded);
         return () => {
-            if (audioEl) {
-                audioEl.removeEventListener('ended', onEnded);
-                audioEl.pause();
+            if (audioRef.current) {
+                audioRef.current.removeEventListener('ended', onEnded);
+                audioRef.current.pause();
             }
         };
     }, []);
@@ -61,27 +62,24 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
-            // Reset to lobby when modal opens
             setView('lobby');
+            // Other state resets
             setCurrentLesson(null);
             setQuizResult(null);
-            setUserAnswers([]);
-            setWritingInput('');
+            setUserAnswers(INITIAL_ANSWERS);
             setIsRecording(false);
             setRecordedSpeakingUrl(null);
         } else {
             document.body.style.overflow = 'auto';
-            // Cleanup audio when modal closes
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
+            // Cleanup audio
+            if (audioRef.current) audioRef.current.pause();
             if (listeningAudioUrl) {
                 URL.revokeObjectURL(listeningAudioUrl);
                 setListeningAudioUrl(null);
             }
             setIsAudioPlaying(false);
             setIsAudioLoading(false);
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            if (mediaRecorderRef.current?.state === 'recording') {
                 mediaRecorderRef.current.stop();
             }
         }
@@ -90,9 +88,14 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const handleStartLesson = async () => {
         setIsLoading(true);
         try {
-            const lesson = await generateReadingLesson(selectedLanguage, selectedLevel, userProfile);
+            const lesson = await generateFullLesson(selectedLanguage, selectedLevel, userProfile);
             setCurrentLesson(lesson);
-            setUserAnswers(new Array(lesson.questions.length).fill(-1));
+            setUserAnswers({
+                reading: new Array(lesson.reading.questions.length).fill(-1),
+                listening: new Array(lesson.listening.length).fill(-1),
+                writing: '',
+                quiz: new Array(lesson.general_questions.length).fill(-1),
+            });
             setActiveTab('Reading');
             setView('lesson');
         } catch (e) {
@@ -102,25 +105,22 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         }
     };
 
-    const handleAnswerChange = (questionIndex: number, answerIndex: number) => {
-        setUserAnswers(prev => {
-            const newAnswers = [...prev];
-            newAnswers[questionIndex] = answerIndex;
-            return newAnswers;
-        });
+    const handleAnswerChange = (skill: 'reading' | 'listening' | 'quiz', qIndex: number, aIndex: number) => {
+        setUserAnswers(prev => ({ ...prev, [skill]: prev[skill].map((ans: any, i: number) => (i === qIndex ? aIndex : ans)) }));
     };
 
     const handleSubmitLesson = async () => {
         if (!currentLesson) return;
-        if (userAnswers.includes(-1)) {
-            setNotifications(prev => ['Please answer all questions before submitting.', ...prev.slice(0, 19)]);
+        const allAnswered = !userAnswers.reading.includes(-1) && !userAnswers.listening.includes(-1) && !userAnswers.quiz.includes(-1);
+        if (!allAnswered) {
+            setNotifications(prev => ['Please answer all multiple-choice questions.', ...prev.slice(0, 19)]);
             return;
         }
         setIsLoading(true);
         try {
-            const result = await gradeReadingAnswers(currentLesson, userAnswers, userProfile);
+            const result = await gradeFullLesson(currentLesson, userAnswers, userProfile);
             setQuizResult(result);
-            handleExpGain(result.score); // Award EXP equal to the score
+            handleExpGain(Math.round(result.totalScore));
             setView('results');
         } catch (e) {
             setNotifications(prev => [e instanceof Error ? e.message : 'Failed to grade answers', ...prev.slice(0, 19)]);
@@ -128,43 +128,36 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             setIsLoading(false);
         }
     };
-
-    const handleGenerateListeningAudio = async () => {
-        if (!currentLesson || !userProfile) return;
-
+    
+    const handleGenerateListeningAudio = useCallback(async (text: string) => {
+        if (!userProfile) return;
         setIsAudioLoading(true);
         setIsAudioPlaying(false);
-        if (listeningAudioUrl) {
-            URL.revokeObjectURL(listeningAudioUrl);
-            setListeningAudioUrl(null);
-        }
-        if (audioRef.current) {
-            audioRef.current.pause();
-        }
+        if (listeningAudioUrl) URL.revokeObjectURL(listeningAudioUrl);
+        setListeningAudioUrl(null);
+        if (audioRef.current) audioRef.current.pause();
 
         try {
-            const base64Audio = await generateSpeech(currentLesson.passage, userProfile, 'nova', 1.0);
+            const base64Audio = await generateSpeech(text, userProfile, 'nova', 1.0);
             const byteCharacters = atob(base64Audio);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
+            const byteArray = new Uint8Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) byteArray[i] = byteCharacters.charCodeAt(i);
             const blob = new Blob([byteArray], { type: 'audio/mpeg' });
             const url = URL.createObjectURL(blob);
             setListeningAudioUrl(url);
 
             if (audioRef.current) {
                 audioRef.current.src = url;
-                audioRef.current.play().catch(e => console.error("Audio playback error", e));
+                audioRef.current.play().catch(console.error);
                 setIsAudioPlaying(true);
             }
         } catch (e) {
-            setNotifications(prev => [e instanceof Error ? e.message : 'Failed to generate audio', ...prev.slice(0, 19)]);
+            setNotifications(prev => [e instanceof Error ? e.message : 'Failed to generate audio', ...prev]);
         } finally {
             setIsAudioLoading(false);
         }
-    };
+    }, [userProfile, setNotifications, listeningAudioUrl]);
+
 
     const toggleAudioPlayback = () => {
         if (!audioRef.current || !listeningAudioUrl) return;
@@ -172,52 +165,33 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             audioRef.current.pause();
             setIsAudioPlaying(false);
         } else {
-            audioRef.current.src = listeningAudioUrl;
-            audioRef.current.play().catch(e => console.error("Audio playback error", e));
+            audioRef.current.play().catch(console.error);
             setIsAudioPlaying(true);
         }
     };
 
-    // Speaking tab functions
-    const startRecording = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorderRef.current = new MediaRecorder(stream);
-            mediaRecorderRef.current.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    recordedChunksRef.current.push(event.data);
-                }
-            };
-            mediaRecorderRef.current.onstop = () => {
-                const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-                const url = URL.createObjectURL(blob);
-                setRecordedSpeakingUrl(url);
-                recordedChunksRef.current = [];
-                // Stop all tracks to release the microphone
-                stream.getTracks().forEach(track => track.stop());
-            };
-            recordedChunksRef.current = [];
-            mediaRecorderRef.current.start();
-            setIsRecording(true);
-            setRecordedSpeakingUrl(null);
-        } catch (err) {
-            console.error("Error starting recording:", err);
-            setNotifications(prev => ["Microphone access denied or not available.", ...prev]);
-        }
-    };
-
-    const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
-        }
-    };
-
-    const handleToggleRecording = () => {
+    const handleToggleRecording = async () => {
         if (isRecording) {
-            stopRecording();
+            mediaRecorderRef.current?.stop();
+            setIsRecording(false);
         } else {
-            startRecording();
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorderRef.current = new MediaRecorder(stream);
+                mediaRecorderRef.current.ondataavailable = e => { if(e.data.size > 0) recordedChunksRef.current.push(e.data); };
+                mediaRecorderRef.current.onstop = () => {
+                    const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+                    setRecordedSpeakingUrl(URL.createObjectURL(blob));
+                    recordedChunksRef.current = [];
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                recordedChunksRef.current = [];
+                mediaRecorderRef.current.start();
+                setIsRecording(true);
+                setRecordedSpeakingUrl(null);
+            } catch (err) {
+                setNotifications(prev => ["Microphone access denied or not available.", ...prev]);
+            }
         }
     };
 
@@ -244,108 +218,85 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         </div>
     );
     
+    const QuestionBlock: React.FC<{q: QuizQuestion, qIndex: number, userAnswer: number, onAnswer: (qIndex: number, aIndex: number) => void}> = ({q, qIndex, userAnswer, onAnswer}) => (
+        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-md">
+            <p className="font-medium mb-2">{qIndex + 1}. {q.question_text}</p>
+            <div className="space-y-2">
+                {q.options.map((opt, oIndex) => (
+                    <label key={oIndex} className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer">
+                        <input type="radio" name={`q-${q.question_text}-${qIndex}`} checked={userAnswer === oIndex} onChange={() => onAnswer(qIndex, oIndex)} className="text-indigo-600 focus:ring-indigo-500"/>
+                        <span>{opt}</span>
+                    </label>
+                ))}
+            </div>
+        </div>
+    );
+
     const renderLesson = () => (
         <div className="flex flex-col h-full">
             <div className="border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-                <nav className="flex space-x-4">
+                <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto">
                     {SKILLS.map(skill => (
-                        <button key={skill} onClick={() => setActiveTab(skill)} className={`py-2 px-3 text-sm font-medium ${activeTab === skill ? 'border-b-2 border-indigo-500 text-indigo-500' : 'text-slate-500 hover:text-indigo-500'}`}>
+                        <button key={skill} onClick={() => setActiveTab(skill)} className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap ${activeTab === skill ? 'border-b-2 border-indigo-500 text-indigo-500' : 'text-slate-500 hover:text-indigo-500'}`}>
                             {skill}
                         </button>
                     ))}
                 </nav>
             </div>
             <div className="flex-grow overflow-y-auto p-4">
-                {activeTab === 'Reading' && currentLesson && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                            <h4 className="font-semibold">Passage ({selectedLanguage})</h4>
-                            <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-3 rounded-md">{currentLesson.passage}</p>
-                            <h4 className="font-semibold">Translation (Vietnamese)</h4>
-                            <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-3 rounded-md">{currentLesson.passage_translation}</p>
-                        </div>
-                        <div className="space-y-4">
-                            <h4 className="font-semibold">Questions</h4>
-                            {currentLesson.questions.map((q, qIndex) => (
-                                <div key={qIndex} className="bg-slate-100 dark:bg-slate-800 p-3 rounded-md">
-                                    <p className="font-medium mb-2">{qIndex + 1}. {q.question_text}</p>
-                                    <div className="space-y-2">
-                                        {q.options.map((opt, oIndex) => (
-                                            <label key={oIndex} className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer">
-                                                <input type="radio" name={`q-${qIndex}`} checked={userAnswers[qIndex] === oIndex} onChange={() => handleAnswerChange(qIndex, oIndex)} className="text-indigo-600 focus:ring-indigo-500"/>
-                                                <span>{opt}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                {currentLesson && (
+                    <div style={{ display: activeTab === 'Reading' ? 'block' : 'none' }}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <h4 className="font-semibold flex items-center gap-2">Passage ({selectedLanguage}) <button onClick={() => handleGenerateListeningAudio(currentLesson.reading.passage)} className="text-slate-500 hover:text-indigo-500"><SpeakerWaveIcon className="w-5 h-5"/></button></h4>
+                                <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-3 rounded-md">{currentLesson.reading.passage}</p>
+                                <h4 className="font-semibold">Translation (Vietnamese)</h4>
+                                <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-3 rounded-md">{currentLesson.reading.passage_translation}</p>
+                            </div>
+                            <div className="space-y-4">
+                                <h4 className="font-semibold">Comprehension Questions</h4>
+                                {currentLesson.reading.questions.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.reading[qIndex]} onAnswer={(i,a)=>handleAnswerChange('reading', i, a)}/>)}
+                            </div>
                         </div>
                     </div>
                 )}
-                 {activeTab === 'Listening' && currentLesson && (
-                    <div className="space-y-4 max-w-3xl mx-auto">
-                        <h4 className="font-semibold text-xl">Listen to the Passage ({selectedLanguage})</h4>
+                {currentLesson && (
+                    <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Listening' ? 'block' : 'none' }}>
+                       {currentLesson.listening.map((task, index) => (
+                           <div key={index}>
+                               <h4 className="font-semibold text-xl mb-2">Listening Task {index + 1}</h4>
+                               <button onClick={() => handleGenerateListeningAudio(task.audio_text)} disabled={isAudioLoading} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold disabled:bg-indigo-400">
+                                   {isAudioLoading ? <><RefreshIcon className="w-5 h-5 animate-spin"/>Generating...</> : <><PlayIcon className="w-5 h-5"/>Play Audio</>}
+                               </button>
+                               <div className="mt-4"><QuestionBlock q={task} qIndex={index} userAnswer={userAnswers.listening[index]} onAnswer={(i,a)=>handleAnswerChange('listening',i,a)}/></div>
+                           </div>
+                       ))}
+                    </div>
+                )}
+                {currentLesson && (
+                     <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Speaking' ? 'block' : 'none' }}>
+                        <h4 className="font-semibold text-xl">Speaking Practice</h4>
+                        <p className="text-sm text-slate-500">Read the following prompt out loud. Record yourself and play it back to check your fluency and pronunciation.</p>
+                        <p className="p-4 bg-slate-100 dark:bg-slate-800 rounded-md font-semibold text-lg">"{currentLesson.speaking.prompt}"</p>
                         <div className="flex items-center gap-4">
-                            <button 
-                                onClick={listeningAudioUrl ? toggleAudioPlayback : handleGenerateListeningAudio}
-                                disabled={isAudioLoading}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold disabled:bg-indigo-400"
-                            >
-                                {isAudioLoading ? (
-                                    <><RefreshIcon className="w-5 h-5 animate-spin" /><span>Generating...</span></>
-                                ) : listeningAudioUrl ? (
-                                    isAudioPlaying ? (
-                                        <><PauseIcon className="w-5 h-5" /><span>Pause</span></>
-                                    ) : (
-                                        <><PlayIcon className="w-5 h-5" /><span>Play Audio</span></>
-                                    )
-                                ) : (
-                                    <><SpeakerWaveIcon className="w-5 h-5" /><span>Generate & Play</span></>
-                                )}
-                            </button>
-                            {listeningAudioUrl && (
-                                <button onClick={handleGenerateListeningAudio} disabled={isAudioLoading} title="Regenerate Audio" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
-                                    <RefreshIcon className={`w-5 h-5 ${isAudioLoading ? 'animate-spin' : ''}`} />
-                                </button>
-                            )}
+                           <button onClick={handleToggleRecording} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold transition-colors ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-indigo-600'}`}>
+                                {isRecording ? <><StopCircleIcon className="w-5 h-5"/>Stop</> : <><SpeakerWaveIcon className="w-5 h-5"/>Record</>}
+                           </button>
+                           {recordedSpeakingUrl && <audio src={recordedSpeakingUrl} controls />}
                         </div>
-                        <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-4 rounded-md text-base">{currentLesson.passage}</p>
                     </div>
                 )}
-                {activeTab === 'Speaking' && currentLesson && (
-                    <div className="space-y-4 max-w-3xl mx-auto">
-                        <h4 className="font-semibold text-xl">Practice Speaking</h4>
-                        <p className="text-sm text-slate-500">Read the passage below out loud. Record yourself to check your pronunciation and fluency.</p>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={handleToggleRecording}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold transition-colors ${
-                                    isRecording
-                                        ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-                                        : 'bg-indigo-600 hover:bg-indigo-700'
-                                }`}
-                            >
-                                {isRecording ? <StopCircleIcon className="w-5 h-5" /> : <SpeakerWaveIcon className="w-5 h-5" />}
-                                <span>{isRecording ? 'Stop Recording' : 'Start Recording'}</span>
-                            </button>
-                            {recordedSpeakingUrl && (
-                                <audio src={recordedSpeakingUrl} controls />
-                            )}
-                        </div>
-                        <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-4 rounded-md text-base">{currentLesson.passage}</p>
+                {currentLesson && (
+                     <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Writing' ? 'block' : 'none' }}>
+                        <h4 className="font-semibold text-xl">Writing Challenge</h4>
+                        <p className="p-4 bg-slate-100 dark:bg-slate-800 rounded-md font-semibold">{currentLesson.writing.prompt}</p>
+                        <textarea value={userAnswers.writing} onChange={(e) => setUserAnswers(prev => ({...prev, writing: e.target.value}))} rows={8} className="w-full p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Your answer here..."/>
                     </div>
                 )}
-                {activeTab === 'Writing' && currentLesson && (
-                    <div className="space-y-4 max-w-3xl mx-auto">
-                        <h4 className="font-semibold text-xl">Practice Writing</h4>
-                        <p className="text-sm text-slate-500">Summarize the passage in your own words, or write about your thoughts on the topic.</p>
-                        <textarea
-                            value={writingInput}
-                            onChange={(e) => setWritingInput(e.target.value)}
-                            rows={10}
-                            className="w-full p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            placeholder="Start writing here..."
-                        />
+                {currentLesson && (
+                     <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Quiz' ? 'block' : 'none' }}>
+                        <h4 className="font-semibold text-xl">General Quiz</h4>
+                        {currentLesson.general_questions.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.quiz[qIndex]} onAnswer={(i,a)=>handleAnswerChange('quiz', i, a)}/>)}
                     </div>
                 )}
             </div>
@@ -361,11 +312,18 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const renderResults = () => (
         <div className="flex flex-col items-center justify-center h-full text-center">
             <h3 className="text-3xl font-bold">Lesson Complete!</h3>
-            <p className="text-6xl font-bold my-4">{quizResult?.score || 0}/100</p>
-            <p className="text-xl font-semibold text-indigo-500">You earned {quizResult?.score || 0} EXP!</p>
-            <div className="mt-6 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-full max-w-xl text-left">
-                <h4 className="font-semibold mb-2">Feedback from AI Tutor:</h4>
-                <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{quizResult?.feedback}</p>
+            <p className="text-6xl font-bold my-4">{quizResult?.totalScore || 0}/100</p>
+            <p className="text-xl font-semibold text-indigo-500">You earned {Math.round(quizResult?.totalScore || 0)} EXP!</p>
+            <div className="mt-6 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-full max-w-3xl text-left grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {quizResult?.skillResults.map(res => (
+                    <div key={res.skill} className="p-3 bg-white dark:bg-slate-700 rounded-md">
+                        <div className="flex justify-between items-baseline">
+                           <h4 className="font-bold text-lg">{res.skill}</h4>
+                           <span className="font-bold text-lg">{res.score}/100</span>
+                        </div>
+                        <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap mt-1">{res.feedback}</p>
+                    </div>
+                ))}
             </div>
             <div className="mt-8 flex gap-4">
                 <button onClick={() => setView('lobby')} className="p-3 bg-slate-200 dark:bg-slate-700 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Back to Lobby</button>
