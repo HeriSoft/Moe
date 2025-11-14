@@ -864,47 +864,42 @@ export default async function handler(req, res) {
             }
 
             case 'generateReadingLesson': {
-                await logAction(userEmail, `generated a ${payload.level} ${payload.language} study lesson`);
+                await logAction(userEmail, `generated a ${payload.level} ${payload.language} full study lesson`);
                 if (!ai) throw new Error("Gemini API key not configured.");
                 const { language, level } = payload;
                 if (!language || !level) return res.status(400).json({ error: "Language and level are required." });
 
                 const prompt = `
-                Generate a reading comprehension lesson for a '${level}' level student learning '${language}'.
-                The lesson should be about a simple, engaging topic.
-                The response MUST be a single JSON object with the following structure and nothing else:
+                Generate a comprehensive, multi-skill language lesson for a '${level}' level student learning '${language}'.
+                The lesson should be engaging and cover Reading, Listening, Speaking, Writing, and general knowledge.
+                The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting like \`\`\`json.
+            
                 {
-                  "passage": "A short reading passage in ${language}, approximately 100-200 words for beginner/intermediate, 200-300 for advanced.",
-                  "passage_translation": "The full Vietnamese translation of the passage.",
-                  "questions": [
-                    {
-                      "question_text": "A multiple-choice question in Vietnamese about the passage.",
-                      "options": ["An option in Vietnamese.", "Another option in Vietnamese.", "A third option in Vietnamese.", "A fourth option in Vietnamese."],
-                      "correct_answer_index": 0,
-                      "explanation": "A brief explanation in Vietnamese about why the answer is correct."
-                    },
-                    {
-                      "question_text": "A second multiple-choice question in Vietnamese about the passage.",
-                      "options": ["Option A in Vietnamese.", "Option B in Vietnamese.", "Option C in Vietnamese.", "Option D in Vietnamese."],
-                      "correct_answer_index": 2,
-                      "explanation": "A brief explanation in Vietnamese for the second question."
-                    },
-                    {
-                      "question_text": "A third multiple-choice question in Vietnamese about the passage.",
-                      "options": ["Choice 1 in Vietnamese.", "Choice 2 in Vietnamese.", "Choice 3 in Vietnamese.", "Choice 4 in Vietnamese."],
-                      "correct_answer_index": 1,
-                      "explanation": "A brief explanation in Vietnamese for the third question."
-                    }
+                  "reading": {
+                    "passage": "A short reading passage in ${language}, approximately 100-200 words.",
+                    "passage_translation": "The full Vietnamese translation of the passage.",
+                    "questions": [
+                      { "question_text": "A multiple-choice question in Vietnamese about the passage's main idea.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 0, "explanation": "A brief explanation in Vietnamese." },
+                      { "question_text": "A vocabulary question in Vietnamese based on a word from the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 2, "explanation": "A brief explanation in Vietnamese." },
+                      { "question_text": "A grammar or context question in Vietnamese related to the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 1, "explanation": "A brief explanation in Vietnamese." }
+                    ]
+                  },
+                  "listening": [
+                    { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
+                  ],
+                  "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
+                  "writing": { "prompt": "A simple writing task in Vietnamese, like 'Translate this sentence to ${language}: ...'" },
+                  "general_questions": [
+                    { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
+                    { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
+                    { "question_text": "A cultural or common phrase question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0, "explanation": "Explanation in Vietnamese." }
                   ]
-                }
-                Ensure the JSON is well-formed and valid. Do not include any markdown formatting like \`\`\`json.
-                `;
+                }`;
+
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-pro',
                     contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                    }
+                    config: { responseMimeType: 'application/json' }
                 });
                 const lessonJson = JSON.parse(response.text);
                 result = { lesson: lessonJson };
@@ -912,39 +907,64 @@ export default async function handler(req, res) {
             }
 
             case 'gradeReadingAnswers': {
-                await logAction(userEmail, `submitted a study lesson for grading`);
+                await logAction(userEmail, `submitted a full lesson for grading`);
                 if (!ai) throw new Error("Gemini API key not configured.");
                 const { lesson, userAnswers } = payload;
-
-                const questionsAndAnswers = lesson.questions.map((q, index) => ({
-                    question: q.question_text,
-                    options: q.options,
-                    correctAnswer: q.options[q.correct_answer_index],
-                    userAnswer: q.options[userAnswers[index]]
-                }));
-
+                
+                const gradingData = {
+                    reading: {
+                        questions: lesson.reading.questions.map((q, i) => ({
+                            question: q.question_text,
+                            correct_answer: q.options[q.correct_answer_index],
+                            user_answer: q.options[userAnswers.reading[i]]
+                        }))
+                    },
+                    listening: {
+                        questions: lesson.listening.map((q, i) => ({
+                            question: q.question_text,
+                            correct_answer: q.options[q.correct_answer_index],
+                            user_answer: q.options[userAnswers.listening[i]]
+                        }))
+                    },
+                    writing: {
+                        prompt: lesson.writing.prompt,
+                        user_answer: userAnswers.writing
+                    },
+                    general_questions: {
+                         questions: lesson.general_questions.map((q, i) => ({
+                            question: q.question_text,
+                            correct_answer: q.options[q.correct_answer_index],
+                            user_answer: q.options[userAnswers.quiz[i]]
+                        }))
+                    }
+                };
+            
                 const prompt = `
-                You are an AI language tutor. A student has completed a reading comprehension quiz.
-                Here is the quiz data and their answers:
-                ${JSON.stringify(questionsAndAnswers, null, 2)}
-                
-                Your task is to:
-                1.  Calculate the student's score out of 100. Each question is weighted equally.
-                2.  Provide brief, encouraging, and constructive feedback in Vietnamese based on their performance. If they made mistakes, gently explain the concepts they might have missed.
-                
-                Provide your response as a single, valid JSON object with the following structure and nothing else:
+                You are an AI language tutor. A student has completed a multi-skill lesson. Here is the data:
+                ${JSON.stringify(gradingData, null, 2)}
+            
+                Your task is to grade the student's performance and provide feedback in Vietnamese.
+                The response MUST be a single, valid JSON object with the exact structure below.
+                - For each skill ('Reading', 'Listening', 'Writing', 'Quiz'), calculate a score from 0-100.
+                - For 'Writing', grade based on correctness, grammar, and effort.
+                - Provide brief, encouraging, and constructive feedback in Vietnamese for each skill.
+                - Calculate a 'totalScore' which is the average of all skill scores.
+                - Do not include any markdown formatting like \`\`\`json.
+            
                 {
-                  "score": <number>,
-                  "feedback": "<string>"
-                }
-                Do not include any markdown formatting like \`\`\`json.
-                `;
+                  "totalScore": <average_score_number>,
+                  "skillResults": [
+                    { "skill": "Reading", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" },
+                    { "skill": "Listening", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" },
+                    { "skill": "Writing", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" },
+                    { "skill": "Quiz", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" }
+                  ]
+                }`;
+
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-pro',
                     contents: prompt,
-                    config: {
-                        responseMimeType: 'application/json',
-                    }
+                    config: { responseMimeType: 'application/json' }
                 });
                 const gradingResult = JSON.parse(response.text);
                 result = { result: gradingResult };
