@@ -253,7 +253,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const renderLobby = () => (
         <div className="flex flex-col items-center justify-center h-full text-center">
              {userProfile && studyStats && (
-                <div className="w-full max-w-md p-4 bg-slate-100 dark:bg-slate-800 rounded-lg mb-6 text-left">
+                <div className="w-full max-w-sm p-4 bg-slate-100 dark:bg-slate-800 rounded-lg mb-6 text-left">
                     <div className="flex items-center gap-4">
                         <img src={userProfile.imageUrl} alt={userProfile.name} className="w-16 h-16 rounded-full" />
                         <div className="min-w-0">
