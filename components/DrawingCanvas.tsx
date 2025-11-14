@@ -1,8 +1,6 @@
-import React, { useRef, useEffect, useImperativeHandle, useState } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, useState, useCallback } from 'react';
 
 interface DrawingCanvasProps {
-  width: number;
-  height: number;
   brushColor: string;
   brushSize: number;
 }
@@ -13,7 +11,7 @@ export interface DrawingCanvasRef {
 }
 
 const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
-  ({ width, height, brushColor, brushSize }, ref) => {
+  ({ brushColor, brushSize }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPointRef = useRef<{ x: number, y: number } | null>(null);
@@ -22,7 +20,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       clear: () => {
         const canvas = canvasRef.current;
         const context = canvas?.getContext('2d');
-        if (context) {
+        if (context && canvas) {
           context.clearRect(0, 0, canvas.width, canvas.height);
         }
       },
@@ -32,6 +30,25 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
       }
     }));
     
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            canvas.width = parent.clientWidth;
+            canvas.height = parent.clientHeight;
+        });
+        resizeObserver.observe(parent);
+
+        // Initial resize
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+
+        return () => resizeObserver.disconnect();
+    }, []);
+
     const getCoordinates = (e: React.MouseEvent | React.TouchEvent): { x: number, y: number } | null => {
         const canvas = canvasRef.current;
         if (!canvas) return null;
@@ -83,8 +100,6 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
     return (
       <canvas
         ref={canvasRef}
-        width={width}
-        height={height}
         onMouseDown={startDrawing}
         onMouseMove={draw}
         onMouseUp={stopDrawing}
@@ -92,7 +107,7 @@ const DrawingCanvas = React.forwardRef<DrawingCanvasRef, DrawingCanvasProps>(
         onTouchStart={startDrawing}
         onTouchMove={draw}
         onTouchEnd={stopDrawing}
-        className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md cursor-crosshair"
+        className="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 cursor-crosshair w-full h-full"
       />
     );
   }
