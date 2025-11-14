@@ -18,13 +18,14 @@ import { MusicBoxModal } from './components/MusicBoxModal';
 import { AdminMusicModal } from './components/AdminMusicModal'; 
 import { PianoModal } from './components/PianoModal';
 import { ExpenseTrackerModal } from './components/ExpenseTrackerModal';
+import { StudyZoneModal } from './components/StudyZoneModal';
 import {
   streamModelResponse,
   addExp,
   addPoints
 } from './services/geminiService';
 import * as googleDriveService from './services/googleDriveService';
-import { AcademicCapIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
+import { BookOpenIcon, UserCircleIcon, CodeBracketIcon, SparklesIcon, InformationCircleIcon } from './components/icons';
 import type { ChatSession, Message, Attachment, UserProfile, Song } from './types';
 
 const MAX_FILES = 4;
@@ -53,7 +54,7 @@ const PERSONAS: { [key: string]: { name: string; icon: React.FC<any>; prompt: st
   },
   tutor: {
     name: 'Academic Tutor',
-    icon: AcademicCapIcon,
+    icon: BookOpenIcon,
     prompt: 'You are an experienced academic tutor. Your goal is to help users understand complex subjects by breaking them down into simple, easy-to-digest concepts. Use analogies, ask guiding questions, and be patient and encouraging.',
     description: 'Explains complex topics in a simple way.'
   }
@@ -131,6 +132,9 @@ const App: React.FC = () => {
 
   // --- NEW: Expense Tracker Modal State ---
   const [isExpenseTrackerOpen, setIsExpenseTrackerOpen] = useState(false);
+  
+  // --- NEW: Study Zone Modal State ---
+  const [isStudyZoneModalOpen, setIsStudyZoneModalOpen] = useState(false);
 
   // --- New Welcome Modal State ---
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(() => {
@@ -560,15 +564,20 @@ const App: React.FC = () => {
         let finalChatState: ChatSession = currentChat;
         const historyForAPI = customHistory || [...currentChat.messages];
         const webSearch = isWebSearchEnabled;
-        const deepThink = isDeepThinkEnabled;
         const activePersonaKey = currentChat.persona || 'default';
         const systemInstruction = PERSONAS[activePersonaKey]?.prompt;
-        setIsWebSearchEnabled(false);
-        setIsDeepThinkEnabled(false);
+        
         let finalModel = currentChat.model;
-        if (currentChat.model === 'deepseek-v3.1') {
+        
+        const isGrokModel = finalModel === 'grok-4';
+        const deepThink = isDeepThinkEnabled || isGrokModel;
+
+        if (finalModel === 'deepseek-v3.1') {
             finalModel = deepThink ? 'deepseek-reasoner' : 'deepseek-chat';
         }
+
+        setIsWebSearchEnabled(false);
+        setIsDeepThinkEnabled(false);
 
         const stream = await streamModelResponse(finalModel, historyForAPI, messageText, messageAttachments, webSearch, deepThink, systemInstruction, userProfile);
         let isFirstChunk = true;
@@ -1051,6 +1060,7 @@ const App: React.FC = () => {
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
           onOpenExpenseTracker={() => setIsExpenseTrackerOpen(true)}
+          onOpenStudyZone={() => setIsStudyZoneModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
           musicBoxState={musicBoxState}
@@ -1174,7 +1184,6 @@ const App: React.FC = () => {
         activeGenre={musicActiveGenre}
         setActiveGenre={setMusicActiveGenre}
         searchTerm={musicSearchTerm}
-// FIX: The state setter for the music search term is `setMusicSearchTerm`, not `setSearchTerm`.
         setSearchTerm={setMusicSearchTerm}
       />
       <AdminMusicModal
@@ -1192,6 +1201,13 @@ const App: React.FC = () => {
         isOpen={isExpenseTrackerOpen}
         onClose={() => setIsExpenseTrackerOpen(false)}
         userProfile={userProfile}
+      />
+      <StudyZoneModal
+        isOpen={isStudyZoneModalOpen}
+        onClose={() => setIsStudyZoneModalOpen(false)}
+        userProfile={userProfile}
+        setNotifications={setNotifications}
+        handleExpGain={handleExpGain}
       />
     </div>
   );
