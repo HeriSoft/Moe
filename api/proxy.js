@@ -71,11 +71,21 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlocked_starter_languages TEXT[];');
+        
+        // NEW: Table for Study Zone stats
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS study_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                language VARCHAR(50) NOT NULL,
+                exp_gained INTEGER NOT NULL,
+                completed_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        `);
 
-
-        console.log("Table 'users' is ready.");
+        console.log("Tables 'users' and 'study_log' are ready.");
     } catch (error) {
-        console.error("Error creating/altering users table:", error);
+        console.error("Error creating/altering tables:", error);
         throw new Error("Failed to initialize database tables.");
     } finally {
         client.release();
@@ -276,6 +286,23 @@ async function handleChatCompletionStream(res, apiUrl, apiKey, payload, isWebSea
         res.end();
     }
 }
+
+async function getAndReturnStudyStats(client, userId) {
+    const [statsRes, todayRes, langRes] = await Promise.all([
+        client.query('SELECT COALESCE(SUM(exp_gained), 0) as total_exp_earned, COUNT(*) as total_lessons_completed FROM study_log WHERE user_id = $1;', [userId]),
+        client.query("SELECT COUNT(*) as today_lessons_completed FROM study_log WHERE user_id = $1 AND completed_at >= current_date;", [userId]),
+        client.query('SELECT array_agg(DISTINCT language) as languages_studied FROM study_log WHERE user_id = $1;', [userId])
+    ]);
+
+    const stats = {
+        total_exp_earned: parseInt(statsRes.rows[0].total_exp_earned, 10),
+        total_lessons_completed: parseInt(statsRes.rows[0].total_lessons_completed, 10),
+        today_lessons_completed: parseInt(todayRes.rows[0].today_lessons_completed, 10),
+        languages_studied: langRes.rows[0].languages_studied || []
+    };
+    return stats;
+}
+
 
 // --- Main Handler ---
 export default async function handler(req, res) {
@@ -867,37 +894,61 @@ export default async function handler(req, res) {
             }
 
             case 'generateReadingLesson': {
-                await logAction(userEmail, `generated a ${payload.level} ${payload.language} full study lesson`);
+                await logAction(userEmail, `generated a ${payload.level} ${payload.language} study lesson`);
                 if (!ai) throw new Error("Gemini API key not configured.");
-                const { language, level } = payload;
+                const { language, level, isStarterOnly } = payload;
                 if (!language || !level) return res.status(400).json({ error: "Language and level are required." });
 
-                const prompt = `
-                Generate a comprehensive, multi-skill language lesson for a '${level}' level student learning '${language}'.
-                The lesson should be engaging and cover Reading, Listening, Speaking, Writing, and general knowledge.
-                The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting like \`\`\`json.
-            
-                {
-                  "reading": {
-                    "passage": "A short reading passage in ${language}, approximately 100-200 words.",
-                    "passage_translation": "The full Vietnamese translation of the passage.",
-                    "questions": [
-                      { "question_text": "A multiple-choice question in Vietnamese about the passage's main idea.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 0, "explanation": "A brief explanation in Vietnamese." },
-                      { "question_text": "A vocabulary question in Vietnamese based on a word from the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 2, "explanation": "A brief explanation in Vietnamese." },
-                      { "question_text": "A grammar or context question in Vietnamese related to the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 1, "explanation": "A brief explanation in Vietnamese." }
-                    ]
-                  },
-                  "listening": [
-                    { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
-                  ],
-                  "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
-                  "writing": { "prompt": "A simple writing task in Vietnamese, like 'Translate this sentence to ${language}: ...' or 'Write the character for...'" },
-                  "general_questions": [
-                    { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
-                    { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
-                    { "question_text": "A cultural or common phrase question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0, "explanation": "Explanation in Vietnamese." }
-                  ]
-                }`;
+                let prompt;
+                if (isStarterOnly) {
+                    prompt = `
+                    Generate a starter lesson for a 'Beginner' level student learning '${language}'. The goal is to learn the basic alphabet/characters.
+                    The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting.
+
+                    The "alphabet_name" should be the name of the primary alphabet for the language (e.g., Hiragana for Japanese, Hangul for Korean).
+                    "characters_to_learn" should be an array of 10-15 fundamental characters.
+                    "quiz" MUST contain exactly 10 multiple-choice questions to test character recognition.
+
+                    {
+                      "starter": {
+                        "alphabet_name": "Name of the alphabet",
+                        "characters_to_learn": [
+                          { "character": "あ", "pronunciation": "a", "example_word": "あさ (asa)", "example_translation": "morning" }
+                        ],
+                        "quiz": [
+                          { "question_text": "Which character is 'ka'?", "options": ["か", "き", "く", "け"], "correct_answer_index": 0, "explanation": "'か' is pronounced 'ka'." }
+                        ]
+                      }
+                    }
+                    `;
+                } else {
+                    prompt = `
+                    Generate a comprehensive, multi-skill language lesson for a '${level}' level student learning '${language}'.
+                    The lesson should be engaging and cover Reading, Listening, Speaking, Writing, and general knowledge.
+                    The response MUST be a single, valid JSON object with the exact structure below. Do not include any markdown formatting like \`\`\`json.
+                
+                    {
+                      "reading": {
+                        "passage": "A short reading passage in ${language}, approximately 100-200 words.",
+                        "passage_translation": "The full Vietnamese translation of the passage.",
+                        "questions": [
+                          { "question_text": "A multiple-choice question in Vietnamese about the passage's main idea.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 0, "explanation": "A brief explanation in Vietnamese." },
+                          { "question_text": "A vocabulary question in Vietnamese based on a word from the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 2, "explanation": "A brief explanation in Vietnamese." },
+                          { "question_text": "A grammar or context question in Vietnamese related to the passage.", "options": ["Option A.", "Option B.", "Option C.", "Option D."], "correct_answer_index": 1, "explanation": "A brief explanation in Vietnamese." }
+                        ]
+                      },
+                      "listening": [
+                        { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
+                      ],
+                      "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
+                      "writing": { "prompt": "A simple writing task in Vietnamese, like 'Translate this sentence to ${language}: ...' or 'Write the character for...'" },
+                      "general_questions": [
+                        { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
+                        { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
+                        { "question_text": "A cultural or common phrase question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0, "explanation": "Explanation in Vietnamese." }
+                      ]
+                    }`;
+                }
 
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-pro',
@@ -910,7 +961,7 @@ export default async function handler(req, res) {
             }
 
             case 'gradeReadingAnswers': {
-                await logAction(userEmail, `submitted a full lesson for grading`);
+                await logAction(userEmail, `submitted a lesson for grading`);
                 if (!ai) throw new Error("Gemini API key not configured.");
                 const { lesson, userAnswers } = payload;
                 
@@ -936,22 +987,30 @@ export default async function handler(req, res) {
                             correct_answer: q.options[q.correct_answer_index],
                             user_answer: q.options[userAnswers.quiz[i]]
                         })) || []
-                    }
+                    },
+                    starter_quiz: {
+                        questions: lesson.starter?.quiz.map((q, i) => ({
+                            question: q.question_text,
+                            correct_answer: q.options[q.correct_answer_index],
+                            user_answer: q.options[userAnswers.starter?.[i]]
+                        })) || []
+                    },
                 };
             
                 const promptText = `
-                You are an AI language tutor. A student has completed a multi-skill lesson. Grade their performance based on the provided data and the attached image for the writing task.
+                You are an AI language tutor. A student has completed a lesson. Grade their performance based on the provided data and, if applicable, the attached image for the writing task.
                 
                 Here is the data for the text-based parts:
                 ${JSON.stringify(textGradingData, null, 2)}
                 
-                The attached image is the student's handwritten answer to the writing prompt. Evaluate the handwriting for accuracy, legibility, and proper character formation according to the prompt.
+                If a writingImage is attached, it is the student's handwritten answer to the writing prompt. Evaluate the handwriting for accuracy and legibility.
                 
                 Your task is to provide a complete evaluation in Vietnamese. The response MUST be a single, valid JSON object with the exact structure below.
-                - For each skill ('Reading', 'Listening', 'Writing', 'Quiz'), calculate a score from 0-100.
-                - For 'Writing', the score should be based on the image. If the score is below 70, you MUST set "rewrite": true. Otherwise, set "rewrite": false.
+                - For each skill that has data ('Reading', 'Listening', 'Writing', 'Quiz', 'Starter'), calculate a score from 0-100.
+                - If grading a 'Starter' quiz, a score of 100 means all 10 questions were correct.
+                - For 'Writing', if there's an image, base the score on it. If the score is below 70, you MUST set "rewrite": true.
                 - Provide brief, encouraging, and constructive feedback in Vietnamese for each skill.
-                - Calculate a 'totalScore' which is the average of all skill scores.
+                - Calculate a 'totalScore' which is the average of all available skill scores.
                 - Do not include any markdown formatting like \`\`\`json.
             
                 {
@@ -960,7 +1019,8 @@ export default async function handler(req, res) {
                     { "skill": "Reading", "score": 0, "feedback": "" },
                     { "skill": "Listening", "score": 0, "feedback": "" },
                     { "skill": "Writing", "score": 0, "feedback": "", "rewrite": false },
-                    { "skill": "Quiz", "score": 0, "feedback": "" }
+                    { "skill": "Quiz", "score": 0, "feedback": "" },
+                    { "skill": "Starter", "score": 0, "feedback": "" }
                   ]
                 }`;
 
@@ -981,6 +1041,84 @@ export default async function handler(req, res) {
                 });
                 const gradingResult = JSON.parse(response.text);
                 result = { result: gradingResult };
+                break;
+            }
+            
+            case 'unlock_starter_language': {
+                const { language } = payload;
+                if (!userEmail || !language) return res.status(400).json({ error: 'User and language are required.' });
+                
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+                    const { rows } = await client.query('SELECT id, unlocked_starter_languages FROM users WHERE email = $1 FOR UPDATE;', [userEmail]);
+                    if (rows.length === 0) throw new Error('User not found.');
+                    
+                    const { id, unlocked_starter_languages: currentLangs } = rows[0];
+                    const unlocked = new Set(currentLangs || []);
+                    unlocked.add(language);
+                    
+                    await client.query('UPDATE users SET unlocked_starter_languages = $1 WHERE id = $2;', [Array.from(unlocked), id]);
+                    await client.query('COMMIT');
+            
+                    const { rows: updatedRows } = await client.query(
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner, unlocked_starter_languages FROM users WHERE id = $1;`,
+                        [id]
+                    );
+                    const dbUser = updatedRows[0];
+                    const fullUserProfile = {
+                        id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                        subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                        isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                        level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
+                        hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
+                    };
+            
+                    result = { success: true, user: fullUserProfile };
+                } catch (e) {
+                    await client.query('ROLLBACK');
+                    throw e;
+                } finally {
+                    client.release();
+                }
+                break;
+            }
+
+            case 'get_study_stats': {
+                if (!userEmail) return res.status(401).json({ error: 'Unauthorized' });
+                const client = await pool.connect();
+                try {
+                    const { rows } = await client.query('SELECT id FROM users WHERE email = $1;', [userEmail]);
+                    if (rows.length === 0) throw new Error('User not found.');
+                    const userId = rows[0].id;
+                    const stats = await getAndReturnStudyStats(client, userId);
+                    result = { stats };
+                } finally {
+                    client.release();
+                }
+                break;
+            }
+
+            case 'log_lesson_completion': {
+                if (!userEmail) return res.status(401).json({ error: 'Unauthorized' });
+                const { language, expGained } = payload;
+                const client = await pool.connect();
+                try {
+                    const { rows } = await client.query('SELECT id FROM users WHERE email = $1;', [userEmail]);
+                    if (rows.length === 0) throw new Error('User not found.');
+                    const userId = rows[0].id;
+
+                    await client.query(
+                        'INSERT INTO study_log (user_id, language, exp_gained) VALUES ($1, $2, $3);',
+                        [userId, language, expGained]
+                    );
+
+                    const stats = await getAndReturnStudyStats(client, userId);
+                    result = { stats };
+                } finally {
+                    client.release();
+                }
                 break;
             }
 
