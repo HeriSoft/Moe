@@ -1,5 +1,5 @@
 import { client } from '@gradio/client';
-import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult } from '../types';
+import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats } from '../types';
 
 /**
  * A robust error handler for fetch requests to the proxy.
@@ -336,13 +336,13 @@ export async function swapFace(targetImage: Attachment, sourceImage: Attachment,
 
 // --- NEW functions for Study Zone ---
 
-export async function generateFullLesson(language: string, level: string, user: UserProfile | undefined): Promise<FullLesson> {
+export async function generateFullLesson(language: string, level: string, isStarterOnly: boolean, user: UserProfile | undefined): Promise<FullLesson> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'generateReadingLesson', // Still uses the old action name in the proxy
-            payload: { language, level, user }
+            action: 'generateReadingLesson',
+            payload: { language, level, isStarterOnly, user }
         })
     });
     if (!response.ok) {
@@ -352,12 +352,12 @@ export async function generateFullLesson(language: string, level: string, user: 
     return data.lesson;
 }
 
-export async function gradeFullLesson(lesson: FullLesson, userAnswers: any, user: UserProfile | undefined): Promise<FullQuizResult> {
+export async function gradeFullLesson(lesson: FullLesson, userAnswers: UserAnswers, user: UserProfile | undefined): Promise<FullQuizResult> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'gradeReadingAnswers', // Still uses the old action name in the proxy
+            action: 'gradeReadingAnswers',
             payload: { lesson, userAnswers, user }
         })
     });
@@ -366,4 +366,46 @@ export async function gradeFullLesson(lesson: FullLesson, userAnswers: any, user
     }
     const data = await response.json();
     return data.result;
+}
+
+export async function unlockStarterLanguage(language: string, user: UserProfile): Promise<UserProfile> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'unlock_starter_language',
+            payload: { language, user }
+        })
+    });
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.user;
+}
+
+export async function getStudyStats(user: UserProfile): Promise<StudyStats> {
+     const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'get_study_stats',
+            payload: { user }
+        })
+    });
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.stats;
+}
+
+export async function logLessonCompletion(language: string, expGained: number, user: UserProfile): Promise<StudyStats> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'log_lesson_completion',
+            payload: { language, expGained, user }
+        })
+    });
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.stats;
 }
