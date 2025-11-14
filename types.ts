@@ -200,20 +200,49 @@ export interface Transaction {
 }
 
 // --- NEW TYPES for Study Zone ---
-export interface StudyZoneQuestion {
+export interface QuizQuestion {
   question_text: string;
   options: string[];
   correct_answer_index: number;
   explanation?: string;
 }
 
-export interface ReadingLesson {
+export interface ReadingTask {
   passage: string;
   passage_translation: string;
-  questions: StudyZoneQuestion[];
+  questions: QuizQuestion[];
 }
 
-export interface QuizResult {
-  score: number;
-  feedback: string;
+export interface ListeningTask {
+  audio_text: string;
+  question_text: string;
+  options: string[];
+  correct_answer_index: number;
+}
+
+export interface SpeakingTask {
+    prompt: string;
+}
+
+export interface WritingTask {
+    prompt: string;
+}
+
+export interface FullLesson {
+  reading: ReadingTask;
+  listening: ListeningTask[];
+  speaking: SpeakingTask;
+  writing: WritingTask;
+  general_questions: QuizQuestion[];
+}
+
+export interface SkillResult {
+    skill: 'Reading' | 'Listening' | 'Writing' | 'Quiz';
+    score: number;
+    feedback: string;
+}
+
+export interface FullQuizResult {
+    totalScore: number;
+    skillResults: SkillResult[];
 }
