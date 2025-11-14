@@ -1043,6 +1043,87 @@ export default async function handler(req, res) {
                 result = { result: gradingResult };
                 break;
             }
+
+            case 'gradeSkill': {
+                await logAction(userEmail, `submitted a skill for grading`);
+                if (!ai) throw new Error("Gemini API key not configured.");
+                const { lesson, userAnswers, skill } = payload;
+                if (!lesson || !userAnswers || !skill) {
+                    return res.status(400).json({ error: 'Lesson, userAnswers, and skill are required.' });
+                }
+
+                let gradingData = {};
+                let promptText = `You are an AI language tutor. A student has completed one part of a lesson. Grade their performance for the following skill: '${skill}'.`;
+
+                switch (skill) {
+                    case 'Reading':
+                        gradingData = {
+                            questions: lesson.reading?.questions.map((q, i) => ({
+                                question: q.question_text,
+                                correct_answer: q.options[q.correct_answer_index],
+                                user_answer: q.options[userAnswers.reading[i]]
+                            })) || []
+                        };
+                        break;
+                    case 'Listening':
+                        gradingData = {
+                            questions: lesson.listening?.map((q, i) => ({
+                                question: q.question_text,
+                                correct_answer: q.options[q.correct_answer_index],
+                                user_answer: q.options[userAnswers.listening[i]]
+                            })) || []
+                        };
+                        break;
+                    case 'Writing':
+                        gradingData = { writing_prompt: lesson.writing?.prompt };
+                        promptText += ' An image of the user\'s writing is attached. Evaluate it for accuracy and legibility.';
+                        break;
+                    case 'Quiz':
+                        gradingData = {
+                            questions: lesson.general_questions?.map((q, i) => ({
+                                question: q.question_text,
+                                correct_answer: q.options[q.correct_answer_index],
+                                user_answer: q.options[userAnswers.quiz[i]]
+                            })) || []
+                        };
+                        break;
+                    case 'Starter':
+                         gradingData = {
+                            questions: lesson.starter?.quiz.map((q, i) => ({
+                                question: q.question_text,
+                                correct_answer: q.options[q.correct_answer_index],
+                                user_answer: q.options[userAnswers.starter?.[i]]
+                            })) || []
+                        };
+                        break;
+                    default:
+                        return res.status(400).json({ error: `Invalid skill to grade: ${skill}`});
+                }
+
+                promptText += `\nHere is the data: ${JSON.stringify(gradingData, null, 2)}`;
+                promptText += `\nYour task is to provide an evaluation in Vietnamese. The response MUST be a single, valid JSON object with the exact structure below.
+                - Calculate a 'score' from 0-100. For 'Starter', 100 means all questions correct.
+                - Provide brief, encouraging, and constructive 'feedback' in Vietnamese.
+                - For 'Writing', if the score is below 70, you MUST set "rewrite": true. For other skills, it should be false.
+                - Do not include any markdown formatting like \`\`\`json.
+
+                { "skill": "${skill}", "score": 0, "feedback": "", "rewrite": false }`;
+
+                const promptParts = [{ text: promptText }];
+                if (skill === 'Writing' && userAnswers.writingImage) {
+                    promptParts.push({
+                        inlineData: { mimeType: 'image/png', data: userAnswers.writingImage }
+                    });
+                }
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-pro',
+                    contents: [{ parts: promptParts }],
+                    config: { responseMimeType: 'application/json' }
+                });
+                result = JSON.parse(response.text);
+                break;
+            }
             
             case 'unlock_starter_language': {
                 const { language } = payload;
