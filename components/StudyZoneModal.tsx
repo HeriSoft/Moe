@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { CloseIcon, BookOpenIcon, RefreshIcon } from './icons';
+import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon } from './icons';
 import type { UserProfile, ReadingLesson, StudyZoneQuestion, QuizResult } from '../types';
-import { generateReadingLesson, gradeReadingAnswers } from '../services/geminiService';
+import { generateReadingLesson, gradeReadingAnswers, generateSpeech } from '../services/geminiService';
 
 interface StudyZoneModalProps {
   isOpen: boolean;
@@ -28,6 +28,27 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
     const [activeTab, setActiveTab] = useState<Skill>('Reading');
 
+    // State for Listening feature
+    const [listeningAudioUrl, setListeningAudioUrl] = useState<string | null>(null);
+    const [isAudioLoading, setIsAudioLoading] = useState(false);
+    const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+        // Setup audio element once on mount
+        audioRef.current = new Audio();
+        const audioEl = audioRef.current;
+        const onEnded = () => setIsAudioPlaying(false);
+        audioEl.addEventListener('ended', onEnded);
+        
+        return () => {
+            if (audioEl) {
+                audioEl.removeEventListener('ended', onEnded);
+                audioEl.pause();
+            }
+        };
+    }, []);
+
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -38,8 +59,18 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             setUserAnswers([]);
         } else {
             document.body.style.overflow = 'auto';
+            // Cleanup audio when modal closes
+            if (audioRef.current) {
+                audioRef.current.pause();
+            }
+            if (listeningAudioUrl) {
+                URL.revokeObjectURL(listeningAudioUrl);
+                setListeningAudioUrl(null);
+            }
+            setIsAudioPlaying(false);
+            setIsAudioLoading(false);
         }
-    }, [isOpen]);
+    }, [isOpen, listeningAudioUrl]);
 
     const handleStartLesson = async () => {
         setIsLoading(true);
@@ -80,6 +111,55 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             setNotifications(prev => [e instanceof Error ? e.message : 'Failed to grade answers', ...prev.slice(0, 19)]);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleGenerateListeningAudio = async () => {
+        if (!currentLesson || !userProfile) return;
+
+        setIsAudioLoading(true);
+        setIsAudioPlaying(false);
+        if (listeningAudioUrl) {
+            URL.revokeObjectURL(listeningAudioUrl);
+            setListeningAudioUrl(null);
+        }
+        if (audioRef.current) {
+            audioRef.current.pause();
+        }
+
+        try {
+            const base64Audio = await generateSpeech(currentLesson.passage, userProfile, 'nova', 1.0);
+            const byteCharacters = atob(base64Audio);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+            setListeningAudioUrl(url);
+
+            if (audioRef.current) {
+                audioRef.current.src = url;
+                audioRef.current.play().catch(e => console.error("Audio playback error", e));
+                setIsAudioPlaying(true);
+            }
+        } catch (e) {
+            setNotifications(prev => [e instanceof Error ? e.message : 'Failed to generate audio', ...prev.slice(0, 19)]);
+        } finally {
+            setIsAudioLoading(false);
+        }
+    };
+
+    const toggleAudioPlayback = () => {
+        if (!audioRef.current || !listeningAudioUrl) return;
+        if (isAudioPlaying) {
+            audioRef.current.pause();
+            setIsAudioPlaying(false);
+        } else {
+            audioRef.current.src = listeningAudioUrl;
+            audioRef.current.play().catch(e => console.error("Audio playback error", e));
+            setIsAudioPlaying(true);
         }
     };
 
@@ -148,7 +228,37 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                         </div>
                     </div>
                 )}
-                 {activeTab !== 'Reading' && <p className="text-center text-slate-500 mt-8">{activeTab} exercises are coming soon!</p>}
+                 {activeTab === 'Listening' && currentLesson && (
+                    <div className="space-y-4 max-w-3xl mx-auto">
+                        <h4 className="font-semibold text-xl">Listen to the Passage ({selectedLanguage})</h4>
+                        <div className="flex items-center gap-4">
+                            <button 
+                                onClick={listeningAudioUrl ? toggleAudioPlayback : handleGenerateListeningAudio}
+                                disabled={isAudioLoading}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold disabled:bg-indigo-400"
+                            >
+                                {isAudioLoading ? (
+                                    <><RefreshIcon className="w-5 h-5 animate-spin" /><span>Generating...</span></>
+                                ) : listeningAudioUrl ? (
+                                    isAudioPlaying ? (
+                                        <><PauseIcon className="w-5 h-5" /><span>Pause</span></>
+                                    ) : (
+                                        <><PlayIcon className="w-5 h-5" /><span>Play Audio</span></>
+                                    )
+                                ) : (
+                                    <><SpeakerWaveIcon className="w-5 h-5" /><span>Generate & Play</span></>
+                                )}
+                            </button>
+                            {listeningAudioUrl && (
+                                <button onClick={handleGenerateListeningAudio} disabled={isAudioLoading} title="Regenerate Audio" className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
+                                    <RefreshIcon className={`w-5 h-5 ${isAudioLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                            )}
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed bg-slate-100 dark:bg-slate-800 p-4 rounded-md text-base">{currentLesson.passage}</p>
+                    </div>
+                )}
+                {activeTab !== 'Reading' && activeTab !== 'Listening' && <p className="text-center text-slate-500 mt-8">{activeTab} exercises are coming soon!</p>}
             </div>
             <div className="flex-shrink-0 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between">
                 <button onClick={() => setView('lobby')} className="p-3 bg-slate-200 dark:bg-slate-700 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Back to Lobby</button>
