@@ -217,10 +217,9 @@ export const ArrowDownTrayIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props
   </svg>
 );
 
-export const AcademicCapIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const BookOpenIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-    <path d="M11.063 2.53L2.25 6.437v2.876l8.813 3.899L12 13.5l.937-.288 8.813-3.899V6.437L12.937 2.53A1.125 1.125 0 0012 2.25c-.413 0-.8.223-1.063.563z" />
-    <path d="M21.75 9.313l-8.813 3.899L12 13.5l-1.125-.469-8.813-3.899V12.11L12 16.5l10.125-4.549v.088a2.25 2.25 0 01-2.625 2.25H17.25a2.25 2.25 0 01-2.25-2.25V12.11L21.75 9.313zM4.125 13.5L12 17.25l7.875-3.75M12 21.75c3.036 0 5.5-1.683 5.5-3.75S15.036 14.25 12 14.25s-5.5 1.683 5.5 3.75S8.964 21.75 12 21.75z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
   </svg>
 );
 
