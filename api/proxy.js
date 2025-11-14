@@ -688,13 +688,13 @@ export default async function handler(req, res) {
             case 'generateSpeech': {
                 await logAction(userEmail, 'used Text-to-Speech');
                 if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
-                const { text } = payload;
+                const { text, voice = 'echo', speed = 1.0 } = payload;
                 if (!text) return res.status(400).json({ error: "Missing text in payload" });
 
                 const response = await fetch('https://api.openai.com/v1/audio/speech', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: 'tts-1', input: text, voice: 'echo', speed: 1.0, response_format: 'mp3' }),
+                    body: JSON.stringify({ model: 'tts-1', input: text, voice: voice, speed: speed, response_format: 'mp3' }),
                 });
 
                 if (!response.ok) {
