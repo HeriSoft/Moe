@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon, AcademicCapIcon } from './icons';
 import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult, StudyStats } from '../types';
-import { generateFullLesson, gradeFullLesson, generateSpeech, getStudyStats } from '../services/geminiService';
+import { generateFullLesson, gradeFullLesson, generateSpeech, getStudyStats, logLessonCompletion } from '../services/geminiService';
 import DrawingCanvas, { DrawingCanvasRef } from './DrawingCanvas';
 
 
@@ -11,6 +11,8 @@ interface StudyZoneModalProps {
   userProfile?: UserProfile;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   handleExpGain: (amount: number) => void;
+  // FIX: Add missing setUserProfile prop to fix TypeScript error in App.tsx
+  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>;
 }
 
 const LANGUAGES = ['Japanese', 'English', 'Vietnamese', 'Korean', 'Chinese'];
@@ -28,7 +30,7 @@ const INITIAL_ANSWERS = {
     quiz: [],
 };
 
-export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose, userProfile, setNotifications, handleExpGain }) => {
+export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose, userProfile, setNotifications, handleExpGain, setUserProfile }) => {
     const [view, setView] = useState<View>('lobby');
     const [isLoading, setIsLoading] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState('Japanese');
@@ -128,7 +130,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     };
 
     const handleSubmitLesson = async () => {
-        if (!currentLesson) return;
+        if (!currentLesson || !userProfile) return;
         const allAnswered = !userAnswers.reading.includes(-1) && !userAnswers.listening.includes(-1) && !userAnswers.quiz.includes(-1);
         if (!allAnswered) {
             setNotifications(prev => ['Please answer all multiple-choice questions.', ...prev.slice(0, 19)]);
@@ -141,7 +143,13 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
 
             const result = await gradeFullLesson(currentLesson, finalAnswers, userProfile);
             setQuizResult(result);
-            handleExpGain(Math.round(result.totalScore));
+            const expGained = Math.round(result.totalScore);
+            handleExpGain(expGained);
+            
+            logLessonCompletion(selectedLanguage, expGained, userProfile)
+                .then(newStats => setStudyStats(newStats))
+                .catch(err => console.error("Failed to log lesson completion", err));
+
 
             if (result.skillResults.find(r => r.skill === 'Writing' && r.rewrite)) {
                 setNotifications(prev => ["Your handwriting score is below 70%. Please try again to improve!", ...prev]);
