@@ -271,8 +271,8 @@ const App: React.FC = () => {
     if (!isLoggedIn || !userProfile) return;
 
     try {
-        const { level, exp } = await addExp(amount, userProfile);
-        setUserProfile(prev => prev ? { ...prev, level, exp } : undefined);
+        const updatedProfile = await addExp(amount, userProfile);
+        setUserProfile(updatedProfile);
     } catch (error) {
         console.error("Failed to update EXP:", error);
         // Do not notify the user, this is a background process.
