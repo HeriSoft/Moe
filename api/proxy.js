@@ -70,6 +70,7 @@ async function createTables() {
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_permanent_name_color BOOLEAN NOT NULL DEFAULT false;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS has_sakura_banner BOOLEAN NOT NULL DEFAULT false;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlocked_starter_languages TEXT[];');
 
 
         console.log("Table 'users' is ready.");
@@ -362,7 +363,7 @@ export default async function handler(req, res) {
 
                     // Fetch the complete, updated profile from the database
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner FROM users WHERE email = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner, unlocked_starter_languages FROM users WHERE email = $1;`,
                         [user.email]
                     );
                     
@@ -382,6 +383,7 @@ export default async function handler(req, res) {
                             credits: dbUser.credits,
                             hasPermanentNameColor: dbUser.has_permanent_name_color,
                             hasSakuraBanner: dbUser.has_sakura_banner,
+                            unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
                         };
                         return res.status(200).json({ success: true, user: fullUserProfile });
                     }
@@ -529,7 +531,7 @@ export default async function handler(req, res) {
                     await client.query('COMMIT');
 
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner FROM users WHERE id = $1;`,
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, level, exp, points, credits, has_permanent_name_color, has_sakura_banner, unlocked_starter_languages FROM users WHERE id = $1;`,
                         [id]
                     );
                     const dbUser = rows[0];
@@ -540,6 +542,7 @@ export default async function handler(req, res) {
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points,
                         credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
                     };
                     result = { success: true, user: fullUserProfile };
                 } catch (dbError) {
@@ -888,7 +891,7 @@ export default async function handler(req, res) {
                     { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
                   ],
                   "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
-                  "writing": { "prompt": "A simple writing task in Vietnamese, like 'Translate this sentence to ${language}: ...'" },
+                  "writing": { "prompt": "A simple writing task in Vietnamese, like 'Translate this sentence to ${language}: ...' or 'Write the character for...'" },
                   "general_questions": [
                     { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
                     { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
@@ -911,59 +914,69 @@ export default async function handler(req, res) {
                 if (!ai) throw new Error("Gemini API key not configured.");
                 const { lesson, userAnswers } = payload;
                 
-                const gradingData = {
+                const textGradingData = {
                     reading: {
-                        questions: lesson.reading.questions.map((q, i) => ({
+                        questions: lesson.reading?.questions.map((q, i) => ({
                             question: q.question_text,
                             correct_answer: q.options[q.correct_answer_index],
                             user_answer: q.options[userAnswers.reading[i]]
-                        }))
+                        })) || []
                     },
                     listening: {
-                        questions: lesson.listening.map((q, i) => ({
+                        questions: lesson.listening?.map((q, i) => ({
                             question: q.question_text,
                             correct_answer: q.options[q.correct_answer_index],
                             user_answer: q.options[userAnswers.listening[i]]
-                        }))
+                        })) || []
                     },
-                    writing: {
-                        prompt: lesson.writing.prompt,
-                        user_answer: userAnswers.writing
-                    },
+                    writing_prompt: lesson.writing?.prompt,
                     general_questions: {
-                         questions: lesson.general_questions.map((q, i) => ({
+                         questions: lesson.general_questions?.map((q, i) => ({
                             question: q.question_text,
                             correct_answer: q.options[q.correct_answer_index],
                             user_answer: q.options[userAnswers.quiz[i]]
-                        }))
+                        })) || []
                     }
                 };
             
-                const prompt = `
-                You are an AI language tutor. A student has completed a multi-skill lesson. Here is the data:
-                ${JSON.stringify(gradingData, null, 2)}
-            
-                Your task is to grade the student's performance and provide feedback in Vietnamese.
-                The response MUST be a single, valid JSON object with the exact structure below.
+                const promptText = `
+                You are an AI language tutor. A student has completed a multi-skill lesson. Grade their performance based on the provided data and the attached image for the writing task.
+                
+                Here is the data for the text-based parts:
+                ${JSON.stringify(textGradingData, null, 2)}
+                
+                The attached image is the student's handwritten answer to the writing prompt. Evaluate the handwriting for accuracy, legibility, and proper character formation according to the prompt.
+                
+                Your task is to provide a complete evaluation in Vietnamese. The response MUST be a single, valid JSON object with the exact structure below.
                 - For each skill ('Reading', 'Listening', 'Writing', 'Quiz'), calculate a score from 0-100.
-                - For 'Writing', grade based on correctness, grammar, and effort.
+                - For 'Writing', the score should be based on the image. If the score is below 70, you MUST set "rewrite": true. Otherwise, set "rewrite": false.
                 - Provide brief, encouraging, and constructive feedback in Vietnamese for each skill.
                 - Calculate a 'totalScore' which is the average of all skill scores.
                 - Do not include any markdown formatting like \`\`\`json.
             
                 {
-                  "totalScore": <average_score_number>,
+                  "totalScore": 0,
                   "skillResults": [
-                    { "skill": "Reading", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" },
-                    { "skill": "Listening", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" },
-                    { "skill": "Writing", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" },
-                    { "skill": "Quiz", "score": <score_number_0_100>, "feedback": "<Vietnamese_feedback>" }
+                    { "skill": "Reading", "score": 0, "feedback": "" },
+                    { "skill": "Listening", "score": 0, "feedback": "" },
+                    { "skill": "Writing", "score": 0, "feedback": "", "rewrite": false },
+                    { "skill": "Quiz", "score": 0, "feedback": "" }
                   ]
                 }`;
 
+                const promptParts = [{ text: promptText }];
+                if (userAnswers.writingImage) {
+                    promptParts.push({
+                        inlineData: {
+                            mimeType: 'image/png',
+                            data: userAnswers.writingImage
+                        }
+                    });
+                }
+
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-pro',
-                    contents: prompt,
+                    contents: [{ parts: promptParts }],
                     config: { responseMimeType: 'application/json' }
                 });
                 const gradingResult = JSON.parse(response.text);
