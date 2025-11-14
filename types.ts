@@ -201,6 +201,8 @@ export interface Transaction {
 }
 
 // --- NEW TYPES for Study Zone ---
+export type Skill = 'Starter' | 'Reading' | 'Listening' | 'Speaking' | 'Writing' | 'Quiz';
+
 export interface QuizQuestion {
   question_text: string;
   options: string[];
@@ -252,7 +254,7 @@ export interface FullLesson {
 }
 
 export interface SkillResult {
-    skill: 'Reading' | 'Listening' | 'Writing' | 'Quiz' | 'Starter';
+    skill: Skill;
     score: number;
     feedback: string;
     rewrite?: boolean; // For writing task
