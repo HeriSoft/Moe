@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon, AcademicCapIcon } from './icons';
 import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult, StudyStats } from '../types';
-import { generateFullLesson, gradeFullLesson, generateSpeech, getStudyStats, logLessonCompletion } from '../services/geminiService';
+import { generateFullLesson, gradeFullLesson, generateSpeech, getStudyStats, logLessonCompletion, unlockStarterLanguage } from '../services/geminiService';
 import DrawingCanvas, { DrawingCanvasRef } from './DrawingCanvas';
 
 
@@ -11,23 +11,22 @@ interface StudyZoneModalProps {
   userProfile?: UserProfile;
   setNotifications: React.Dispatch<React.SetStateAction<string[]>>;
   handleExpGain: (amount: number) => void;
-  // FIX: Add missing setUserProfile prop to fix TypeScript error in App.tsx
   setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>;
 }
 
 const LANGUAGES = ['Japanese', 'English', 'Vietnamese', 'Korean', 'Chinese'];
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
-type Skill = 'Reading' | 'Listening' | 'Speaking' | 'Writing' | 'Quiz';
-const SKILLS: Skill[] = ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'];
+type Skill = 'Starter' | 'Reading' | 'Listening' | 'Speaking' | 'Writing' | 'Quiz';
 
 type View = 'lobby' | 'lesson' | 'results';
 
 const INITIAL_ANSWERS = {
     reading: [],
     listening: [],
-    writing: '', // This will be unused, but kept for type consistency
+    writing: '',
     writingImage: '',
     quiz: [],
+    starter: [],
 };
 
 export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose, userProfile, setNotifications, handleExpGain, setUserProfile }) => {
@@ -41,22 +40,31 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const [activeTab, setActiveTab] = useState<Skill>('Reading');
     const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
 
-    // Canvas state
     const drawingCanvasRef = useRef<DrawingCanvasRef>(null);
     const [brushColor, setBrushColor] = useState('#000000');
     const [brushSize, setBrushSize] = useState(5);
 
-    // State for Listening feature
     const [listeningAudioUrl, setListeningAudioUrl] = useState<string | null>(null);
     const [isAudioLoading, setIsAudioLoading] = useState(false);
     const [isAudioPlaying, setIsAudioPlaying] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // State for Speaking feature
     const [isRecording, setIsRecording] = useState(false);
     const [recordedSpeakingUrl, setRecordedSpeakingUrl] = useState<string | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
+
+    const isLanguageLocked = useMemo(() => 
+        selectedLevel === 'Beginner' && !userProfile?.unlocked_starter_languages?.includes(selectedLanguage),
+        [selectedLevel, selectedLanguage, userProfile]
+    );
+
+    const TABS: Skill[] = useMemo(() => 
+        isLanguageLocked 
+            ? ['Starter', 'Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'] 
+            : ['Reading', 'Listening', 'Speaking', 'Writing', 'Quiz'],
+        [isLanguageLocked]
+    );
 
     useEffect(() => {
         audioRef.current = new Audio();
@@ -107,7 +115,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const handleStartLesson = async () => {
         setIsLoading(true);
         try {
-            const lesson = await generateFullLesson(selectedLanguage, selectedLevel, false, userProfile);
+            const lesson = await generateFullLesson(selectedLanguage, selectedLevel, isLanguageLocked, userProfile);
             setCurrentLesson(lesson);
             setUserAnswers({
                 reading: new Array(lesson.reading?.questions.length || 0).fill(-1),
@@ -115,8 +123,9 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 writing: '',
                 writingImage: '',
                 quiz: new Array(lesson.general_questions?.length || 0).fill(-1),
+                starter: new Array(lesson.starter?.quiz.length || 0).fill(-1),
             });
-            setActiveTab('Reading');
+            setActiveTab(isLanguageLocked ? 'Starter' : 'Reading');
             setView('lesson');
         } catch (e) {
             setNotifications(prev => [e instanceof Error ? e.message : 'Failed to generate lesson', ...prev.slice(0, 19)]);
@@ -125,23 +134,49 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         }
     };
 
-    const handleAnswerChange = (skill: 'reading' | 'listening' | 'quiz', qIndex: number, aIndex: number) => {
+    const handleAnswerChange = (skill: 'reading' | 'listening' | 'quiz' | 'starter', qIndex: number, aIndex: number) => {
         setUserAnswers((prev: any) => ({ ...prev, [skill]: prev[skill].map((ans: any, i: number) => (i === qIndex ? aIndex : ans)) }));
     };
 
     const handleSubmitLesson = async () => {
         if (!currentLesson || !userProfile) return;
-        const allAnswered = !userAnswers.reading.includes(-1) && !userAnswers.listening.includes(-1) && !userAnswers.quiz.includes(-1);
-        if (!allAnswered) {
-            setNotifications(prev => ['Please answer all multiple-choice questions.', ...prev.slice(0, 19)]);
-            return;
+
+        const isStarterLesson = !!currentLesson.starter;
+
+        if (isStarterLesson) {
+            if (userAnswers.starter.includes(-1)) {
+                setNotifications(prev => ['Please answer all starter quiz questions.', ...prev.slice(0, 19)]);
+                return;
+            }
+        } else {
+            const allAnswered = !userAnswers.reading.includes(-1) && !userAnswers.listening.includes(-1) && !userAnswers.quiz.includes(-1);
+            if (!allAnswered) {
+                setNotifications(prev => ['Please answer all multiple-choice questions.', ...prev.slice(0, 19)]);
+                return;
+            }
         }
+        
         setIsLoading(true);
         try {
             const writingImage = drawingCanvasRef.current?.toDataURL().split(',')[1] || '';
             const finalAnswers = { ...userAnswers, writingImage };
 
             const result = await gradeFullLesson(currentLesson, finalAnswers, userProfile);
+            const starterResult = result.skillResults.find(r => r.skill === 'Starter');
+
+            if (isStarterLesson) {
+                if (starterResult?.score === 100) {
+                    const updatedProfile = await unlockStarterLanguage(selectedLanguage, userProfile);
+                    setUserProfile(updatedProfile);
+                    setNotifications(prev => [`Perfect score! You've unlocked all lessons for ${selectedLanguage} and earned 100 EXP!`, ...prev]);
+                    handleExpGain(100);
+                    setView('lobby');
+                    return; 
+                } else {
+                    setNotifications(prev => [`You need a perfect score (10/10) to unlock other lessons. Please review and try again! Your score: ${starterResult?.score}/100`, ...prev]);
+                }
+            }
+            
             setQuizResult(result);
             const expGained = Math.round(result.totalScore);
             handleExpGain(expGained);
@@ -149,7 +184,6 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             logLessonCompletion(selectedLanguage, expGained, userProfile)
                 .then(newStats => setStudyStats(newStats))
                 .catch(err => console.error("Failed to log lesson completion", err));
-
 
             if (result.skillResults.find(r => r.skill === 'Writing' && r.rewrite)) {
                 setNotifications(prev => ["Your handwriting score is below 70%. Please try again to improve!", ...prev]);
@@ -190,18 +224,6 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             setIsAudioLoading(false);
         }
     }, [userProfile, setNotifications, listeningAudioUrl]);
-
-
-    const toggleAudioPlayback = () => {
-        if (!audioRef.current || !listeningAudioUrl) return;
-        if (isAudioPlaying) {
-            audioRef.current.pause();
-            setIsAudioPlaying(false);
-        } else {
-            audioRef.current.play().catch(console.error);
-            setIsAudioPlaying(true);
-        }
-    };
 
     const handleToggleRecording = async () => {
         if (isRecording) {
@@ -264,7 +286,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                     </select>
                 </div>
                 <button onClick={handleStartLesson} disabled={isLoading} className="w-full p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
-                    {isLoading ? 'Generating Lesson...' : 'Start Now'}
+                    {isLoading ? 'Generating Lesson...' : (isLanguageLocked ? 'Start Starter Lesson' : 'Start Now')}
                 </button>
             </div>
         </div>
@@ -288,14 +310,46 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
         <div className="flex flex-col h-full">
             <div className="border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto">
-                    {SKILLS.map(skill => (
-                        <button key={skill} onClick={() => setActiveTab(skill)} className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap ${activeTab === skill ? 'border-b-2 border-indigo-500 text-indigo-500' : 'text-slate-500 hover:text-indigo-500'}`}>
-                            {skill}
-                        </button>
-                    ))}
+                    {TABS.map(skill => {
+                        const isDisabled = isLanguageLocked && skill !== 'Starter';
+                        return (
+                             <button key={skill} onClick={() => !isDisabled && setActiveTab(skill)} 
+                                className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap rounded-t-md ${
+                                    isDisabled ? 'opacity-50 cursor-not-allowed text-slate-400' : (activeTab === skill ? 'border-b-2 text-indigo-500' : 'text-slate-500 hover:text-indigo-500')
+                                } ${
+                                    skill === 'Starter' && isLanguageLocked ? 'bg-yellow-300 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 border-yellow-500' : (activeTab === skill ? 'border-indigo-500' : 'border-transparent')
+                                }`}
+                                disabled={isDisabled}>
+                                {skill}
+                            </button>
+                        );
+                    })}
                 </nav>
             </div>
             <div className="flex-grow overflow-y-auto p-4">
+                {currentLesson?.starter && (
+                    <div className="max-w-4xl mx-auto space-y-6" style={{ display: activeTab === 'Starter' ? 'block' : 'none' }}>
+                        <div>
+                            <h4 className="font-bold text-xl mb-2">Learn the Alphabet: {currentLesson.starter.alphabet_name}</h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                                {currentLesson.starter.characters_to_learn.map(char => (
+                                    <div key={char.character} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg text-center">
+                                        <p className="text-4xl font-bold">{char.character}</p>
+                                        <p className="font-semibold">{char.pronunciation}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{char.example_word}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">({char.example_translation})</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-xl mb-2">Starter Quiz (10/10 to unlock)</h4>
+                            <div className="space-y-4">
+                                {currentLesson.starter.quiz.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.starter[qIndex]} onAnswer={(i,a)=>handleAnswerChange('starter', i, a)}/>)}
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {currentLesson?.reading && (
                     <div style={{ display: activeTab === 'Reading' ? 'block' : 'none' }}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -342,23 +396,15 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                      <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Writing' ? 'block' : 'none' }}>
                         <h4 className="font-semibold text-xl">Writing Challenge</h4>
                         <p className="p-4 bg-slate-100 dark:bg-slate-800 rounded-md font-semibold">{currentLesson.writing.prompt}</p>
-                        
                         <div className="flex flex-wrap items-center justify-center gap-4 p-2 bg-slate-100 dark:bg-slate-800 rounded-md">
                             <label htmlFor="brush-color" className="text-sm font-medium">Color:</label>
                             <input id="brush-color" type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} />
-                            
                             <label htmlFor="brush-size" className="text-sm font-medium">Size: {brushSize}</label>
                             <input id="brush-size" type="range" min="1" max="30" value={brushSize} onChange={e => setBrushSize(Number(e.target.value))} className="w-24 sm:w-32" />
-
                             <button onClick={() => drawingCanvasRef.current?.clear()} className="px-3 py-1 bg-slate-300 dark:bg-slate-600 text-sm font-semibold rounded-md hover:bg-slate-400 dark:hover:bg-slate-500">Clear</button>
                         </div>
-
                         <div className="w-full aspect-video border border-slate-300 dark:border-slate-600 rounded-md overflow-hidden">
-                            <DrawingCanvas
-                                ref={drawingCanvasRef}
-                                brushColor={brushColor}
-                                brushSize={brushSize}
-                            />
+                            <DrawingCanvas ref={drawingCanvasRef} brushColor={brushColor} brushSize={brushSize} />
                         </div>
                     </div>
                 )}
