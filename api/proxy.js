@@ -941,7 +941,7 @@ export default async function handler(req, res) {
                         { "audio_text": "A short sentence in ${language} to be read aloud.", "question_text": "A multiple-choice question in Vietnamese about the audio content.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 0 }
                       ],
                       "speaking": { "prompt": "A simple question or a sentence to read aloud in ${language}." },
-                      "writing": { "prompt": "A simple writing task in Vietnamese, like 'Translate this sentence to ${language}: ...' or 'Write the character for...'" },
+                      "writing": { "prompt": "A simple writing task in Vietnamese that asks the user to correctly write a specific character or word from the lesson. For example: 'Hãy viết đúng ký tự cho: sa' (Write the correct character for: sa) or 'Hãy viết đúng chính tả từ sau: こんにちは' (Write the correct spelling for the following word: こんにちは)." },
                       "general_questions": [
                         { "question_text": "A general multiple-choice grammar question in Vietnamese.", "options": ["Option A.", "Option B.", "Option C."], "correct_answer_index": 1, "explanation": "Explanation in Vietnamese." },
                         { "question_text": "A fill-in-the-blank vocabulary question in Vietnamese.", "options": ["word A", "word B", "word C"], "correct_answer_index": 2, "explanation": "Explanation in Vietnamese." },
