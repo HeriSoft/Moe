@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon, AcademicCapIcon } from './icons';
-import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult, StudyStats } from '../types';
-import { generateFullLesson, gradeFullLesson, generateSpeech, getStudyStats, logLessonCompletion, unlockStarterLanguage } from '../services/geminiService';
+import { CloseIcon, BookOpenIcon, RefreshIcon, SpeakerWaveIcon, PlayIcon, PauseIcon, StopCircleIcon, AcademicCapIcon, CheckIcon } from './icons';
+import type { UserProfile, FullLesson, QuizQuestion, FullQuizResult, StudyStats, Skill, SkillResult } from '../types';
+import { generateFullLesson, gradeSingleSkill, generateSpeech, getStudyStats, logLessonCompletion, unlockStarterLanguage } from '../services/geminiService';
 import DrawingCanvas, { DrawingCanvasRef } from './DrawingCanvas';
 
 
@@ -16,7 +16,6 @@ interface StudyZoneModalProps {
 
 const LANGUAGES = ['Japanese', 'English', 'Vietnamese', 'Korean', 'Chinese'];
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
-type Skill = 'Starter' | 'Reading' | 'Listening' | 'Speaking' | 'Writing' | 'Quiz';
 
 type View = 'lobby' | 'lesson' | 'results';
 
@@ -39,6 +38,8 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const [quizResult, setQuizResult] = useState<FullQuizResult | null>(null);
     const [activeTab, setActiveTab] = useState<Skill>('Reading');
     const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
+    const [completedTabs, setCompletedTabs] = useState<Set<Skill>>(new Set());
+    const [skillResults, setSkillResults] = useState<SkillResult[]>([]);
 
     const drawingCanvasRef = useRef<DrawingCanvasRef>(null);
     const [brushColor, setBrushColor] = useState('#000000');
@@ -87,6 +88,8 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             setUserAnswers(INITIAL_ANSWERS);
             setIsRecording(false);
             setRecordedSpeakingUrl(null);
+            setCompletedTabs(new Set());
+            setSkillResults([]);
             
             if (userProfile) {
                 getStudyStats(userProfile)
@@ -125,6 +128,8 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                 quiz: new Array(lesson.general_questions?.length || 0).fill(-1),
                 starter: new Array(lesson.starter?.quiz.length || 0).fill(-1),
             });
+            setCompletedTabs(new Set());
+            setSkillResults([]);
             setActiveTab(isLanguageLocked ? 'Starter' : 'Reading');
             setView('lesson');
         } catch (e) {
@@ -137,65 +142,70 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
     const handleAnswerChange = (skill: 'reading' | 'listening' | 'quiz' | 'starter', qIndex: number, aIndex: number) => {
         setUserAnswers((prev: any) => ({ ...prev, [skill]: prev[skill].map((ans: any, i: number) => (i === qIndex ? aIndex : ans)) }));
     };
-
-    const handleSubmitLesson = async () => {
+    
+    const handleSubmitSkill = async (skill: Skill) => {
         if (!currentLesson || !userProfile) return;
 
-        const isStarterLesson = !!currentLesson.starter;
+        // Validation
+        let answersForSkill: number[] = [];
+        if (skill === 'Starter') answersForSkill = userAnswers.starter;
+        if (skill === 'Reading') answersForSkill = userAnswers.reading;
+        if (skill === 'Listening') answersForSkill = userAnswers.listening;
+        if (skill === 'Quiz') answersForSkill = userAnswers.quiz;
 
-        if (isStarterLesson) {
-            if (userAnswers.starter.includes(-1)) {
-                setNotifications(prev => ['Please answer all starter quiz questions.', ...prev.slice(0, 19)]);
-                return;
-            }
-        } else {
-            const allAnswered = !userAnswers.reading.includes(-1) && !userAnswers.listening.includes(-1) && !userAnswers.quiz.includes(-1);
-            if (!allAnswered) {
-                setNotifications(prev => ['Please answer all multiple-choice questions.', ...prev.slice(0, 19)]);
-                return;
-            }
+        if (answersForSkill.length > 0 && answersForSkill.includes(-1)) {
+             setNotifications(prev => [`Please answer all questions for the ${skill} section.`, ...prev.slice(0, 19)]);
+             return;
         }
-        
+
+        const finalAnswers = {...userAnswers};
+        if (skill === 'Writing') {
+            finalAnswers.writingImage = drawingCanvasRef.current?.toDataURL().split(',')[1] || '';
+        }
+
         setIsLoading(true);
         try {
-            const writingImage = drawingCanvasRef.current?.toDataURL().split(',')[1] || '';
-            const finalAnswers = { ...userAnswers, writingImage };
+            const result = await gradeSingleSkill(currentLesson, finalAnswers, skill, userProfile);
 
-            const result = await gradeFullLesson(currentLesson, finalAnswers, userProfile);
-            const starterResult = result.skillResults.find(r => r.skill === 'Starter');
+            handleExpGain(result.score);
+            setNotifications(prev => [`${skill} Score: ${result.score}/100. You earned ${result.score} EXP!`, ...prev.slice(0,19)]);
 
-            if (isStarterLesson) {
-                if (starterResult?.score === 100) {
+            if (skill === 'Starter') {
+                if (result.score === 100) {
                     const updatedProfile = await unlockStarterLanguage(selectedLanguage, userProfile);
                     setUserProfile(updatedProfile);
-                    setNotifications(prev => [`Perfect score! You've unlocked all lessons for ${selectedLanguage} and earned 100 EXP!`, ...prev]);
-                    handleExpGain(100);
-                    setView('lobby');
-                    return; 
+                    setCompletedTabs(prev => new Set(prev).add(skill));
+                    setSkillResults(prev => [...prev, result]);
+                    setActiveTab('Reading');
                 } else {
-                    setNotifications(prev => [`You need a perfect score (10/10) to unlock other lessons. Please review and try again! Your score: ${starterResult?.score}/100`, ...prev]);
+                    setQuizResult({ totalScore: result.score, skillResults: [result] });
+                    setView('results');
                 }
+                return;
             }
-            
-            setQuizResult(result);
-            const expGained = Math.round(result.totalScore);
-            handleExpGain(expGained);
-            
-            logLessonCompletion(selectedLanguage, expGained, userProfile)
-                .then(newStats => setStudyStats(newStats))
-                .catch(err => console.error("Failed to log lesson completion", err));
 
-            if (result.skillResults.find(r => r.skill === 'Writing' && r.rewrite)) {
-                setNotifications(prev => ["Your handwriting score is below 70%. Please try again to improve!", ...prev]);
+            setCompletedTabs(prev => new Set(prev).add(skill));
+            const updatedResults = [...skillResults, result];
+            setSkillResults(updatedResults);
+            
+            const currentIndex = TABS.findIndex(t => t === skill);
+            if (currentIndex < TABS.length - 1) {
+                setActiveTab(TABS[currentIndex + 1]);
+            } else {
+                const totalScore = Math.round(updatedResults.reduce((acc, r) => acc + r.score, 0) / updatedResults.length);
+                setQuizResult({ totalScore, skillResults: updatedResults });
+                await logLessonCompletion(selectedLanguage, totalScore, userProfile);
+                const newStats = await getStudyStats(userProfile);
+                setStudyStats(newStats);
+                setView('results');
             }
-            setView('results');
-        } catch (e) {
-            setNotifications(prev => [e instanceof Error ? e.message : 'Failed to grade answers', ...prev.slice(0, 19)]);
+        } catch(e) {
+            setNotifications(prev => [e instanceof Error ? e.message : `Failed to grade ${skill}`, ...prev.slice(0, 19)]);
         } finally {
             setIsLoading(false);
         }
     };
-    
+
     const handleGenerateListeningAudio = useCallback(async (text: string) => {
         if (!userProfile || !text) return;
         setIsAudioLoading(true);
@@ -305,21 +315,41 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
             </div>
         </div>
     );
+    
+    const SkillSubmitButton: React.FC<{ skill: Skill }> = ({ skill }) => {
+        const isLastTab = TABS.indexOf(skill) === TABS.length - 1;
+        return (
+            <div className="mt-6 text-center">
+                <button 
+                    onClick={() => handleSubmitSkill(skill)}
+                    disabled={isLoading}
+                    className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:bg-green-400 transition-colors"
+                >
+                    {isLoading ? 'Submitting...' : isLastTab ? 'Finish & See Results' : 'Submit & Continue'}
+                </button>
+            </div>
+        );
+    };
 
     const renderLesson = () => (
         <div className="flex flex-col h-full">
             <div className="border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto">
                     {TABS.map(skill => {
+                        const isCompleted = completedTabs.has(skill);
                         const isDisabled = isLanguageLocked && skill !== 'Starter';
                         return (
-                             <button key={skill} onClick={() => !isDisabled && setActiveTab(skill)} 
-                                className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap rounded-t-md ${
-                                    isDisabled ? 'opacity-50 cursor-not-allowed text-slate-400' : (activeTab === skill ? 'border-b-2 text-indigo-500' : 'text-slate-500 hover:text-indigo-500')
+                             <button key={skill} onClick={() => !isDisabled && !isCompleted && setActiveTab(skill)} 
+                                className={`py-2 px-2 sm:px-3 text-sm font-medium whitespace-nowrap rounded-t-md flex items-center gap-1.5 ${
+                                    isDisabled ? 'opacity-50 cursor-not-allowed text-slate-400' :
+                                    isCompleted ? 'text-green-500 cursor-default' :
+                                    (activeTab === skill ? 'border-b-2 text-indigo-500' : 'text-slate-500 hover:text-indigo-500')
                                 } ${
-                                    skill === 'Starter' && isLanguageLocked ? 'bg-yellow-300 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 border-yellow-500' : (activeTab === skill ? 'border-indigo-500' : 'border-transparent')
+                                    skill === 'Starter' && isLanguageLocked ? 'bg-yellow-300 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 border-yellow-500' : 
+                                    (activeTab === skill ? 'border-indigo-500' : 'border-transparent')
                                 }`}
-                                disabled={isDisabled}>
+                                disabled={isDisabled || isCompleted}>
+                                {isCompleted && <CheckIcon className="w-4 h-4"/>}
                                 {skill}
                             </button>
                         );
@@ -348,6 +378,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                                 {currentLesson.starter.quiz.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.starter[qIndex]} onAnswer={(i,a)=>handleAnswerChange('starter', i, a)}/>)}
                             </div>
                         </div>
+                        {!completedTabs.has('Starter') && <SkillSubmitButton skill="Starter" />}
                     </div>
                 )}
                 {currentLesson?.reading && (
@@ -364,6 +395,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                                 {currentLesson.reading.questions.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.reading[qIndex]} onAnswer={(i,a)=>handleAnswerChange('reading', i, a)}/>)}
                             </div>
                         </div>
+                         {!completedTabs.has('Reading') && <SkillSubmitButton skill="Reading" />}
                     </div>
                 )}
                 {currentLesson?.listening && (
@@ -377,6 +409,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                                <div className="mt-4"><QuestionBlock q={task} qIndex={index} userAnswer={userAnswers.listening[index]} onAnswer={(i,a)=>handleAnswerChange('listening',i,a)}/></div>
                            </div>
                        ))}
+                        {!completedTabs.has('Listening') && <SkillSubmitButton skill="Listening" />}
                     </div>
                 )}
                 {currentLesson?.speaking && (
@@ -390,6 +423,7 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                            </button>
                            {recordedSpeakingUrl && <audio src={recordedSpeakingUrl} controls />}
                         </div>
+                        {!completedTabs.has('Speaking') && <SkillSubmitButton skill="Speaking" />}
                     </div>
                 )}
                 {currentLesson?.writing && (
@@ -406,48 +440,59 @@ export const StudyZoneModal: React.FC<StudyZoneModalProps> = ({ isOpen, onClose,
                         <div className="w-full aspect-video border border-slate-300 dark:border-slate-600 rounded-md overflow-hidden">
                             <DrawingCanvas ref={drawingCanvasRef} brushColor={brushColor} brushSize={brushSize} />
                         </div>
+                         {!completedTabs.has('Writing') && <SkillSubmitButton skill="Writing" />}
                     </div>
                 )}
                 {currentLesson?.general_questions && (
                      <div className="max-w-3xl mx-auto space-y-4" style={{ display: activeTab === 'Quiz' ? 'block' : 'none' }}>
                         <h4 className="font-semibold text-xl">General Quiz</h4>
                         {currentLesson.general_questions.map((q, qIndex) => <QuestionBlock key={qIndex} q={q} qIndex={qIndex} userAnswer={userAnswers.quiz[qIndex]} onAnswer={(i,a)=>handleAnswerChange('quiz', i, a)}/>)}
+                        {!completedTabs.has('Quiz') && <SkillSubmitButton skill="Quiz" />}
                     </div>
                 )}
             </div>
-            <div className="flex-shrink-0 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between">
+            <div className="flex-shrink-0 pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-start">
                 <button onClick={() => setView('lobby')} className="p-3 bg-slate-200 dark:bg-slate-700 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Back to Lobby</button>
-                <button onClick={handleSubmitLesson} disabled={isLoading} className="p-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:bg-green-400">
-                    {isLoading ? 'Grading...' : 'Submit & See Results'}
-                </button>
             </div>
         </div>
     );
 
-    const renderResults = () => (
-        <div className="flex flex-col items-center justify-center h-full text-center">
-            <h3 className="text-3xl font-bold">Lesson Complete!</h3>
-            <p className="text-6xl font-bold my-4">{quizResult?.totalScore || 0}/100</p>
-            <p className="text-xl font-semibold text-indigo-500">You earned {Math.round(quizResult?.totalScore || 0)} EXP!</p>
-            <div className="mt-6 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-full max-w-3xl text-left grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {quizResult?.skillResults.map(res => (
-                    <div key={res.skill} className="p-3 bg-white dark:bg-slate-700 rounded-md">
-                        <div className="flex justify-between items-baseline">
-                           <h4 className="font-bold text-lg">{res.skill}</h4>
-                           <span className="font-bold text-lg">{res.score}/100</span>
+    const renderResults = () => {
+        const isStarterFailure = isLanguageLocked && quizResult?.skillResults.some(r => r.skill === 'Starter' && r.score < 100);
+
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+                <h3 className="text-3xl font-bold">Lesson Complete!</h3>
+                <p className="text-6xl font-bold my-4">{quizResult?.totalScore || 0}/100</p>
+                <p className="text-xl font-semibold text-indigo-500">You earned {Math.round(quizResult?.totalScore || 0)} EXP!</p>
+                <div className="mt-6 p-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-full max-w-3xl text-left grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {quizResult?.skillResults.map(res => (
+                        <div key={res.skill} className="p-3 bg-white dark:bg-slate-700 rounded-md">
+                            <div className="flex justify-between items-baseline">
+                               <h4 className="font-bold text-lg">{res.skill}</h4>
+                               <span className="font-bold text-lg">{res.score}/100</span>
+                            </div>
+                            <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap mt-1">{res.feedback}</p>
                         </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap mt-1">{res.feedback}</p>
-                    </div>
-                ))}
+                    ))}
+                </div>
+                <div className="mt-8 flex gap-4">
+                    {isStarterFailure ? (
+                        <button onClick={() => { setView('lesson'); setActiveTab('Starter'); }} className="p-3 bg-yellow-500 text-white font-bold rounded-lg hover:bg-yellow-600">
+                            Retry Starter Quiz
+                        </button>
+                    ) : (
+                        <button onClick={() => setView('lobby')} className="p-3 bg-slate-200 dark:bg-slate-700 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">
+                            Back to Lobby
+                        </button>
+                    )}
+                    <button onClick={handleStartLesson} disabled={isLoading} className="p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
+                        {isLoading ? <RefreshIcon className="w-5 h-5 animate-spin" /> : 'Try Another Lesson'}
+                    </button>
+                </div>
             </div>
-            <div className="mt-8 flex gap-4">
-                <button onClick={() => setView('lobby')} className="p-3 bg-slate-200 dark:bg-slate-700 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600">Back to Lobby</button>
-                <button onClick={handleStartLesson} disabled={isLoading} className="p-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
-                    {isLoading ? <RefreshIcon className="w-5 h-5 animate-spin" /> : 'Try Another Lesson'}
-                </button>
-            </div>
-        </div>
-    );
+        );
+    };
 
     if (!isOpen) return null;
 
