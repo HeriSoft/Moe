@@ -863,6 +863,94 @@ export default async function handler(req, res) {
                 throw new Error("Polling for Gradio result timed out.");
             }
 
+            case 'generateReadingLesson': {
+                await logAction(userEmail, `generated a ${payload.level} ${payload.language} study lesson`);
+                if (!ai) throw new Error("Gemini API key not configured.");
+                const { language, level } = payload;
+                if (!language || !level) return res.status(400).json({ error: "Language and level are required." });
+
+                const prompt = `
+                Generate a reading comprehension lesson for a '${level}' level student learning '${language}'.
+                The lesson should be about a simple, engaging topic.
+                The response MUST be a single JSON object with the following structure and nothing else:
+                {
+                  "passage": "A short reading passage in ${language}, approximately 100-200 words for beginner/intermediate, 200-300 for advanced.",
+                  "passage_translation": "The full Vietnamese translation of the passage.",
+                  "questions": [
+                    {
+                      "question_text": "A multiple-choice question in Vietnamese about the passage.",
+                      "options": ["An option in Vietnamese.", "Another option in Vietnamese.", "A third option in Vietnamese.", "A fourth option in Vietnamese."],
+                      "correct_answer_index": 0,
+                      "explanation": "A brief explanation in Vietnamese about why the answer is correct."
+                    },
+                    {
+                      "question_text": "A second multiple-choice question in Vietnamese about the passage.",
+                      "options": ["Option A in Vietnamese.", "Option B in Vietnamese.", "Option C in Vietnamese.", "Option D in Vietnamese."],
+                      "correct_answer_index": 2,
+                      "explanation": "A brief explanation in Vietnamese for the second question."
+                    },
+                    {
+                      "question_text": "A third multiple-choice question in Vietnamese about the passage.",
+                      "options": ["Choice 1 in Vietnamese.", "Choice 2 in Vietnamese.", "Choice 3 in Vietnamese.", "Choice 4 in Vietnamese."],
+                      "correct_answer_index": 1,
+                      "explanation": "A brief explanation in Vietnamese for the third question."
+                    }
+                  ]
+                }
+                Ensure the JSON is well-formed and valid. Do not include any markdown formatting like \`\`\`json.
+                `;
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-pro',
+                    contents: prompt,
+                    config: {
+                        responseMimeType: 'application/json',
+                    }
+                });
+                const lessonJson = JSON.parse(response.text);
+                result = { lesson: lessonJson };
+                break;
+            }
+
+            case 'gradeReadingAnswers': {
+                await logAction(userEmail, `submitted a study lesson for grading`);
+                if (!ai) throw new Error("Gemini API key not configured.");
+                const { lesson, userAnswers } = payload;
+
+                const questionsAndAnswers = lesson.questions.map((q, index) => ({
+                    question: q.question_text,
+                    options: q.options,
+                    correctAnswer: q.options[q.correct_answer_index],
+                    userAnswer: q.options[userAnswers[index]]
+                }));
+
+                const prompt = `
+                You are an AI language tutor. A student has completed a reading comprehension quiz.
+                Here is the quiz data and their answers:
+                ${JSON.stringify(questionsAndAnswers, null, 2)}
+                
+                Your task is to:
+                1.  Calculate the student's score out of 100. Each question is weighted equally.
+                2.  Provide brief, encouraging, and constructive feedback in Vietnamese based on their performance. If they made mistakes, gently explain the concepts they might have missed.
+                
+                Provide your response as a single, valid JSON object with the following structure and nothing else:
+                {
+                  "score": <number>,
+                  "feedback": "<string>"
+                }
+                Do not include any markdown formatting like \`\`\`json.
+                `;
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-pro',
+                    contents: prompt,
+                    config: {
+                        responseMimeType: 'application/json',
+                    }
+                });
+                const gradingResult = JSON.parse(response.text);
+                result = { result: gradingResult };
+                break;
+            }
+
             default:
                 return res.status(400).json({ error: `Unknown action: ${action}` });
         }
