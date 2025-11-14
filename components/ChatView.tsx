@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon, PianoIcon, CurrencyDollarIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon, PianoIcon, CurrencyDollarIcon, BookOpenIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
@@ -13,6 +13,20 @@ declare global {
     webkitSpeechRecognition: any;
   }
 }
+
+// --- NEW: Model Capabilities ---
+const MODEL_CAPABILITIES: { [key: string]: { hasImage: boolean; hasWebSearch: boolean; hasDeepThink: boolean | 'always-on'; } } = {
+  'gemini-2.5-flash': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
+  'gemini-2.5-pro': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
+  'o3-mini': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
+  'o3': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
+  'gpt-5-mini': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
+  'gpt-4.1': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
+  'gpt-5': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
+  'deepseek-v3.1': { hasImage: false, hasWebSearch: false, hasDeepThink: true },
+  'grok-4': { hasImage: true, hasWebSearch: true, hasDeepThink: 'always-on' },
+};
+
 
 // --- Persona Selector Component ---
 const PersonaSelector: React.FC<{
@@ -107,6 +121,7 @@ interface ChatViewProps {
   onOpenMusicBox: () => void; // For Music Box
   onOpenPianoModal: () => void; // For Piano
   onOpenExpenseTracker: () => void; // For Expense Tracker
+  onOpenStudyZone: () => void; // For Study Zone
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
   // Music Box background state
@@ -182,7 +197,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, onOpenPianoModal, onOpenExpenseTracker, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, onOpenPianoModal, onOpenExpenseTracker, onOpenStudyZone, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -416,7 +431,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
   };
 
   const currentModelName = activeChat?.model ?? defaultModel;
-  const isDeepSeekModel = currentModelName === 'deepseek-v3.1';
+  const capabilities = MODEL_CAPABILITIES[currentModelName as keyof typeof MODEL_CAPABILITIES] || MODEL_CAPABILITIES['gemini-2.5-flash'];
   
   const languages = [
     { code: 'Vietnamese', name: 'Tiếng Việt' }, { code: 'English', name: 'English' },
@@ -538,6 +553,13 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
         
         <div className="absolute bottom-4 right-4 sm:right-6 z-20 flex flex-col items-center gap-2">
             <button
+              onClick={onOpenStudyZone}
+              aria-label="Open Study Zone"
+              className="p-2 rounded-full bg-teal-600 text-white shadow-lg transition-all duration-300 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 dark:focus:ring-offset-[#171725]"
+            >
+              <BookOpenIcon className="w-6 h-6" />
+            </button>
+            <button
               onClick={onOpenPianoModal}
               aria-label="Open Virtual Piano"
               className="p-2 rounded-full bg-gray-600 text-white shadow-lg transition-all duration-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:focus:ring-offset-[#171725]"
@@ -648,15 +670,21 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                 </form>
                 <div className="flex items-center justify-start flex-wrap gap-1 mt-1 px-2 border-t border-slate-200 dark:border-slate-600/50 pt-1">
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="*/*" multiple />
-                    <button title={"Attach file from computer"} aria-label="Attach file from computer" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                        <AttachmentIcon className="w-5 h-5" />
-                    </button>
-                    <button title={"Attach from Google Drive"} aria-label="Attach from Google Drive" onClick={onAttachFromDrive} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                        <GoogleDriveIcon className="w-5 h-5" />
-                    </button>
-                    <button title={"Web Search"} aria-label="Web Search" onClick={toggleWebSearch} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isWebSearchEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
-                        <WebSearchIcon className="w-5 h-5" />
-                    </button>
+                    {capabilities.hasImage && (
+                        <>
+                            <button title={"Attach file from computer"} aria-label="Attach file from computer" onClick={() => fileInputRef.current?.click()} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                                <AttachmentIcon className="w-5 h-5" />
+                            </button>
+                            <button title={"Attach from Google Drive"} aria-label="Attach from Google Drive" onClick={onAttachFromDrive} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                                <GoogleDriveIcon className="w-5 h-5" />
+                            </button>
+                        </>
+                    )}
+                    {capabilities.hasWebSearch && (
+                        <button title={"Web Search"} aria-label="Web Search" onClick={toggleWebSearch} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isWebSearchEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
+                            <WebSearchIcon className="w-5 h-5" />
+                        </button>
+                    )}
                     <button title={isRecording ? "Stop recording" : "Start recording"} aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={toggleRecording} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isRecording ? 'bg-red-100 dark:bg-red-900/50 !text-red-500' : ''}`}>
                         {isRecording ? <StopCircleIcon className="w-5 h-5" /> : <MicrophoneIcon className="w-5 h-5" />}
                     </button>
@@ -666,7 +694,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                      <button title={"Creative Tools"} aria-label="Open Creative Tools" onClick={onOpenGenerationModal} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
                         <SparklesIcon className="w-5 h-5" />
                     </button>
-                    {isDeepSeekModel && (
+                    {capabilities.hasDeepThink === true && (
                       <button title={"Deep Think"} aria-label="Toggle Deep Think mode" onClick={toggleDeepThink} className={`p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400 transition-colors ${isDeepThinkEnabled ? 'bg-indigo-100 dark:bg-indigo-900/50 !text-indigo-500' : ''}`}>
                           <DeepThinkIcon className="w-5 h-5" />
                       </button>
