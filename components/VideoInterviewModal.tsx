@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CloseIcon, CameraIcon, DownloadIcon, StopCircleIcon, PlayIcon, SparklesIcon } from './icons';
+import { CloseIcon, CameraIcon, DownloadIcon, StopCircleIcon, PlayIcon, SparklesIcon, LanguageIcon } from './icons';
 import type { UserProfile } from '../types';
 import { generateInterviewQuestion } from '../services/geminiService';
 
@@ -11,14 +12,33 @@ interface VideoInterviewModalProps {
 
 type AspectRatio = '9/16' | '16/9' | '3/4' | '1/1';
 
+const LANGUAGES = [
+    { code: 'vi-VN', label: 'Tiếng Việt' },
+    { code: 'en-US', label: 'Tiếng Anh' },
+    { code: 'ja-JP', label: 'Tiếng Nhật' },
+    { code: 'zh-CN', label: 'Tiếng Trung' },
+    { code: 'ko-KR', label: 'Tiếng Hàn' },
+    { code: 'ru-RU', label: 'Tiếng Nga' },
+    { code: 'th-TH', label: 'Tiếng Thái' },
+];
+
 export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen, onClose, userProfile }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9/16');
   const [aiPrompt, setAiPrompt] = useState("Hãy bắt đầu bằng việc giới thiệu về bản thân bạn...");
+  const [aiSubtitle, setAiSubtitle] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   
+  // Settings State
+  const [spokenLanguage, setSpokenLanguage] = useState('vi-VN');
+  const [targetLanguage, setTargetLanguage] = useState('Tiếng Việt');
+  const [subtitleLanguage, setSubtitleLanguage] = useState('Tiếng Việt');
+  const [showSubtitle, setShowSubtitle] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -165,17 +185,23 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
+      recognition.lang = spokenLanguage; // Use state
 
       recognition.onresult = (event: any) => {
         let finalTranscript = '';
+        let interim = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
              finalTranscript += event.results[i][0].transcript + ' ';
+          } else {
+             interim += event.results[i][0].transcript;
           }
         }
+        
         if (finalTranscript.trim()) {
             setTranscript(prev => (prev + " " + finalTranscript).trim());
         }
+        setInterimTranscript(interim);
       };
 
       recognition.onend = () => {
@@ -192,7 +218,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
         console.error("Speech recognition start failed", e);
       }
     }
-  }, [isOpen, stopSpeechRecognition]);
+  }, [isOpen, stopSpeechRecognition, spokenLanguage]);
 
   // Main lifecycle effect
   useEffect(() => {
@@ -202,7 +228,9 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
       setIsRecording(false);
       setRecordedBlob(null);
       setAiPrompt("Hãy bắt đầu bằng việc giới thiệu về bản thân bạn...");
+      setAiSubtitle("");
       setTranscript("");
+      setInterimTranscript("");
       lastAiUpdateRef.current = 0;
 
       startCamera();
@@ -232,12 +260,21 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
     const now = Date.now();
     if (now - lastAiUpdateRef.current > 8000) { // Check every 8 seconds
         lastAiUpdateRef.current = now;
-        const context = transcript.slice(-200); 
-        generateInterviewQuestion(context, userProfile).then(question => {
-            if (question) setAiPrompt(question);
-        });
+        const context = transcript.slice(-300); 
+        // Pass targetLanguage and subtitleLanguage (if shown)
+        generateInterviewQuestion(context, userProfile, targetLanguage, showSubtitle ? subtitleLanguage : targetLanguage)
+            .then(result => {
+                if (result.question) {
+                    setAiPrompt(result.question);
+                    if (showSubtitle && result.subtitle) {
+                        setAiSubtitle(result.subtitle);
+                    } else {
+                        setAiSubtitle("");
+                    }
+                }
+            });
     }
-  }, [transcript, userProfile, isOpen]);
+  }, [transcript, userProfile, isOpen, targetLanguage, subtitleLanguage, showSubtitle]);
 
   const startRecording = () => {
       if (!canvasRef.current || !streamRef.current) return;
@@ -313,7 +350,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
         <div className="flex-grow flex flex-col md:flex-row min-h-0 p-6 gap-6">
             
             {/* Video Area */}
-            <div className="flex-grow relative flex items-center justify-center bg-black rounded-2xl overflow-hidden shadow-inner shadow-black/50 min-h-0">
+            <div className="flex-grow relative flex items-center justify-center bg-black rounded-2xl overflow-hidden shadow-inner shadow-black/50 min-h-0 group">
                 <video ref={videoRef} className="absolute opacity-0 pointer-events-none" playsInline muted autoPlay />
                 <canvas 
                     ref={canvasRef} 
@@ -321,13 +358,27 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
                     style={{ aspectRatio: aspectRatio.replace('/', '/') }}
                 />
                 
-                {/* AI Prompt Overlay */}
+                {/* Subtitles Overlay (User Speech) */}
+                {(interimTranscript || transcript) && (
+                    <div className="absolute top-8 left-0 right-0 text-center px-8 pointer-events-none">
+                        <span className="inline-block bg-black/50 backdrop-blur-sm text-white/90 px-3 py-1 rounded-lg text-sm font-medium shadow-sm">
+                            {interimTranscript || transcript.split(' ').slice(-10).join(' ')}
+                        </span>
+                    </div>
+                )}
+
+                {/* AI Prompt & Subtitle Overlay */}
                 <div className="absolute bottom-10 left-0 right-0 px-8 text-center">
                     <div className="inline-block bg-black/60 backdrop-blur-md text-white px-6 py-4 rounded-2xl border border-white/10 shadow-xl max-w-2xl animate-fade-in-up">
                         <div className="flex items-center justify-center gap-2 mb-1 text-yellow-400 text-xs font-bold uppercase tracking-wider">
                             <SparklesIcon className="w-4 h-4" /> AI Interviewer
                         </div>
                         <p className="text-lg md:text-xl font-medium leading-relaxed">"{aiPrompt}"</p>
+                        {showSubtitle && aiSubtitle && (
+                            <p className="text-sm md:text-base text-yellow-300 mt-2 font-medium italic border-t border-white/20 pt-2">
+                                {aiSubtitle}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -354,6 +405,61 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
                     )}
                 </div>
 
+                {/* Language Settings */}
+                <div className="bg-white dark:bg-white/5 p-4 rounded-2xl shadow-sm border border-orange-100 dark:border-white/5">
+                    <button 
+                        onClick={() => setShowSettings(!showSettings)}
+                        className="w-full flex justify-between items-center text-slate-700 dark:text-slate-200 font-semibold mb-2"
+                    >
+                        <span className="flex items-center gap-2"><LanguageIcon className="w-5 h-5 text-indigo-500"/> Language Settings</span>
+                        <span className="text-xs text-slate-400">{showSettings ? 'Hide' : 'Show'}</span>
+                    </button>
+                    
+                    {showSettings && (
+                        <div className="space-y-3 mt-3 animate-fade-in text-sm">
+                            <div>
+                                <label className="block text-slate-500 dark:text-slate-400 text-xs mb-1">My Language (Mic)</label>
+                                <select 
+                                    value={spokenLanguage} 
+                                    onChange={(e) => { setSpokenLanguage(e.target.value); setupSpeechRecognition(); }}
+                                    className="w-full p-2 bg-slate-100 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+                                >
+                                    {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-slate-500 dark:text-slate-400 text-xs mb-1">AI Answer Language</label>
+                                <select 
+                                    value={targetLanguage} 
+                                    onChange={(e) => setTargetLanguage(e.target.value)}
+                                    className="w-full p-2 bg-slate-100 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+                                >
+                                    {LANGUAGES.map(l => <option key={l.code} value={l.label}>{l.label}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+                                <label className="text-slate-700 dark:text-slate-300 text-xs font-medium">Translate subtitles</label>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" checked={showSubtitle} onChange={e => setShowSubtitle(e.target.checked)} className="sr-only peer" />
+                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                                </label>
+                            </div>
+                            {showSubtitle && (
+                                <div>
+                                    <label className="block text-slate-500 dark:text-slate-400 text-xs mb-1">Subtitle Language</label>
+                                    <select 
+                                        value={subtitleLanguage} 
+                                        onChange={(e) => setSubtitleLanguage(e.target.value)}
+                                        className="w-full p-2 bg-slate-100 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+                                    >
+                                        {LANGUAGES.map(l => <option key={l.code} value={l.label}>{l.label}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 {/* Aspect Ratio Selector */}
                 <div className="bg-white dark:bg-white/5 p-6 rounded-2xl shadow-sm border border-orange-100 dark:border-white/5">
                     <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-4">Kích thước khung hình</h3>
@@ -368,16 +474,6 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
                             </button>
                         ))}
                     </div>
-                </div>
-
-                {/* Tips */}
-                <div className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-6 rounded-2xl border border-yellow-100 dark:border-white/5">
-                    <h3 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2 flex items-center gap-2">
-                        <SparklesIcon className="w-5 h-5" /> Tips
-                    </h3>
-                    <p className="text-sm text-yellow-700/80 dark:text-yellow-200/70 leading-relaxed">
-                        Hãy nói chuyện tự nhiên. AI sẽ lắng nghe và gợi ý câu hỏi tiếp theo để câu chuyện của bạn luôn liền mạch.
-                    </p>
                 </div>
             </div>
         </div>
