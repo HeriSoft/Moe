@@ -1060,7 +1060,17 @@ const App: React.FC = () => {
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
-          onOpenVideoInterview={() => setIsVideoInterviewOpen(true)}
+          onOpenVideoInterview={() => {
+              if (!isLoggedIn) {
+                  handleProFeatureBlock();
+                  return;
+              }
+              if (userProfile?.isPro || isAdmin) {
+                  setIsVideoInterviewOpen(true);
+              } else {
+                  handleProFeatureBlock();
+              }
+          }}
           onOpenStudyZone={() => setIsStudyZoneModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
