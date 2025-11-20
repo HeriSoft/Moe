@@ -1,3 +1,4 @@
+
 // File: /api/admin.js
 import IORedis from 'ioredis';
 import pg from 'pg';
@@ -44,6 +45,10 @@ async function invalidateUserProCache(email) {
         }
     }
 }
+
+const getExpForLevel = (level) => {
+    return 100 + (level * 50) + (level * level * 5);
+};
 
 async function createTables() {
     const client = await pool.connect();
@@ -168,7 +173,7 @@ export default async function handler(req, res) {
                 }
                 if (actionQuery === 'get_all_users') {
                     const { rows } = await pool.query(
-                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points, credits FROM users ORDER BY name;`
+                        `SELECT id, name, email, image_url, subscription_expires_at, is_moderator, has_permanent_name_color, has_sakura_banner, points, credits, level, exp FROM users ORDER BY name;`
                     );
                     const users = rows.map(user => ({
                         ...user,
@@ -219,6 +224,7 @@ export default async function handler(req, res) {
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
                     };
 
                     await logAction(ADMIN_EMAIL, `reset their own cosmetic items.`);
@@ -313,6 +319,7 @@ export default async function handler(req, res) {
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
                     };
                     await logAction(ADMIN_EMAIL, `${amountNum >= 0 ? 'added' : 'removed'} ${Math.abs(amountNum)} credits ${amountNum >= 0 ? 'to' : 'from'} ${email}.`);
                     return res.status(200).json({ success: true, user: fullUserProfile });
@@ -336,10 +343,69 @@ export default async function handler(req, res) {
                         isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
                         level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
                         hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                        unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
                     };
 
                     await logAction(ADMIN_EMAIL, `added ${amountNum} points to ${email}.`);
                     return res.status(200).json({ success: true, user: fullUserProfile });
+                }
+
+                if (action === 'add_exp_admin') {
+                    if (!email || !amount) return res.status(400).json({ error: 'Email and amount are required.' });
+                    const amountNum = parseInt(amount, 10);
+                    if (isNaN(amountNum)) {
+                            return res.status(400).json({ error: 'Amount must be a valid number.' });
+                    }
+
+                    const client = await pool.connect();
+                    try {
+                        await client.query('BEGIN');
+                        const { rows } = await client.query('SELECT id, level, exp FROM users WHERE email = $1 FOR UPDATE;', [email]);
+                        if (rows.length === 0) {
+                            throw new Error('User not found.');
+                        }
+
+                        let { id, level, exp } = rows[0];
+                        
+                        if (level < 100) {
+                            exp += amountNum;
+                            let expToNextLevel = getExpForLevel(level);
+
+                            while (level < 100 && exp >= expToNextLevel) {
+                                exp -= expToNextLevel;
+                                level++;
+                                expToNextLevel = getExpForLevel(level);
+                            }
+                            
+                            if (level >= 100) exp = 0;
+                        }
+
+                        await client.query('UPDATE users SET level = $1, exp = $2, updated_at = NOW() WHERE id = $3;', [level, exp, id]);
+                        await client.query('COMMIT');
+
+                        const { rows: updatedRows } = await client.query(
+                            `SELECT * FROM users WHERE id = $1;`,
+                            [id]
+                        );
+                        const dbUser = updatedRows[0];
+                        const fullUserProfile = {
+                            id: dbUser.id, name: dbUser.name, email: dbUser.email, imageUrl: dbUser.image_url,
+                            subscriptionExpiresAt: dbUser.subscription_expires_at, isModerator: dbUser.is_moderator,
+                            isPro: dbUser.subscription_expires_at && new Date(dbUser.subscription_expires_at) > new Date(),
+                            level: dbUser.level, exp: dbUser.exp, points: dbUser.points, credits: dbUser.credits,
+                            hasPermanentNameColor: dbUser.has_permanent_name_color, hasSakuraBanner: dbUser.has_sakura_banner,
+                            unlocked_starter_languages: dbUser.unlocked_starter_languages || [],
+                        };
+
+                        await logAction(ADMIN_EMAIL, `added ${amountNum} exp to ${email}.`);
+                        return res.status(200).json({ success: true, user: fullUserProfile });
+
+                    } catch (e) {
+                        await client.query('ROLLBACK');
+                        throw e;
+                    } finally {
+                        client.release();
+                    }
                 }
 
                 return res.status(400).json({ error: 'Invalid POST action' });
