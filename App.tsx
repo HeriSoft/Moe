@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
@@ -17,7 +19,7 @@ import { AdminFilesLibraryModal } from './components/AdminFilesLibraryModal';
 import { MusicBoxModal } from './components/MusicBoxModal'; 
 import { AdminMusicModal } from './components/AdminMusicModal'; 
 import { PianoModal } from './components/PianoModal';
-import { ExpenseTrackerModal } from './components/ExpenseTrackerModal';
+import { VideoInterviewModal } from './components/VideoInterviewModal';
 import { StudyZoneModal } from './components/StudyZoneModal';
 import {
   streamModelResponse,
@@ -130,8 +132,8 @@ const App: React.FC = () => {
   // --- New Piano Modal State ---
   const [isPianoModalOpen, setIsPianoModalOpen] = useState(false);
 
-  // --- NEW: Expense Tracker Modal State ---
-  const [isExpenseTrackerOpen, setIsExpenseTrackerOpen] = useState(false);
+  // --- NEW: Video Interview Modal State (Replaces Expense Tracker) ---
+  const [isVideoInterviewOpen, setIsVideoInterviewOpen] = useState(false);
   
   // --- NEW: Study Zone Modal State ---
   const [isStudyZoneModalOpen, setIsStudyZoneModalOpen] = useState(false);
@@ -1058,7 +1060,7 @@ const App: React.FC = () => {
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
-          onOpenExpenseTracker={() => setIsExpenseTrackerOpen(true)}
+          onOpenExpenseTracker={() => setIsVideoInterviewOpen(true)}
           onOpenStudyZone={() => setIsStudyZoneModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
@@ -1196,9 +1198,9 @@ const App: React.FC = () => {
         isOpen={isPianoModalOpen}
         onClose={() => setIsPianoModalOpen(false)}
       />
-      <ExpenseTrackerModal
-        isOpen={isExpenseTrackerOpen}
-        onClose={() => setIsExpenseTrackerOpen(false)}
+      <VideoInterviewModal
+        isOpen={isVideoInterviewOpen}
+        onClose={() => setIsVideoInterviewOpen(false)}
         userProfile={userProfile}
       />
       <StudyZoneModal
