@@ -4,11 +4,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 // --- CHESS LOGIC & AI ---
 
 const BOARD_SIZE = 8;
-// Use solid characters for both sides to ensure consistent size/weight.
-// We will distinguish them using CSS colors (text-white vs text-black).
+
+// Revert to standard Unicode Chess Pieces (Outline for White, Solid for Black)
+// This avoids the issue where solid glyphs don't render as white on some devices.
+// We will scale the White pieces slightly to match the visual weight of Black pieces.
 const PIECES: { [key: string]: string } = {
-    r: '♜', n: '♞', b: '♝', q: '♛', k: '♚', p: '♟', // Black keys
-    R: '♜', N: '♞', B: '♝', Q: '♛', K: '♚', P: '♟'  // White keys (mapped to solid glyphs)
+    r: '♜', n: '♞', b: '♝', q: '♛', k: '♚', p: '♟', // Black pieces (Solid)
+    R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔', P: '♙'  // White pieces (Outline)
 };
 
 const INITIAL_SETUP = [
@@ -320,6 +322,7 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
                             const isSelected = selected?.r === r && selected?.c === c;
                             const isHint = possibleMoves.some(m => m.r === r && m.c === c);
                             const isLastMove = false; 
+                            const isWhitePiece = getPieceColor(piece) === 'white';
 
                             return (
                                 <div
@@ -333,10 +336,9 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
                                     `}
                                 >
                                     {piece && (
-                                        <span className={`z-10 select-none ${getPieceColor(piece) === 'white' 
-                                            ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]' 
-                                            : 'text-black'
-                                        }`}>
+                                        // Use text-black for both as White pieces are outlines and Black pieces are solid.
+                                        // Scale up White pieces (outlines) to match visual weight of solid Black pieces.
+                                        <span className={`z-10 select-none text-black ${isWhitePiece ? 'scale-125 font-bold' : ''}`}>
                                             {PIECES[piece]}
                                         </span>
                                     )}
