@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CloseIcon, CameraIcon, DownloadIcon, StopCircleIcon, PlayIcon, SparklesIcon, LanguageIcon } from './icons';
+import { CloseIcon, CameraIcon, DownloadIcon, StopCircleIcon, PlayIcon, SparklesIcon, LanguageIcon, MicrophoneIcon, RefreshIcon } from './icons';
 import type { UserProfile } from '../types';
 import { generateInterviewQuestion } from '../services/geminiService';
 
@@ -31,6 +31,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   
   // Settings State
   const [spokenLanguage, setSpokenLanguage] = useState('vi-VN');
@@ -47,6 +48,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   const chunksRef = useRef<Blob[]>([]);
   const animationRef = useRef<number | null>(null);
   const lastAiUpdateRef = useRef<number>(0);
+  const isMountedRef = useRef(false); // Track mounting status to prevent leaks
 
   useEffect(() => {
       const checkOrientation = () => {
@@ -82,7 +84,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext('2d');
 
-      if (!video || !canvas || !ctx) return;
+      if (!video || !canvas || !ctx || !isOpen) return;
       
       const { width, height } = getCanvasDimensions();
       canvas.width = width;
@@ -119,73 +121,108 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
           animationRef.current = requestAnimationFrame(render);
       };
       render();
-  }, [getCanvasDimensions]);
+  }, [getCanvasDimensions, isOpen]);
 
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.onplaying = null;
-    }
+  const stopAllMedia = useCallback(() => {
+    // 1. Stop Animation Loop
     if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
     }
+
+    // 2. Stop Video/Audio Tracks immediately
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      tracks.forEach(track => {
+          track.stop();
+          streamRef.current?.removeTrack(track);
+      });
+      streamRef.current = null;
+    }
+
+    // 3. Clean up Video Element
+    if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+        videoRef.current.load(); // Force release of buffers
+        videoRef.current.onplaying = null;
+    }
+
+    // 4. Stop Speech Recognition forcefully
+    if (recognitionRef.current) {
+        recognitionRef.current.onend = null; // Remove callback to prevent auto-restart loop
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.abort(); // 'abort' is faster/harder than 'stop'
+        recognitionRef.current = null;
+    }
+    
+    setIsListening(false);
+    setIsRecording(false);
   }, []);
 
   const startCamera = useCallback(async () => {
+    if (!isMountedRef.current) return; // Don't start if unmounted
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error("Trình duyệt của bạn không hỗ trợ truy cập Camera/Microphone.");
       }
 
+      // Request camera
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" }, 
         audio: true 
       });
       
+      if (!isMountedRef.current) {
+          // If closed while loading, clean up immediately
+          stream.getTracks().forEach(t => t.stop());
+          return;
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onplaying = drawToCanvas;
-        videoRef.current.play();
+        // Use a promise to handle play errors (like "request was interrupted")
+        videoRef.current.play().catch(e => console.warn("Video play interrupted:", e));
       }
     } catch (err: any) {
       console.error("Error accessing camera/mic:", err);
       let errorMessage = "Không thể truy cập camera hoặc micro.";
       
       if (err.name === 'NotFoundError' || err.message?.includes('device not found')) {
-          errorMessage = "Không tìm thấy driver microphone hoặc camera. Vui lòng kiểm tra kết nối thiết bị.";
+          errorMessage = "Không tìm thấy thiết bị. Vui lòng kiểm tra kết nối.";
       } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          errorMessage = "Quyền truy cập bị từ chối. Vui lòng cấp quyền camera/mic cho trang web trong cài đặt trình duyệt.";
+          errorMessage = "Quyền truy cập bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt.";
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-          errorMessage = "Thiết bị đang được sử dụng bởi ứng dụng khác hoặc bị lỗi phần cứng.";
+          errorMessage = "Camera/Mic đang bị ứng dụng khác chiếm dụng. Hãy đóng các tab/ứng dụng khác và thử lại.";
       }
       
       alert(errorMessage);
-      onClose(); // Close modal if camera fails
+      stopAllMedia(); 
+      onClose(); 
     }
-  }, [drawToCanvas, onClose]);
+  }, [drawToCanvas, onClose, stopAllMedia]);
 
-  const stopSpeechRecognition = useCallback(() => {
-      if (recognitionRef.current) {
-          recognitionRef.current.stop();
-          recognitionRef.current = null;
-      }
-  }, []);
 
   const setupSpeechRecognition = useCallback(() => {
-    stopSpeechRecognition(); // Ensure any previous instance is stopped
+    // Cleanup existing instance first
+    if (recognitionRef.current) {
+        recognitionRef.current.abort();
+        recognitionRef.current = null;
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = spokenLanguage; // Use state
+      recognition.lang = spokenLanguage;
+
+      recognition.onstart = () => {
+          setIsListening(true);
+      };
 
       recognition.onresult = (event: any) => {
         let finalTranscript = '';
@@ -204,10 +241,28 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
         setInterimTranscript(interim);
       };
 
+      recognition.onerror = (event: any) => {
+          console.warn("Speech recognition error:", event.error);
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+               setIsListening(false);
+          }
+          // Don't abort on 'no-speech', it just means silence
+      };
+
       recognition.onend = () => {
-          // Restart recognition if it stops unexpectedly while the modal is open
-          if (isOpen && recognitionRef.current) {
-              try { recognition.start(); } catch (e) { /* ignore */ }
+          setIsListening(false);
+          // Auto-restart if modal is still open and mounted
+          if (isMountedRef.current && isOpen) {
+              try {
+                   // Small delay to prevent CPU hogging in loop
+                   setTimeout(() => {
+                       if (isMountedRef.current && isOpen && recognitionRef.current) {
+                           recognitionRef.current.start();
+                       }
+                   }, 300);
+              } catch (e) {
+                  console.error("Restart recognition failed", e);
+              }
           }
       };
 
@@ -218,13 +273,22 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
         console.error("Speech recognition start failed", e);
       }
     }
-  }, [isOpen, stopSpeechRecognition, spokenLanguage]);
+  }, [spokenLanguage, isOpen]); // Re-run when language or open state changes
+
+  // Reset recognition when language changes while open
+  useEffect(() => {
+      if (isOpen && isMountedRef.current) {
+          setupSpeechRecognition();
+      }
+  }, [spokenLanguage, setupSpeechRecognition, isOpen]);
 
   // Main lifecycle effect
   useEffect(() => {
+    isMountedRef.current = true;
+    
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      // Reset all state when opening to ensure a fresh session
+      // Reset state
       setIsRecording(false);
       setRecordedBlob(null);
       setAiPrompt("Hãy bắt đầu bằng việc giới thiệu về bản thân bạn...");
@@ -233,18 +297,23 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
       setInterimTranscript("");
       lastAiUpdateRef.current = 0;
 
-      startCamera();
-      setupSpeechRecognition();
+      // Small timeout to ensure previous cleanup finished
+      const timer = setTimeout(() => {
+          startCamera();
+          setupSpeechRecognition();
+      }, 100);
+      
+      return () => clearTimeout(timer);
     } else {
       document.body.style.overflow = 'auto';
-      stopCamera();
-      stopSpeechRecognition();
+      stopAllMedia();
     }
+    
     return () => {
-        stopCamera();
-        stopSpeechRecognition();
+        isMountedRef.current = false;
+        stopAllMedia();
     };
-  }, [isOpen, startCamera, stopCamera, setupSpeechRecognition, stopSpeechRecognition]);
+  }, [isOpen, startCamera, stopAllMedia, setupSpeechRecognition]);
   
   // Effect to handle aspect ratio changes dynamically
   useEffect(() => {
@@ -261,10 +330,9 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
     if (now - lastAiUpdateRef.current > 8000) { // Check every 8 seconds
         lastAiUpdateRef.current = now;
         const context = transcript.slice(-300); 
-        // Pass targetLanguage and subtitleLanguage (if shown)
         generateInterviewQuestion(context, userProfile, targetLanguage, showSubtitle ? subtitleLanguage : targetLanguage)
             .then(result => {
-                if (result.question) {
+                if (result.question && isMountedRef.current) {
                     setAiPrompt(result.question);
                     if (showSubtitle && result.subtitle) {
                         setAiSubtitle(result.subtitle);
@@ -279,32 +347,37 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   const startRecording = () => {
       if (!canvasRef.current || !streamRef.current) return;
       
-      const canvasStream = canvasRef.current.captureStream(30);
-      const audioTracks = streamRef.current.getAudioTracks();
-      if (audioTracks.length > 0) {
-          canvasStream.addTrack(audioTracks[0]);
+      try {
+        const canvasStream = canvasRef.current.captureStream(30);
+        const audioTracks = streamRef.current.getAudioTracks();
+        if (audioTracks.length > 0) {
+            canvasStream.addTrack(audioTracks[0]);
+        }
+
+        const mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp9' });
+        mediaRecorderRef.current = mediaRecorder;
+        chunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(chunksRef.current, { type: 'video/mp4' });
+            setRecordedBlob(blob);
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+        setRecordedBlob(null);
+      } catch (e) {
+          console.error("Failed to start recording:", e);
+          alert("Không thể bắt đầu ghi hình. Vui lòng thử lại.");
       }
-
-      const mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp9' });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: 'video/mp4' });
-          setRecordedBlob(blob);
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordedBlob(null);
   };
 
   const stopRecording = () => {
-      if (mediaRecorderRef.current) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
           mediaRecorderRef.current.stop();
           setIsRecording(false);
       }
@@ -321,6 +394,10 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
       }
+  };
+  
+  const handleRestartMic = () => {
+      setupSpeechRecognition();
   };
 
   if (!isOpen) return null;
@@ -366,6 +443,20 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
                         </span>
                     </div>
                 )}
+                
+                {/* Mic Status Indicator */}
+                 <div className="absolute top-4 left-4">
+                    {isListening ? (
+                        <div className="flex items-center gap-2 bg-green-500/20 text-green-500 px-2 py-1 rounded-full text-xs font-bold backdrop-blur-md border border-green-500/30">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> MIC ON
+                        </div>
+                    ) : (
+                         <button onClick={handleRestartMic} className="flex items-center gap-2 bg-red-500/20 text-red-500 px-2 py-1 rounded-full text-xs font-bold backdrop-blur-md border border-red-500/30 hover:bg-red-500/30">
+                            <RefreshIcon className="w-3 h-3"/> MIC OFF (Click to restart)
+                        </button>
+                    )}
+                </div>
+
 
                 {/* AI Prompt & Subtitle Overlay */}
                 <div className="absolute bottom-10 left-0 right-0 px-8 text-center">
@@ -421,7 +512,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
                                 <label className="block text-slate-500 dark:text-slate-400 text-xs mb-1">My Language (Mic)</label>
                                 <select 
                                     value={spokenLanguage} 
-                                    onChange={(e) => { setSpokenLanguage(e.target.value); setupSpeechRecognition(); }}
+                                    onChange={(e) => { setSpokenLanguage(e.target.value); }}
                                     className="w-full p-2 bg-slate-100 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
                                 >
                                     {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
