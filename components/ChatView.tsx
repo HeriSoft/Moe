@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
@@ -20,6 +19,7 @@ declare global {
 const MODEL_CAPABILITIES: { [key: string]: { hasImage: boolean; hasWebSearch: boolean; hasDeepThink: boolean | 'always-on'; } } = {
   'gemini-2.5-flash': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'gemini-2.5-pro': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
+  'gemini-3-pro-preview': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'o3-mini': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
   'o3': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
   'gpt-5-mini': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
@@ -122,7 +122,7 @@ interface ChatViewProps {
   onOpenGamePortal: () => void; // For Game Portal
   onOpenMusicBox: () => void; // For Music Box
   onOpenPianoModal: () => void; // For Piano
-  onOpenExpenseTracker: () => void; // For Expense Tracker
+  onOpenVideoInterview: () => void;
   onOpenStudyZone: () => void; // For Study Zone
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
@@ -199,7 +199,7 @@ interface AudioState {
     isLoading: boolean;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, onOpenPianoModal, onOpenExpenseTracker, onOpenStudyZone, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, handleEditMessage, handleRefreshResponse, handleDeleteSingleMessage, isLoading, thinkingStatus, attachments, setAttachments, removeAttachment, isWebSearchEnabled, toggleWebSearch, isDeepThinkEnabled, toggleDeepThink, onMenuClick, isDarkMode, chatBgColor, defaultModel, notifications, setNotifications, clearNotifications, personas, setPersona, onOpenGenerationModal, onAttachFromDrive, onSaveToDrive, startChatWithPrompt, startNewChat, onOpenMediaGallery, onOpenVideoCinema, onOpenFilesLibrary, onOpenGamePortal, onOpenMusicBox, onOpenPianoModal, onOpenVideoInterview, onOpenStudyZone, userProfile, onProFeatureBlock, musicBoxState, currentSong, isPlaying, handleExpGain }) => {
   const [input, setInput] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -701,7 +701,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                           <DeepThinkIcon className="w-5 h-5" />
                       </button>
                     )}
-                    <button title="Video Interview AI" aria-label="Open Video Interview AI" onClick={onOpenExpenseTracker} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                    <button title="Video Interview AI" aria-label="Open Video Interview AI" onClick={onOpenVideoInterview} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
                         <CameraIcon className="w-5 h-5 text-yellow-500" />
                     </button>
                 </div>
