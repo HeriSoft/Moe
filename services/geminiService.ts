@@ -1,5 +1,6 @@
 
 
+
 import { client } from '@gradio/client';
 import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats, SkillResult, Skill } from '../types';
 
@@ -437,9 +438,10 @@ export async function generateInterviewQuestion(context: string, user: UserProfi
             payload: {
                 model: 'gemini-2.5-flash', // Fast model for responsiveness
                 history: [],
-                newMessage: `You are an engaging podcast interviewer. The user is recording a video diary or vlog. 
-                Based on their transcript below, ask a short, relevant, and thought-provoking follow-up question to keep them talking. 
-                If the transcript is empty or too short, suggest a creative icebreaker topic.
+                newMessage: `You are an engaging podcast interviewer. 
+                First, detect the language of the user's transcript below. 
+                Then, ask a short, relevant, and thought-provoking follow-up question **in that same language** to keep them talking.
+                If the transcript is empty or too short, suggest a creative icebreaker topic in Vietnamese.
                 Keep the question under 20 words.
                 
                 Transcript: "${context}"`,
