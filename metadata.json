@@ -2,6 +2,7 @@
   "name": "Moe Chat",
   "description": "A sleek, modern chat application powered by the Gemini API, featuring a user-friendly and responsive interface. It allows users to engage in conversations, manage chat history, and customize settings like theme and model selection.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera"
   ]
 }
