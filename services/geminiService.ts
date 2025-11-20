@@ -1,3 +1,5 @@
+
+
 import { client } from '@gradio/client';
 import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats, SkillResult, Skill } from '../types';
 
@@ -423,4 +425,57 @@ export async function logLessonCompletion(language: string, expGained: number, u
     if (!response.ok) await handleProxyError(response);
     const data = await response.json();
     return data.stats;
+}
+
+// --- NEW: Generate Interview Question ---
+export async function generateInterviewQuestion(context: string, user: UserProfile | undefined): Promise<string> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'generateContentStream', // Reuse standard generation action
+            payload: {
+                model: 'gemini-2.5-flash', // Fast model for responsiveness
+                history: [],
+                newMessage: `You are an engaging podcast interviewer. The user is recording a video diary or vlog. 
+                Based on their transcript below, ask a short, relevant, and thought-provoking follow-up question to keep them talking. 
+                If the transcript is empty or too short, suggest a creative icebreaker topic.
+                Keep the question under 20 words.
+                
+                Transcript: "${context}"`,
+                user
+            }
+        })
+    });
+
+    if (!response.ok) {
+        // If streaming fails or is not suitable here, we might want to check if the endpoint returns a stream or a full response.
+        // However, our proxy for 'generateContentStream' returns a stream. We need to consume it to get the text.
+         await handleProxyError(response);
+    }
+
+    if (!response.body) throw new Error("Response body is null");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while(true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n\n');
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const jsonStr = line.substring(6);
+                if (jsonStr) {
+                     try {
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.text) fullText += parsed.text;
+                     } catch (e) { /* ignore */ }
+                }
+            }
+        }
+    }
+    return fullText;
 }
