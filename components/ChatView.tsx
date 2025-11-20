@@ -123,7 +123,7 @@ interface ChatViewProps {
   onOpenGamePortal: () => void; // For Game Portal
   onOpenMusicBox: () => void; // For Music Box
   onOpenPianoModal: () => void; // For Piano
-  onOpenVideoInterview: () => void; // For Expense Tracker
+  onOpenVideoInterview: () => void; // For Video Interview AI
   onOpenStudyZone: () => void; // For Study Zone
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
