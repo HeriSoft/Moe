@@ -162,4 +162,3 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
     </div>
   );
 };
-
