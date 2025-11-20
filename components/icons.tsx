@@ -506,6 +506,13 @@ export const Pool8BallIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
     </svg>
 );
 
+export const ChessIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9v-1.5h9v1.5Zm0-3h-9v-1.5h9v1.5Zm-8.625-6.75h8.25m-6 3h3.75m-1.5-6h-1.5a2.25 2.25 0 0 0-2.25 2.25v3h6v-3a2.25 2.25 0 0 0-2.25-2.25Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 21h13.5m-13.5-1.5h13.5m-11.25-3h9" />
+    </svg>
+);
+
 // FIX: Add missing ArrowsUpDownIcon and ArrowUturnLeftIcon
 export const ArrowsUpDownIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
