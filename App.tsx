@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatView } from './components/ChatView';
@@ -992,20 +993,6 @@ const App: React.FC = () => {
     }
   }, [currentSong, isPlaying, handleTogglePlay, handleNextSong, handlePrevSong]);
 
-  const handleOpenVideoInterview = () => {
-    if (!userProfile) {
-        setIsLoginModalOpen(true);
-        setNotifications(prev => ["Please sign in to use this Pro feature.", ...prev.slice(0, 19)]);
-        return;
-    }
-    if (userProfile.isPro || isAdmin) {
-        setIsVideoInterviewOpen(true);
-    } else {
-// FIX: Corrected typo from `onProFeatureBlock` to `handleProFeatureBlock`.
-        handleProFeatureBlock();
-    }
-  };
-
 
   return (
     <div className="relative flex h-screen w-full font-sans overflow-hidden">
@@ -1073,8 +1060,7 @@ const App: React.FC = () => {
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
-{/* FIX: Renamed prop from `onOpenExpenseTracker` to `onOpenVideoInterview` to match its new function. */}
-          onOpenVideoInterview={handleOpenVideoInterview}
+          onOpenExpenseTracker={() => setIsVideoInterviewOpen(true)}
           onOpenStudyZone={() => setIsStudyZoneModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
