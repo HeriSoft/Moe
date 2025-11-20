@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
-import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon } from './icons';
+import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon, ChessIcon } from './icons';
 import type { UserProfile } from '../types';
-import TienLenGame from './games/TienLenGame';
-import FlappyBirdGame from './games/FlappyBirdGame';
-import EightBallPoolGame from './games/EightBallPoolGame';
+import TienLenGame from './Games/TienLenGame';
+import FlappyBirdGame from './Games/FlappyBirdGame';
+import EightBallPoolGame from './Games/EightBallPoolGame';
+import ChessGame from './Games/ChessGame';
 import LuckyWheel from './games/LuckyWheel';
 
 interface GamePortalModalProps {
@@ -15,7 +17,7 @@ interface GamePortalModalProps {
   setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | undefined>>; // To update profile after winning prize
 }
 
-type ActiveGame = 'lobby' | 'tienlen' | 'flappy' | 'pool';
+type ActiveGame = 'lobby' | 'tienlen' | 'flappy' | 'pool' | 'chess';
 
 const GameCard: React.FC<{ title: string; description: string; Icon: React.FC<any>; onPlay: () => void; bgColorClass: string; }> = 
 ({ title, description, Icon, onPlay, bgColorClass }) => (
@@ -81,6 +83,8 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
             return <FlappyBirdGame handlePointsGain={handlePointsGain} />;
         case 'pool':
             return <EightBallPoolGame handlePointsGain={handlePointsGain} setNotifications={setNotifications} />;
+        case 'chess':
+            return <ChessGame handlePointsGain={handlePointsGain} setNotifications={setNotifications} />;
         default:
             return null;
     }
@@ -89,13 +93,13 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center" onClick={onClose} role="dialog">
       <div 
-        className="bg-slate-100 dark:bg-[#1e293b] rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200"
+        className="bg-slate-100 dark:bg-[#1e293b] rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col p-4 sm:p-6 m-4 text-slate-800 dark:text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 className="text-2xl font-bold flex items-center gap-2">
             {activeGame === 'lobby' ? <PuzzlePieceIcon className="w-7 h-7 text-indigo-500" /> : <button onClick={() => setActiveGame('lobby')} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full"><ArrowUturnLeftIcon className="w-6 h-6 text-indigo-500"/></button>}
-            Cổng Game v1.0
+            Cổng Game
           </h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" aria-label="Close Game Portal">
             <CloseIcon className="w-7 h-7" />
@@ -112,27 +116,34 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
                         <span>Bạn có <strong>{tickets}</strong> vé quay thưởng (1000 điểm/vé)</span>
                     </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <GameCard 
                         title="Tiến Lên Miền Nam"
-                        description="Đánh bài với Bot logic. Thắng +100 điểm, thua -50 điểm."
+                        description="Đánh bài với Bot logic. Thắng +20 điểm, thua -10 điểm."
                         Icon={CardsIcon}
                         onPlay={() => setActiveGame('tienlen')}
                         bgColorClass="bg-gradient-to-br from-green-500 to-green-700"
                     />
                      <GameCard 
                         title="Flappy Bird"
-                        description="Bay và né chướng ngại vật. Điểm số mỗi lượt chơi sẽ được cộng vào tổng điểm."
+                        description="Bay và né chướng ngại vật. Điểm số cộng vào tổng điểm."
                         Icon={BirdIcon}
                         onPlay={() => setActiveGame('flappy')}
                         bgColorClass="bg-gradient-to-br from-sky-400 to-sky-600"
                     />
                      <GameCard 
                         title="8 Ball Pool"
-                        description="Game bida 8 bóng logic. +5 điểm cho mỗi bi lọt lỗ."
+                        description="Bida 8 bóng. +5 điểm cho mỗi bi mục tiêu lọt lỗ."
                         Icon={Pool8BallIcon}
                         onPlay={() => setActiveGame('pool')}
                         bgColorClass="bg-gradient-to-br from-purple-500 to-purple-700"
+                    />
+                     <GameCard 
+                        title="Cờ Vua AI"
+                        description="Đấu trí với AI Minimax. Thắng +50 điểm."
+                        Icon={ChessIcon}
+                        onPlay={() => setActiveGame('chess')}
+                        bgColorClass="bg-gradient-to-br from-slate-600 to-slate-800"
                     />
                 </div>
                 <div className="mt-8 border-t-2 border-dashed border-slate-300 dark:border-slate-600 pt-8">
