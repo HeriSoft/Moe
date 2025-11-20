@@ -328,7 +328,7 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
                                     onClick={() => handleCellClick(r, c)}
                                     className={`
                                         w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center text-2xl sm:text-3xl cursor-pointer relative
-                                        ${isWhiteSq ? 'bg-[#ebecd0]' : 'bg-[#739552]'}
+                                        ${isWhiteSq ? 'bg-[#c0c0c0]' : 'bg-[#404040]'}
                                         ${isSelected ? '!bg-yellow-200' : ''}
                                         ${isLastMove ? 'bg-yellow-100' : ''}
                                     `}
