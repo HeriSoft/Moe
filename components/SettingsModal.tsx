@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { CloseIcon, SpeakerWaveIcon, StopCircleIcon, TicketIcon, ClockIcon } from './icons';
 import type { UserProfile } from '../types';
@@ -197,7 +196,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 <label htmlFor="default-model" className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Model</label>
                 <select id="default-model" value={model} onChange={(e) => setModel(e.target.value)} className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
                   <optgroup label="Free Models"><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="o3-mini">o3-mini</option><option value="gpt-5-mini">gpt-5-mini</option><option value="deepseek-v3.1">DeepSeek v3.1</option></optgroup>
-                  <optgroup label="Pro Models"><option value="gemini-2.5-pro">gemini-2.5-pro (Pro)</option><option value="grok-4">Grok-4 (Pro)</option><option value="gpt-4.1">gpt-4.1 (Pro)</option><option value="gpt-5">gpt-5 (Pro)</option><option value="o3">o3 (Pro)</option></optgroup>
+                  <optgroup label="Pro Models">
+                    <option value="gemini-3-pro-preview">gemini-3-pro-preview (Pro)</option>
+                    <option value="gemini-2.5-pro">gemini-2.5-pro (Pro)</option>
+                    <option value="grok-4">Grok-4 (Pro)</option>
+                    <option value="gpt-4.1">gpt-4.1 (Pro)</option>
+                    <option value="gpt-5">gpt-5 (Pro)</option>
+                    <option value="o3">o3 (Pro)</option>
+                  </optgroup>
                 </select>
               </div>
             </div>
