@@ -1,8 +1,9 @@
 
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
-import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon, PianoIcon, CurrencyDollarIcon, BookOpenIcon } from './icons';
+import { SendIcon, AttachmentIcon, WebSearchIcon, CloseIcon, MenuIcon, BellIcon, DeepThinkIcon, DocumentPlusIcon, ArrowDownIcon, MicrophoneIcon, StopCircleIcon, TranslateIcon, ModelIcon, SpeakerWaveIcon, SpeakerXMarkIcon, GoogleDriveIcon, FolderOpenIcon, PlusIcon, SparklesIcon, VideoIcon, DownloadIcon, CubeIcon, PuzzlePieceIcon, MusicalNoteIcon, PianoIcon, CameraIcon, BookOpenIcon } from './icons';
 import { generateSpeech, getTranslation } from '../services/geminiService';
 import { getDriveFilePublicUrl } from '../services/googleDriveService';
 
@@ -17,7 +18,6 @@ declare global {
 
 // --- NEW: Model Capabilities ---
 const MODEL_CAPABILITIES: { [key: string]: { hasImage: boolean; hasWebSearch: boolean; hasDeepThink: boolean | 'always-on'; } } = {
-  'gemini-3-pro-preview': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'gemini-2.5-flash': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'gemini-2.5-pro': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'o3-mini': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
@@ -701,8 +701,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ activeChat, sendMessage, han
                           <DeepThinkIcon className="w-5 h-5" />
                       </button>
                     )}
-                    <button title="Personal Expense Tracker" aria-label="Open Personal Expense Tracker" onClick={onOpenExpenseTracker} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
-                        <CurrencyDollarIcon className="w-5 h-5" />
+                    <button title="Video Interview AI" aria-label="Open Video Interview AI" onClick={onOpenExpenseTracker} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-500/50 text-slate-500 dark:text-slate-400">
+                        <CameraIcon className="w-5 h-5 text-yellow-500" />
                     </button>
                 </div>
             </div>
