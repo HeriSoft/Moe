@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 export const PresentationChartLineIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -558,7 +559,6 @@ export const PianoIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
         <path strokeLinecap="round" d="M8.25 7.5h1.5v3h-1.5zM11.25 7.5h1.5v3h-1.5zM14.25 7.5h1.5v3h-1.5z" />
     </svg>
 );
-
 
 // --- ALIASES for easier import ---
 export const GearIcon = CogIcon;
