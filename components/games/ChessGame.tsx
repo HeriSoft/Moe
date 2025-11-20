@@ -4,11 +4,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 // --- CHESS LOGIC & AI ---
 
 const BOARD_SIZE = 8;
-// Use solid characters for both sides to ensure consistent size/weight.
-// We will distinguish them using CSS colors (text-white vs text-black).
 const PIECES: { [key: string]: string } = {
-    r: '♜', n: '♞', b: '♝', q: '♛', k: '♚', p: '♟', // Black keys
-    R: '♜', N: '♞', B: '♝', Q: '♛', K: '♚', P: '♟'  // White keys (mapped to solid glyphs)
+    r: '♜', n: '♞', b: '♝', q: '♛', k: '♚', p: '♟', // Black
+    R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔', P: '♙'  // White
 };
 
 const INITIAL_SETUP = [
@@ -120,7 +118,9 @@ const minimax = (board: Board, depth: number, alpha: number, beta: number, isMax
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(board[r][c] === (isMaximizing ? 'K' : 'k')) kingFound = true;
     if (!kingFound) return isMaximizing ? -10000 : 10000; // Opponent king gone is good
 
-    if (isMaximizing) { // AI is Black
+    if (isMaximizing) { // AI is Black (positive value in piece map is black... wait, logic inversion in PIECE_VALUES. Let's fix)
+        // In PIECE_VALUES: Black is Positive (p=10), White is Negative (P=-10).
+        // So AI (Black) wants to MAXIMIZE score.
         let maxEval = -Infinity;
         const moves = getAllMoves(board, 'black');
         if (moves.length === 0) return evaluateBoard(board);
@@ -133,7 +133,7 @@ const minimax = (board: Board, depth: number, alpha: number, beta: number, isMax
             if (beta <= alpha) break;
         }
         return maxEval;
-    } else { // Human is White
+    } else { // Human is White (Negative scores)
         let minEval = Infinity;
         const moves = getAllMoves(board, 'white');
         if (moves.length === 0) return evaluateBoard(board);
@@ -205,6 +205,7 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
         const moves = getAllMoves(board, 'black');
 
         if (moves.length === 0) {
+            // Stalemate or checkmate logic could go here, but simplistic end is fine
             setLog(prev => ["AI has no moves.", ...prev]);
             return;
         }
@@ -319,7 +320,7 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
                             const isWhiteSq = (r + c) % 2 === 0;
                             const isSelected = selected?.r === r && selected?.c === c;
                             const isHint = possibleMoves.some(m => m.r === r && m.c === c);
-                            const isLastMove = false; 
+                            const isLastMove = false; // Could track last move for highlighting
 
                             return (
                                 <div
@@ -333,10 +334,7 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
                                     `}
                                 >
                                     {piece && (
-                                        <span className={`z-10 select-none ${getPieceColor(piece) === 'white' 
-                                            ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]' 
-                                            : 'text-black'
-                                        }`}>
+                                        <span className={`z-10 ${getPieceColor(piece) === 'white' ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]' : 'text-black'}`}>
                                             {PIECES[piece]}
                                         </span>
                                     )}
