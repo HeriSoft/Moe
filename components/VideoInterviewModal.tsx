@@ -17,6 +17,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9/16');
   const [aiPrompt, setAiPrompt] = useState("Hãy bắt đầu bằng việc giới thiệu về bản thân bạn...");
   const [transcript, setTranscript] = useState("");
+  const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -26,6 +27,17 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   const chunksRef = useRef<Blob[]>([]);
   const animationRef = useRef<number | null>(null);
   const lastAiUpdateRef = useRef<number>(0);
+
+  useEffect(() => {
+      const checkOrientation = () => {
+          const isMobile = window.matchMedia("(pointer: coarse)").matches || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          const isPortrait = window.innerHeight > window.innerWidth;
+          setIsMobilePortrait(isMobile && isPortrait);
+      };
+      checkOrientation();
+      window.addEventListener('resize', checkOrientation);
+      return () => window.removeEventListener('resize', checkOrientation);
+  }, []);
 
   const getCanvasDimensions = useCallback(() => {
       // Base height 1080p roughly
@@ -107,19 +119,34 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
 
   const startCamera = useCallback(async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Trình duyệt của bạn không hỗ trợ truy cập Camera/Microphone.");
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" }, 
         audio: true 
       });
+      
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onplaying = drawToCanvas;
         videoRef.current.play();
       }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập.");
+    } catch (err: any) {
+      console.error("Error accessing camera/mic:", err);
+      let errorMessage = "Không thể truy cập camera hoặc micro.";
+      
+      if (err.name === 'NotFoundError' || err.message?.includes('device not found')) {
+          errorMessage = "Không tìm thấy driver microphone hoặc camera. Vui lòng kiểm tra kết nối thiết bị.";
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errorMessage = "Quyền truy cập bị từ chối. Vui lòng cấp quyền camera/mic cho trang web trong cài đặt trình duyệt.";
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          errorMessage = "Thiết bị đang được sử dụng bởi ứng dụng khác hoặc bị lỗi phần cứng.";
+      }
+      
+      alert(errorMessage);
       onClose(); // Close modal if camera fails
     }
   }, [drawToCanvas, onClose]);
@@ -158,8 +185,12 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
           }
       };
 
-      recognition.start();
-      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+        recognitionRef.current = recognition;
+      } catch (e) {
+        console.error("Speech recognition start failed", e);
+      }
     }
   }, [isOpen, stopSpeechRecognition]);
 
@@ -258,8 +289,16 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-stone-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#fff5f0] dark:bg-[#2a2522] rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden border border-orange-100/50" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-stone-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm overflow-hidden" onClick={onClose}>
+      <div 
+        className={`transition-all duration-300 shadow-2xl flex flex-col overflow-hidden border border-orange-100/50 bg-[#fff5f0] dark:bg-[#2a2522]
+           ${isMobilePortrait 
+             ? 'fixed w-[100vh] h-[100vw] origin-center rotate-90 rounded-none' 
+             : 'w-full max-w-6xl h-[90vh] rounded-3xl relative'}`
+        }
+        style={isMobilePortrait ? { left: '50%', top: '50%', translate: '-50% -50%' } : {}}
+        onClick={e => e.stopPropagation()}
+      >
         
         {/* Header */}
         <div className="flex-shrink-0 flex justify-between items-center p-4 sm:p-6 border-b border-orange-100/50 dark:border-white/10">
@@ -340,7 +379,6 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
                         Hãy nói chuyện tự nhiên. AI sẽ lắng nghe và gợi ý câu hỏi tiếp theo để câu chuyện của bạn luôn liền mạch.
                     </p>
                 </div>
-
             </div>
         </div>
       </div>
