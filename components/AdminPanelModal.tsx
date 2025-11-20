@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon, PlusIcon, ArrowUturnLeftIcon } from './icons';
+import { CloseIcon, ShieldCheckIcon, ShieldExclamationIcon, UserCircleIcon, ClipboardDocumentListIcon, RefreshIcon, SparklesIcon, CurrencyDollarIcon, PhotoIcon, StarIcon, WrenchScrewdriverIcon, PlusIcon, ArrowUturnLeftIcon, AcademicCapIcon } from './icons';
 import type { UserProfile } from '../types';
 import * as googleDriveService from '../services/googleDriveService';
 
@@ -321,6 +322,8 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
      const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
      const [pointsToAdd, setPointsToAdd] = useState<Record<string, string>>({});
      const [creditsToAdd, setCreditsToAdd] = useState<Record<string, string>>({});
+     const [expToAdd, setExpToAdd] = useState<Record<string, string>>({});
+
 
     const handleToggleMod = async (email: string, currentStatus: boolean) => {
         setIsSubmitting(email + '_mod');
@@ -417,6 +420,33 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
         }
     };
 
+    const handleAddExp = async (email: string) => {
+        const amount = parseInt(expToAdd[email] || '0', 10);
+        if (!amount) return;
+
+        setIsSubmitting(email + '_exp');
+        try {
+            const response = await fetch(ADMIN_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-User-Email': userProfile.email },
+                body: JSON.stringify({ action: 'add_exp_admin', email, amount }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.details || 'Failed to add exp.');
+            
+            if (email === userProfile.email) {
+                setUserProfile(result.user);
+            }
+
+            onUpdate();
+            setExpToAdd(prev => ({ ...prev, [email]: '' }));
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
+
     return (
         <div className="space-y-2">
             {users.map(user => (
@@ -431,7 +461,7 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
                             </p>
                             <p className="text-sm text-slate-500 truncate">{user.email}</p>
                             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                Points: {user.points?.toLocaleString() || 0} | Credits: {user.credits?.toLocaleString() || 0}
+                                Level: {user.level || 0} | Points: {user.points?.toLocaleString() || 0} | Credits: {user.credits?.toLocaleString() || 0}
                             </p>
                         </div>
                     </div>
@@ -474,6 +504,26 @@ const UserManagement: React.FC<{ users: AdminUser[], userProfile: UserProfile, o
                                 <PlusIcon className="w-4 h-4" />
                             </button>
                         </div>
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="number"
+                                placeholder="Exp"
+                                value={expToAdd[user.email] || ''}
+                                onChange={(e) => setExpToAdd(p => ({ ...p, [user.email]: e.target.value }))}
+                                className="w-20 p-1 text-sm rounded-md bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600"
+                                disabled={isSubmitting?.startsWith(user.email)}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => handleAddExp(user.email)}
+                                disabled={isSubmitting?.startsWith(user.email) || !expToAdd[user.email] || parseInt(expToAdd[user.email]) === 0}
+                                className="p-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 disabled:opacity-50"
+                                title="Add Exp"
+                            >
+                                <AcademicCapIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+
                         <div className="h-8 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
                         {user.email === userProfile.email && (user.hasPermanentNameColor || user.hasSakuraBanner) && (
                             <button
@@ -535,6 +585,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 imageUrl: user.image_url,
                 points: user.points,
                 credits: user.credits,
+                level: user.level,
+                exp: user.exp,
                 isPro: user.isPro,
                 subscriptionExpiresAt: user.subscriptionExpiresAt,
                 isModerator: user.isModerator,
