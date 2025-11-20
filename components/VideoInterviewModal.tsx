@@ -42,43 +42,47 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   }, [aspectRatio]);
 
   const drawToCanvas = useCallback(() => {
-      if (!videoRef.current || !canvasRef.current) return;
-      
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      
       if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
       }
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+
+      if (!video || !canvas || !ctx) return;
       
       const { width, height } = getCanvasDimensions();
       canvas.width = width;
       canvas.height = height;
 
       const render = () => {
-          if (!video || video.paused || video.ended || !ctx) {
+          if (!video || video.paused || video.ended || video.videoWidth === 0) {
               animationRef.current = requestAnimationFrame(render);
               return;
           }
           
-          const vRatio = video.videoWidth / video.videoHeight;
-          const cRatio = canvas.width / canvas.height;
-          let sx, sy, sWidth, sHeight;
+          const videoRatio = video.videoWidth / video.videoHeight;
+          const canvasRatio = canvas.width / canvas.height;
+          
+          let sourceX = 0;
+          let sourceY = 0;
+          let sourceWidth = video.videoWidth;
+          let sourceHeight = video.videoHeight;
 
-          if (vRatio > cRatio) {
-              sHeight = video.videoHeight;
-              sWidth = sHeight * cRatio;
-              sx = (video.videoWidth - sWidth) / 2;
-              sy = 0;
+          // Cover logic: crop the video to fill the canvas without distortion.
+          if (videoRatio > canvasRatio) {
+              // Video is wider than canvas, crop sides
+              sourceWidth = video.videoHeight * canvasRatio;
+              sourceX = (video.videoWidth - sourceWidth) / 2;
           } else {
-              sWidth = video.videoWidth;
-              sHeight = sWidth / cRatio;
-              sx = 0;
-              sy = (video.videoHeight - sHeight) / 2;
+              // Video is taller than canvas, crop top/bottom
+              sourceHeight = video.videoWidth / canvasRatio;
+              sourceY = (video.videoHeight - sourceHeight) / 2;
           }
           
-          ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
           
           animationRef.current = requestAnimationFrame(render);
       };
@@ -163,7 +167,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      // Reset all state when opening
+      // Reset all state when opening to ensure a fresh session
       setIsRecording(false);
       setRecordedBlob(null);
       setAiPrompt("Hãy bắt đầu bằng việc giới thiệu về bản thân bạn...");
@@ -255,10 +259,10 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
 
   return (
     <div className="fixed inset-0 bg-stone-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-[#fff5f0] dark:bg-[#2a2522] rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden border border-orange-100/50 relative" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#fff5f0] dark:bg-[#2a2522] rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden border border-orange-100/50" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
-        <div className="flex justify-between items-center p-4 sm:p-6 bg-white/50 dark:bg-black/20 backdrop-blur-md absolute top-0 left-0 right-0 z-20 rounded-t-3xl">
+        <div className="flex-shrink-0 flex justify-between items-center p-4 sm:p-6 border-b border-orange-100/50 dark:border-white/10">
             <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800 dark:text-orange-50">
                 <CameraIcon className="w-8 h-8 text-yellow-500" />
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 to-pink-500">Video Interview AI</span>
@@ -267,10 +271,10 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
         </div>
 
         {/* Main Content */}
-        <div className="flex-grow flex flex-col md:flex-row h-full pt-20 pb-6 px-6 gap-6">
+        <div className="flex-grow flex flex-col md:flex-row min-h-0 p-6 gap-6">
             
             {/* Video Area */}
-            <div className="flex-grow relative flex items-center justify-center bg-black rounded-2xl overflow-hidden shadow-inner shadow-black/50">
+            <div className="flex-grow relative flex items-center justify-center bg-black rounded-2xl overflow-hidden shadow-inner shadow-black/50 min-h-0">
                 <video ref={videoRef} className="absolute opacity-0 pointer-events-none" playsInline muted autoPlay />
                 <canvas 
                     ref={canvasRef} 
