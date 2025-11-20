@@ -1,3 +1,4 @@
+
 // FIX: Augment the global ImportMeta type to include Vite's environment variables.
 // This resolves TypeScript errors about `import.meta.env` when the standard
 // `vite/client` types are not being picked up automatically.
@@ -29,6 +30,7 @@ let gapi: any = null;
 let google: any = null;
 let tokenClient: any = null;
 let appFolderId: string | null = null;
+let refreshPromise: Promise<void> | null = null; // Lock for refresh process
 
 /**
  * Inspects a GAPI error object and throws a more user-friendly error.
@@ -232,8 +234,11 @@ export function signOut(onSignOutComplete: () => void) {
 }
 
 function refreshToken(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    if (refreshPromise) return refreshPromise;
+
+    refreshPromise = new Promise((resolve, reject) => {
         if (!tokenClient) {
+            refreshPromise = null;
             return reject(new Error("Token client not initialized."));
         }
         console.log("Attempting to silently refresh access token...");
@@ -242,28 +247,57 @@ function refreshToken(): Promise<void> {
         
         tokenClient.callback = (tokenResponse: any) => {
             tokenClient.callback = originalCallback;
+            refreshPromise = null;
+            
             if (tokenResponse.error) {
                 console.error("Token refresh failed:", tokenResponse);
                 reject(new Error("Session expired. Please sign in again."));
                 return;
             }
+            
+            // Ensure we actually have a valid token object
+            if (!tokenResponse || !tokenResponse.access_token) {
+                console.error("Token refresh response invalid:", tokenResponse);
+                reject(new Error("Failed to retrieve a valid access token."));
+                return;
+            }
+
             console.log("Token refreshed successfully via temporary callback.");
-            gapi.client.setToken(tokenResponse);
+            if (gapi && gapi.client) {
+                gapi.client.setToken(tokenResponse);
+            }
             resolve();
         };
         
-        tokenClient.requestAccessToken({ prompt: 'none' });
+        try {
+            tokenClient.requestAccessToken({ prompt: 'none' });
+        } catch (e) {
+            tokenClient.callback = originalCallback;
+            refreshPromise = null;
+            console.error("Error requesting access token silently:", e);
+            reject(e);
+        }
     });
+    
+    return refreshPromise;
 }
 
 async function gapiWithAuthRefresh<T>(apiCall: () => Promise<T>): Promise<T> {
     try {
         return await apiCall();
     } catch (error: any) {
-        if (error?.result?.error?.code === 401 || error?.status === 401) {
+        // Check for various forms of 401/403 errors that indicate token expiration or auth issues
+        const isAuthError = 
+            error?.result?.error?.code === 401 || 
+            error?.status === 401 || 
+            error?.code === 401 || 
+            (error?.message && typeof error.message === 'string' && error.message.includes('401'));
+
+        if (isAuthError) {
             console.warn("API request failed with 401. Refreshing token and retrying.");
             try {
                 await refreshToken();
+                // Retry the API call with the new token
                 return await apiCall();
             } catch (refreshError) {
                 console.error("Failed to refresh token or retry the request:", refreshError);
@@ -280,7 +314,7 @@ async function getAppFolderId(): Promise<string> {
     }
 
     try {
-        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({ // <-- SỬA 1
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({ 
             q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`,
             spaces: 'appDataFolder',
             fields: 'files(id, name)',
@@ -295,7 +329,7 @@ async function getAppFolderId(): Promise<string> {
                 'mimeType': 'application/vnd.google-apps.folder',
                 'parents': ['appDataFolder']
             };
-            const file: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.create({ // <-- SỬA 2
+            const file: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.create({
                 resource: fileMetadata,
                 fields: 'id'
             }));
@@ -310,7 +344,7 @@ async function getAppFolderId(): Promise<string> {
 export async function listSessions(): Promise<ChatSession[]> {
     try {
         const folderId = await getAppFolderId();
-        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({ // <-- SỬA 3
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({
             q: `'${folderId}' in parents and trashed=false`,
             spaces: 'appDataFolder',
             fields: 'files(id, name)',
@@ -320,7 +354,7 @@ export async function listSessions(): Promise<ChatSession[]> {
         const files = response.result.files || [];
         const sessionPromises = files.map(async (file: any) => {
             try {
-                const contentResponse: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({ // <-- SỬA 4
+                const contentResponse: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({
                     fileId: file.id,
                     alt: 'media'
                 }));
@@ -367,7 +401,7 @@ export async function saveSession(session: ChatSession): Promise<ChatSession> {
           JSON.stringify(sessionToSave) +
           close_delim;
           
-        const response: any = await gapiWithAuthRefresh(() => gapi.client.request({ // <-- SỬA 5
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.request({
             path: `/upload/drive/v3/files${fileId ? `/${fileId}` : ''}`,
             method: fileId ? 'PATCH' : 'POST',
             params: { uploadType: 'multipart' },
