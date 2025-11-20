@@ -1060,7 +1060,7 @@ const App: React.FC = () => {
           onOpenGamePortal={() => setIsGamePortalOpen(true)}
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
-          onOpenExpenseTracker={() => setIsVideoInterviewOpen(true)}
+          onOpenVideoInterview={() => setIsVideoInterviewOpen(true)}
           onOpenStudyZone={() => setIsStudyZoneModalOpen(true)}
           userProfile={userProfile}
           onProFeatureBlock={handleProFeatureBlock}
