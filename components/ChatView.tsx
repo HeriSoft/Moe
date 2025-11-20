@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
@@ -16,6 +17,7 @@ declare global {
 
 // --- NEW: Model Capabilities ---
 const MODEL_CAPABILITIES: { [key: string]: { hasImage: boolean; hasWebSearch: boolean; hasDeepThink: boolean | 'always-on'; } } = {
+  'gemini-3-pro-preview': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'gemini-2.5-flash': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'gemini-2.5-pro': { hasImage: true, hasWebSearch: true, hasDeepThink: true },
   'o3-mini': { hasImage: true, hasWebSearch: false, hasDeepThink: false },
