@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatSession, Attachment, Message, UserProfile, Song } from '../types';
 import { MessageComponent } from './Message';
@@ -122,7 +123,7 @@ interface ChatViewProps {
   onOpenGamePortal: () => void; // For Game Portal
   onOpenMusicBox: () => void; // For Music Box
   onOpenPianoModal: () => void; // For Piano
-  onOpenVideoInterview: () => void;
+  onOpenVideoInterview: () => void; // For Expense Tracker
   onOpenStudyZone: () => void; // For Study Zone
   userProfile: UserProfile | undefined; // For logging
   onProFeatureBlock: () => void; // Callback for Pro feature gate
