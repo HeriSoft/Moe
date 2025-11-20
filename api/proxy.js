@@ -1,3 +1,4 @@
+
 // File: /api/proxy.js
 // This is a Vercel Serverless Function that acts as a multi-API proxy.
 // It uses ioredis for logging and IP management.
@@ -371,7 +372,7 @@ export default async function handler(req, res) {
 
         // --- FEATURE GATING ---
         const proActions = ['swapFace', 'generateImages', 'editImage', 'generateSpeech'];
-        const proModels = ['gpt-4.1', 'gpt-5', 'o3', 'gemini-2.5-pro', 'grok-4'];
+        const proModels = ['gpt-4.1', 'gpt-5', 'o3', 'gemini-2.5-pro', 'grok-4', 'gemini-3-pro-preview'];
 
         const isProAction = proActions.includes(action);
         const isProModel = action === 'generateContentStream' && proModels.includes(payload.model);
