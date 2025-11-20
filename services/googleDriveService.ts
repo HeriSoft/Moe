@@ -1,481 +1,546 @@
 
+// FIX: Augment the global ImportMeta type to include Vite's environment variables.
+// This resolves TypeScript errors about `import.meta.env` when the standard
+// `vite/client` types are not being picked up automatically.
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_GOOGLE_CLIENT_ID: string;
+      readonly VITE_GOOGLE_API_KEY: string;
+    };
+  }
+}
 
-import { client } from '@gradio/client';
-import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats, SkillResult, Skill } from '../types';
+import type { ChatSession, UserProfile } from '../types';
+import { fetchUserProfileAndLogLogin } from './geminiService';
+
+// Use Vite's import.meta.env to access environment variables on the client-side
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+
+
+const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+// FIX: Request full drive scope. The 'drive.file' scope is insufficient for PATCHing
+// arbitrary files selected by the user via the picker, leading to 403 errors.
+// The 'drive' scope allows the app to modify any file the user has granted access to.
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive';
+const APP_FOLDER_NAME = 'Moe Chat Data';
+
+let gapi: any = null;
+let google: any = null;
+let tokenClient: any = null;
+let appFolderId: string | null = null;
+let refreshPromise: Promise<void> | null = null; // Lock for refresh process
 
 /**
- * A robust error handler for fetch requests to the proxy.
- * It tries to parse the error response as JSON, but falls back to text 
- * if that fails. This prevents crashes when the server (e.g., Vercel)
- * returns a non-JSON error like "413 Payload Too Large".
- * @param response The raw Response object from a failed fetch call.
- * @throws An Error with a detailed message from the response body.
+ * Inspects a GAPI error object and throws a more user-friendly error.
+ * Specifically checks for the "API not enabled" error.
+ * @param error The raw error object from a GAPI client promise rejection.
+ * @param context A string describing the action that failed (e.g., "saving session").
  */
-async function handleProxyError(response: Response): Promise<never> {
-    let errorDetails = `Proxy request failed with status ${response.status}`;
-    try {
-        const errorData = await response.json();
-        errorDetails = errorData.details || errorData.error || JSON.stringify(errorData);
-    } catch (e) {
-        try {
-            errorDetails = await response.text();
-        } catch (textError) {
-            // Fallback, the initial error message is used.
+const handleGapiError = (error: any, context: string): never => {
+    console.error(`GAPI Error during ${context}:`, error);
+    const errorDetails = error?.result?.error || error?.data?.error;
+
+    if (errorDetails) {
+        if (
+            (errorDetails.status === 'PERMISSION_DENIED' || errorDetails.code === 403) &&
+            errorDetails.message?.toLowerCase().includes('drive api has not been used')
+        ) {
+            throw new Error(
+                "Google Drive API is not enabled. Please visit your Google Cloud Console and enable the 'Google Drive API' for this project to save and load chats."
+            );
         }
+        // Throw a more specific message if available
+        throw new Error(`Google Drive Error: ${errorDetails.message} (Code: ${errorDetails.code})`);
     }
-    throw new Error(errorDetails);
-}
+
+    // Fallback for unexpected error formats or custom errors from our refresh logic
+    throw new Error(error.message || `An unknown error occurred during ${context}.`);
+};
 
 
-export async function addExp(amount: number, user: UserProfile): Promise<UserProfile> {
-    if (!user || !user.email) {
-        throw new Error("User must be logged in to gain EXP.");
-    }
-    try {
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'add_exp',
-                payload: { amount, user }
-            })
-        });
-
-        if (!response.ok) {
-            await handleProxyError(response);
-        }
-        
-        const data = await response.json();
-        if (data.success && data.user) {
-            return data.user;
-        } else {
-            throw new Error("Failed to update EXP on the server.");
-        }
-    } catch (error) {
-        console.error("Failed to add EXP:", error);
-        throw error;
-    }
-}
-
-export async function addPoints(amount: number, user: UserProfile): Promise<{ points: number }> {
-    if (!user || !user.email) {
-        throw new Error("User must be logged in to gain points.");
-    }
-    try {
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'add_points',
-                payload: { amount, user }
-            })
-        });
-
-        if (!response.ok) {
-            await handleProxyError(response);
-        }
-        
-        const data = await response.json();
-        if (data.success && data.user) {
-            return data.user;
-        } else {
-            throw new Error("Failed to update points on the server.");
-        }
-    } catch (error) {
-        console.error("Failed to add points:", error);
-        throw error;
-    }
-}
-
-
-export async function fetchUserProfileAndLogLogin(user: UserProfile): Promise<UserProfile> {
-    try {
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'logLogin',
-                payload: { user }
-            })
-        });
-        if (!response.ok) {
-            // Fallback to original user profile if API fails
-            console.error("Failed to fetch full user profile:", await response.text());
-            return user;
-        }
-        const data = await response.json();
-        return data.user || user; // Return full profile from DB, or original as fallback
-    } catch (error) {
-        console.error("Failed to log user login/fetch profile:", error);
-        return user; // Fallback
-    }
-}
-
-// We only need one service function now, which calls the proxy's streaming endpoint.
-// The proxy will handle all the logic for different models and functionalities.
-export async function streamModelResponse(
-    model: string,
-    history: Message[],
-    newMessage: string,
-    attachments: Attachment[] | null,
-    isWebSearchEnabled: boolean,
-    isDeepThinkEnabled: boolean,
-    systemInstruction: string | undefined,
-    user: UserProfile | undefined,
+/**
+ * Initializes the Google API client.
+ * This function now assumes gapi and google scripts are loaded from index.html
+ * @param onAuthChange Callback function to update authentication status in the app.
+ */
+export async function initClient(
+    onAuthChange: (isLoggedIn: boolean, userProfile?: UserProfile) => void
 ) {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'generateContentStream',
-            payload: {
-                model,
-                history,
-                newMessage,
-                attachments,
-                isWebSearchEnabled,
-                isDeepThinkEnabled,
-                systemInstruction,
-                user, // Pass user profile for logging
-            }
-        })
-    });
-
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-
-    if (!response.body) {
-        throw new Error("Response body is null");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    return (async function*() {
-        while(true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n\n');
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const jsonStr = line.substring(6);
-                    if (jsonStr) {
-                         try {
-                            yield JSON.parse(jsonStr);
-                         } catch (e) {
-                            console.error("Failed to parse stream chunk:", jsonStr);
-                         }
-                    }
+    console.log("Starting Google Drive service initialization...");
+    try {
+        if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
+            throw new Error("VITE_GOOGLE_CLIENT_ID or VITE_GOOGLE_API_KEY is not set. Please check your environment variables.");
+        }
+        
+        const gapiLoadPromise = new Promise<void>((resolve, reject) => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if ((window as any).gapi) {
+                    clearInterval(interval);
+                    gapi = (window as any).gapi;
+                    console.log("gapi library loaded.");
+                    resolve();
+                } else if (++attempts > 50) {
+                    clearInterval(interval);
+                    reject(new Error("Failed to load Google API (gapi) library. Check script tag in index.html."));
                 }
-            }
-        }
-    })();
+            }, 100);
+        });
+
+        const gisLoadPromise = new Promise<void>((resolve, reject) => {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if ((window as any).google) {
+                    clearInterval(interval);
+                    google = (window as any).google;
+                    console.log("Google Identity Services (gis) library loaded.");
+                    resolve();
+                } else if (++attempts > 50) {
+                    clearInterval(interval);
+                    reject(new Error("Failed to load Google Identity Services (gis) library. Check script tag in index.html."));
+                }
+            }, 100);
+        });
+        
+        await Promise.all([gapiLoadPromise, gisLoadPromise]);
+
+        await new Promise<void>((resolve, reject) => {
+            gapi.load('client', async () => {
+                try {
+                    console.log("Initializing gapi client...");
+                    await gapi.client.init({
+                        apiKey: GOOGLE_API_KEY,
+                        discoveryDocs: DISCOVERY_DOCS,
+                    });
+                    console.log("Gapi client initialized successfully.");
+
+                    const updateUserStatus = async () => {
+                        const token = gapi.client.getToken();
+                        if (token === null || !token.access_token) {
+                            console.log("User is not signed in or token is missing.");
+                            onAuthChange(false);
+                            return;
+                        }
+
+                        console.log("User has a token. Fetching profile via direct fetch...");
+                        try {
+                            const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                                headers: { 'Authorization': `Bearer ${token.access_token}` }
+                            });
+
+                            if (!profileResponse.ok) {
+                                throw new Error(`User info fetch failed with status: ${profileResponse.status}`);
+                            }
+
+                            const googleProfile = await profileResponse.json();
+
+                            if (!googleProfile || !googleProfile.sub) {
+                                console.warn("Token exists but userinfo is empty. Signing out.");
+                                signOut(() => onAuthChange(false));
+                                return;
+                            }
+                            
+                            const basicUserProfile: UserProfile = {
+                                id: googleProfile.sub,
+                                name: googleProfile.name,
+                                email: googleProfile.email,
+                                imageUrl: googleProfile.picture,
+                            };
+                            
+                            // Fetch full profile from our DB to get membership status etc.
+                            const fullProfile = await fetchUserProfileAndLogLogin(basicUserProfile);
+
+                            console.log("Full profile fetched successfully:", fullProfile.name);
+                            onAuthChange(true, fullProfile);
+                        } catch (error) {
+                            console.error("Error fetching user info for existing session, signing out:", error);
+                            signOut(() => onAuthChange(false));
+                        }
+                    };
+                    
+                    console.log("Initializing token client...");
+                    tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: GOOGLE_CLIENT_ID,
+                        scope: SCOPES,
+                        callback: (tokenResponse: any) => {
+                            if (tokenResponse.error) {
+                                console.error('Token client error:', tokenResponse);
+                                onAuthChange(false);
+                                return;
+                            }
+                            console.log("Access token received from sign-in flow.");
+                            gapi.client.setToken(tokenResponse);
+                            updateUserStatus();
+                        },
+                    });
+                    console.log("Token client initialized successfully.");
+                    
+                    await updateUserStatus();
+                    
+                    resolve();
+                } catch (error: any) {
+                    if (error && typeof error === 'object' && 'result' in error) {
+                        const errorResult = (error as any).result?.error;
+                        if (errorResult && errorResult.message && errorResult.message.includes('API not found')) {
+                             reject(new Error("API discovery response missing required fields. Ensure 'Google Drive API' and 'Google People API' are enabled in your Google Cloud project."));
+                             return;
+                        }
+                    }
+                    reject(error);
+                }
+            });
+        });
+
+        console.log("Google Drive service initialization complete.");
+
+    } catch (error) {
+        console.error("Fatal error during Google service initialization:", error);
+        onAuthChange(false);
+    }
 }
 
 
-// Updated to handle different models and settings
-export async function generateImage(prompt: string, settings: any, user: UserProfile | undefined): Promise<Attachment[]> {
-    const response = await fetch('/api/proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-          action: 'generateImages',
-          payload: {
-              model: settings.model,
-              prompt: prompt,
-              config: {
-                numberOfImages: settings.numImages || 1,
-                outputMimeType: 'image/png',
-                aspectRatio: settings.aspectRatio || '1:1',
-                quality: settings.quality,
-                style: settings.style,
-              },
-              user, // Pass user profile for logging
-          }
-      })
-    });
-    
-    if (!response.ok) {
-        await handleProxyError(response);
+export function signIn() {
+    console.log("signIn function called.");
+    if (!tokenClient) {
+        console.error("Cannot sign in: Google Auth client (tokenClient) is not initialized.");
+        alert("Sign-in service is not ready. Please check the console for errors.");
+        return;
     }
-
-    const data = await response.json();
-
-    if (data.generatedImages && data.generatedImages.length > 0) {
-        return data.generatedImages.map((img: any) => ({
-             data: img.image.imageBytes,
-             mimeType: 'image/png',
-             fileName: `${prompt.substring(0, 20)}.png`
-        }));
+    
+    console.log("Requesting access token...");
+    if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({prompt: 'consent'});
     } else {
-        throw new Error("Image generation failed.");
+        tokenClient.requestAccessToken({prompt: ''});
     }
 }
 
-// New function for image editing
-export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
-    
-    // Create a config object from settings, excluding properties we don't want to send.
-    const config: any = { ...settings };
-    delete config.model; // model is passed separately.
-
-    // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images (e.g. when applying outfits).
-    // The Gemini API expects an `output` object within the `config`.
-    if (settings?.outputSize?.width && settings?.outputSize?.height) {
-        config.output = {
-            width: settings.outputSize.width,
-            height: settings.outputSize.height,
-        };
+export function signOut(onSignOutComplete: () => void) {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token, () => {
+            gapi.client.setToken('');
+            appFolderId = null;
+            onSignOutComplete();
+            console.log("User signed out and token revoked.");
+        });
+    } else {
+        onSignOutComplete();
+        console.log("No user was signed in.");
     }
-    delete config.outputSize; // clean up
-
-    // Let's also handle the 'auto' aspect ratio here on the client-side to be safe.
-    if (config.aspectRatio === 'auto' || !config.aspectRatio) {
-        delete config.aspectRatio;
-    }
-
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'editImage',
-            payload: {
-                model: settings.model,
-                prompt,
-                images,
-                config: config, // Pass the constructed config object
-                user, // Pass user profile for logging
-            }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    return await response.json();
 }
 
+function refreshToken(): Promise<void> {
+    if (refreshPromise) return refreshPromise;
 
-// New function for translating input text
-export async function getTranslation(text: string, targetLanguage: string, user: UserProfile | undefined): Promise<string> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'getTranslation',
-            payload: { text, targetLanguage, user }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    const data = await response.json();
-    return data.translatedText;
-}
-
-
-export async function generateSpeech(text: string, user: UserProfile | undefined, voice?: string, speed?: number): Promise<string> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'generateSpeech',
-            payload: { text, user, voice, speed }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    const data = await response.json();
-    return data.audioContent; // This will be the base64 string
-}
-
-// New function for face swapping using a Gradio API
-export async function swapFace(targetImage: Attachment, sourceImage: Attachment, user: UserProfile | undefined): Promise<Attachment> {
-    console.log("Calling local proxy for face swap...");
-
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'swapFace',
-            payload: { 
-                targetImage: targetImage, 
-                sourceImage: sourceImage,
-                user, // Pass user profile for logging
-            }
-        })
-    });
-
-    console.log("Response status from proxy:", response.status);
-
-    if (!response.ok) {
-        // Use the centralized error handler and wrap its error in a more specific one for this context.
-        try {
-            await handleProxyError(response);
-        } catch (e: any) {
-            console.error("Proxy API error details for face swap:", e.message);
-            throw new Error(`Face swap failed via proxy: ${e.message}`);
+    refreshPromise = new Promise((resolve, reject) => {
+        if (!tokenClient) {
+            refreshPromise = null;
+            return reject(new Error("Token client not initialized."));
         }
+        console.log("Attempting to silently refresh access token...");
+
+        const originalCallback = tokenClient.callback;
+        
+        tokenClient.callback = (tokenResponse: any) => {
+            tokenClient.callback = originalCallback;
+            refreshPromise = null;
+            
+            if (tokenResponse.error) {
+                console.error("Token refresh failed:", tokenResponse);
+                reject(new Error("Session expired. Please sign in again."));
+                return;
+            }
+            
+            // Ensure we actually have a valid token object
+            if (!tokenResponse || !tokenResponse.access_token) {
+                console.error("Token refresh response invalid:", tokenResponse);
+                reject(new Error("Failed to retrieve a valid access token."));
+                return;
+            }
+
+            console.log("Token refreshed successfully via temporary callback.");
+            if (gapi && gapi.client) {
+                gapi.client.setToken(tokenResponse);
+            }
+            resolve();
+        };
+        
+        try {
+            tokenClient.requestAccessToken({ prompt: 'none' });
+        } catch (e) {
+            tokenClient.callback = originalCallback;
+            refreshPromise = null;
+            console.error("Error requesting access token silently:", e);
+            reject(e);
+        }
+    });
+    
+    return refreshPromise;
+}
+
+async function gapiWithAuthRefresh<T>(apiCall: () => Promise<T>): Promise<T> {
+    try {
+        return await apiCall();
+    } catch (error: any) {
+        // Check for various forms of 401/403 errors that indicate token expiration or auth issues
+        const isAuthError = 
+            error?.result?.error?.code === 401 || 
+            error?.status === 401 || 
+            error?.code === 401 || 
+            (error?.message && typeof error.message === 'string' && error.message.includes('401'));
+
+        if (isAuthError) {
+            console.warn("API request failed with 401. Refreshing token and retrying.");
+            try {
+                await refreshToken();
+                // Retry the API call with the new token
+                return await apiCall();
+            } catch (refreshError) {
+                console.error("Failed to refresh token or retry the request:", refreshError);
+                throw new Error("Your session has expired and could not be renewed. Please sign in again.");
+            }
+        }
+        throw error;
+    }
+}
+
+async function getAppFolderId(): Promise<string> {
+    if (appFolderId) {
+        return appFolderId;
     }
 
     try {
-        const result = await response.json();
-        console.log("Proxy API response for swapFace:", JSON.stringify(result, null, 2));
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({ 
+            q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`,
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
+        }));
 
-        if (!result || !result.data || !result.mimeType) {
-            console.error("Invalid response from proxy for face swap. Missing image data.", result);
-            throw new Error("Invalid response from proxy for face swap. Missing image data.");
+        if (response.result.files && response.result.files.length > 0) {
+            appFolderId = response.result.files[0].id;
+            return appFolderId as string;
+        } else {
+            const fileMetadata = {
+                'name': APP_FOLDER_NAME,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': ['appDataFolder']
+            };
+            const file: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.create({
+                resource: fileMetadata,
+                fields: 'id'
+            }));
+            appFolderId = file.result.id;
+            return appFolderId as string;
+        }
+    } catch (error) {
+        handleGapiError(error, 'finding or creating app folder');
+    }
+}
+
+export async function listSessions(): Promise<ChatSession[]> {
+    try {
+        const folderId = await getAppFolderId();
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and trashed=false`,
+            spaces: 'appDataFolder',
+            fields: 'files(id, name)',
+            pageSize: 1000
+        }));
+        
+        const files = response.result.files || [];
+        const sessionPromises = files.map(async (file: any) => {
+            try {
+                const contentResponse: any = await gapiWithAuthRefresh(() => gapi.client.drive.files.get({
+                    fileId: file.id,
+                    alt: 'media'
+                }));
+                const sessionData = contentResponse.result as ChatSession;
+                sessionData.driveFileId = file.id;
+                return sessionData;
+            } catch (error) {
+                console.error(`Failed to fetch content for file ${file.name} (${file.id}):`, error);
+                return null;
+            }
+        });
+
+        const sessions = (await Promise.all(sessionPromises)).filter(Boolean) as ChatSession[];
+        return sessions;
+    } catch (error) {
+        handleGapiError(error, 'listing chat sessions');
+    }
+}
+
+export async function saveSession(session: ChatSession): Promise<ChatSession> {
+    try {
+        const folderId = await getAppFolderId();
+        const fileName = `${session.id}.json`;
+        const sessionToSave = { ...session };
+        const fileId = sessionToSave.driveFileId;
+        delete sessionToSave.driveFileId;
+
+        const fileMetadata = {
+            name: fileName,
+            mimeType: 'application/json',
+            ...(fileId ? {} : { parents: [folderId] })
+        };
+
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+
+        const multipartRequestBody =
+          delimiter +
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+          JSON.stringify(fileMetadata) +
+          delimiter +
+          'Content-Type: application/json\r\n\r\n' +
+          JSON.stringify(sessionToSave) +
+          close_delim;
+          
+        const response: any = await gapiWithAuthRefresh(() => gapi.client.request({
+            path: `/upload/drive/v3/files${fileId ? `/${fileId}` : ''}`,
+            method: fileId ? 'PATCH' : 'POST',
+            params: { uploadType: 'multipart' },
+            headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
+            body: multipartRequestBody
+        }));
+        
+        session.driveFileId = response.result.id;
+        return session;
+    } catch (error) {
+        handleGapiError(error, 'saving chat session');
+    }
+}
+
+export async function deleteSession(driveFileId: string): Promise<void> {
+    try {
+        if (!driveFileId) {
+            throw new Error("driveFileId is required to delete a session.");
+        }
+        await gapiWithAuthRefresh(() => gapi.client.drive.files.delete({
+            fileId: driveFileId
+        }));
+    } catch (error) {
+        handleGapiError(error, 'deleting chat session');
+    }
+}
+
+let isPickerApiLoaded = false;
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+export function getDriveFilePublicUrl(fileId: string): string {
+    // FIX: Revert to using the /thumbnail endpoint but now append the API key.
+    // This provides the necessary authentication for Google to serve the thumbnail
+    // to any user, resolving the issue of broken images for non-admin users.
+    // This still requires the underlying file to be publicly shared.
+    return `https://drive.google.com/thumbnail?id=${fileId}&key=${GOOGLE_API_KEY}`;
+}
+
+export async function downloadDriveFile(fileId: string): Promise<string> {
+    const performFetch = async (accessToken: string) => {
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) {
+            const error: any = new Error(`HTTP Status: ${response.status}`);
+            error.status = response.status;
+            try { error.data = await response.json(); } catch (e) { /* Ignore parsing error */ }
+            throw error;
+        }
+        return response;
+    };
+
+    try {
+        let token = gapi.client.getToken();
+        if (!token || !token.access_token) {
+            throw new Error("Cannot download file: User is not authenticated.");
         }
 
-        return result;
-    } catch (e) {
-        console.error("Failed to parse successful proxy response as JSON", e);
-        throw new Error("Proxy returned a successful status, but the response body was not valid JSON.");
-    }
-}
-
-// --- NEW functions for Study Zone ---
-
-export async function generateFullLesson(language: string, level: string, isStarterOnly: boolean, user: UserProfile | undefined): Promise<FullLesson> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'generateReadingLesson',
-            payload: { language, level, isStarterOnly, user }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    const data = await response.json();
-    return data.lesson;
-}
-
-export async function gradeFullLesson(lesson: FullLesson, userAnswers: UserAnswers, user: UserProfile | undefined): Promise<FullQuizResult> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'gradeReadingAnswers',
-            payload: { lesson, userAnswers, user }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    const data = await response.json();
-    return data.result;
-}
-
-export async function gradeSingleSkill(lesson: FullLesson, userAnswers: UserAnswers, skill: Skill, user: UserProfile | undefined): Promise<SkillResult> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'gradeSkill',
-            payload: { lesson, userAnswers, skill, user }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    return await response.json();
-}
-
-export async function unlockStarterLanguage(language: string, user: UserProfile): Promise<UserProfile> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'unlock_starter_language',
-            payload: { language, user }
-        })
-    });
-    if (!response.ok) await handleProxyError(response);
-    const data = await response.json();
-    return data.user;
-}
-
-export async function getStudyStats(user: UserProfile): Promise<StudyStats> {
-     const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'get_study_stats',
-            payload: { user }
-        })
-    });
-    if (!response.ok) await handleProxyError(response);
-    const data = await response.json();
-    return data.stats;
-}
-
-export async function logLessonCompletion(language: string, expGained: number, user: UserProfile): Promise<StudyStats> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'log_lesson_completion',
-            payload: { language, expGained, user }
-        })
-    });
-    if (!response.ok) await handleProxyError(response);
-    const data = await response.json();
-    return data.stats;
-}
-
-// --- NEW: Generate Interview Question ---
-export async function generateInterviewQuestion(context: string, user: UserProfile | undefined): Promise<string> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'generateContentStream', // Reuse standard generation action
-            payload: {
-                model: 'gemini-2.5-flash', // Fast model for responsiveness
-                history: [],
-                newMessage: `You are an engaging podcast interviewer. The user is recording a video diary or vlog. 
-                Based on their transcript below, ask a short, relevant, and thought-provoking follow-up question to keep them talking. 
-                If the transcript is empty or too short, suggest a creative icebreaker topic.
-                Keep the question under 20 words.
-                
-                Transcript: "${context}"`,
-                user
-            }
-        })
-    });
-
-    if (!response.ok) {
-        // If streaming fails or is not suitable here, we might want to check if the endpoint returns a stream or a full response.
-        // However, our proxy for 'generateContentStream' returns a stream. We need to consume it to get the text.
-         await handleProxyError(response);
-    }
-
-    if (!response.body) throw new Error("Response body is null");
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-
-    while(true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const jsonStr = line.substring(6);
-                if (jsonStr) {
-                     try {
-                        const parsed = JSON.parse(jsonStr);
-                        if (parsed.text) fullText += parsed.text;
-                     } catch (e) { /* ignore */ }
+        try {
+            const response = await performFetch(token.access_token);
+            const buffer = await response.arrayBuffer();
+            return arrayBufferToBase64(buffer);
+        } catch (error: any) {
+            if (error.status === 401) {
+                console.warn("Download fetch failed with 401. Refreshing token and retrying.");
+                await refreshToken();
+                const newToken = gapi.client.getToken();
+                if (!newToken || !newToken.access_token) {
+                    throw new Error("Failed to get new token for download.");
                 }
+                const retryResponse = await performFetch(newToken.access_token);
+                const buffer = await retryResponse.arrayBuffer();
+                return arrayBufferToBase64(buffer);
             }
+            throw error;
         }
+    } catch (error) {
+        handleGapiError(error, `downloading file ${fileId}`);
     }
-    return fullText;
+}
+
+export async function updateDriveFileContent(fileId: string, newContent: string, mimeType: string): Promise<void> {
+    try {
+        await gapiWithAuthRefresh(() => gapi.client.request({
+            path: `/upload/drive/v3/files/${fileId}`,
+            method: 'PATCH',
+            params: { uploadType: 'media' },
+            headers: { 'Content-Type': mimeType },
+            body: newContent
+        }));
+    } catch (error) {
+        handleGapiError(error, `updating file content for ${fileId}`);
+    }
+}
+
+export function showPicker(onFilesSelected: (files: any[]) => void, viewOptions?: { mimeTypes?: string }): void {
+    const show = () => {
+        const token = gapi.client.getToken();
+        if (!token) {
+            console.error("Cannot show picker: user is not signed in.");
+            signIn();
+            return;
+        }
+
+        const view = new google.picker.View(google.picker.ViewId.DOCS);
+        const mimeTypes = viewOptions?.mimeTypes || "image/png,image/jpeg,image/jpg,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        view.setMimeTypes(mimeTypes);
+
+        const picker = new google.picker.PickerBuilder()
+            .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+            .setAppId(GOOGLE_CLIENT_ID.split('-')[0])
+            .setOAuthToken(token.access_token)
+            .addView(view)
+            .addView(new google.picker.DocsUploadView())
+            .setCallback((data: any) => {
+                if (data.action === google.picker.Action.PICKED) {
+                    onFilesSelected(data.docs);
+                }
+            })
+            .build();
+        picker.setVisible(true);
+    };
+
+    if (isPickerApiLoaded) {
+        show();
+    } else {
+        gapi.load('picker', () => {
+            isPickerApiLoaded = true;
+            show();
+        });
+    }
 }
