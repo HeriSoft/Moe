@@ -1,6 +1,4 @@
 
-
-
 import { client } from '@gradio/client';
 import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats, SkillResult, Skill } from '../types';
 
@@ -429,7 +427,12 @@ export async function logLessonCompletion(language: string, expGained: number, u
 }
 
 // --- NEW: Generate Interview Question ---
-export async function generateInterviewQuestion(context: string, user: UserProfile | undefined): Promise<string> {
+export async function generateInterviewQuestion(
+    context: string, 
+    user: UserProfile | undefined,
+    targetLanguage: string = 'Tiếng Anh',
+    subtitleLanguage: string = 'Tiếng Việt'
+): Promise<{ question: string; subtitle?: string }> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -438,21 +441,28 @@ export async function generateInterviewQuestion(context: string, user: UserProfi
             payload: {
                 model: 'gemini-2.5-flash', // Fast model for responsiveness
                 history: [],
-                newMessage: `You are an engaging podcast interviewer. 
-                First, detect the language of the user's transcript below. 
-                Then, ask a short, relevant, and thought-provoking follow-up question **in that same language** to keep them talking.
-                If the transcript is empty or too short, suggest a creative icebreaker topic in Vietnamese.
-                Keep the question under 20 words.
+                newMessage: `You are an engaging podcast interviewer.
                 
-                Transcript: "${context}"`,
+                Context: User's recent speech transcript: "${context}"
+                
+                Tasks:
+                1. Understand the transcript (even if in a different language).
+                2. Formulate a short, natural, and thought-provoking follow-up question or comment in **${targetLanguage}** (under 25 words).
+                3. Translate that exact question/comment into **${subtitleLanguage}**.
+                
+                Output Format:
+                Return ONLY the response in this specific format:
+                [Question in ${targetLanguage}] ||| [Translation in ${subtitleLanguage}]
+                
+                Example:
+                How does that make you feel? ||| Điều đó làm bạn cảm thấy thế nào?
+                `,
                 user
             }
         })
     });
 
     if (!response.ok) {
-        // If streaming fails or is not suitable here, we might want to check if the endpoint returns a stream or a full response.
-        // However, our proxy for 'generateContentStream' returns a stream. We need to consume it to get the text.
          await handleProxyError(response);
     }
 
@@ -479,5 +489,11 @@ export async function generateInterviewQuestion(context: string, user: UserProfi
             }
         }
     }
-    return fullText;
+    
+    // Parse the result based on the separator
+    const parts = fullText.split('|||');
+    const question = parts[0]?.trim() || fullText.trim();
+    const subtitle = parts[1]?.trim();
+
+    return { question, subtitle };
 }
