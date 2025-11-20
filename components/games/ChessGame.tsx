@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 const BOARD_SIZE = 8;
 const PIECES: { [key: string]: string } = {
     r: '♜', n: '♞', b: '♝', q: '♛', k: '♚', p: '♙',   // Black uses ♙ (same size)
-    R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔', P: '♙'
+    R: '♜', N: '♞', B: '♝', Q: '♛', K: '♚', P: '♙'
 };
 
 const INITIAL_SETUP = [
