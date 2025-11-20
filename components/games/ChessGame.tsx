@@ -334,7 +334,15 @@ const ChessGame: React.FC<ChessGameProps> = ({ handlePointsGain, setNotification
                                     `}
                                 >
                                     {piece && (
-                                        <span className={`z-10 ${getPieceColor(piece) === 'white' ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]' : 'text-black'}`}>
+                                        <span
+                                            className={`
+                                                chess-piece z-10
+                                                ${getPieceColor(piece) === 'white'
+                                                    ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]'
+                                                    : 'text-black'
+                                                }
+                                            `}
+                                        >
                                             {PIECES[piece]}
                                         </span>
                                     )}
