@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CloseIcon, CameraIcon, DownloadIcon, StopCircleIcon, PlayIcon, SparklesIcon } from './icons';
 import type { UserProfile } from '../types';
@@ -28,101 +27,7 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
   const animationRef = useRef<number | null>(null);
   const lastAiUpdateRef = useRef<number>(0);
 
-  // Setup Camera and Canvas Loop
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      startCamera();
-      setupSpeechRecognition();
-    } else {
-      document.body.style.overflow = 'auto';
-      stopCamera();
-      stopSpeechRecognition();
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    }
-    return () => {
-        stopCamera();
-        stopSpeechRecognition();
-        if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
-  }, [isOpen]);
-
-  // Restart camera if aspect ratio changes to re-adjust constraints if possible (though usually we crop via canvas)
-  // For simplicity, we will just crop via canvas drawing loop.
-  
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" }, 
-        audio: true 
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        drawToCanvas();
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập.");
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-  };
-
-  const setupSpeechRecognition = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'vi-VN'; // Default to Vietnamese, could be dynamic
-
-      recognition.onresult = (event: any) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-             currentTranscript += event.results[i][0].transcript + ' ';
-          }
-        }
-        if (currentTranscript.trim()) {
-            setTranscript(prev => (prev + " " + currentTranscript).trim());
-        }
-      };
-
-      recognition.start();
-      recognitionRef.current = recognition;
-    }
-  };
-
-  const stopSpeechRecognition = () => {
-      if (recognitionRef.current) {
-          recognitionRef.current.stop();
-      }
-  };
-
-  // AI Question Logic
-  useEffect(() => {
-    if (!transcript) return;
-    
-    const now = Date.now();
-    if (now - lastAiUpdateRef.current > 8000) { // Check every 8 seconds
-        lastAiUpdateRef.current = now;
-        // Take the last part of the transcript for context
-        const context = transcript.slice(-200); 
-        generateInterviewQuestion(context, userProfile).then(question => {
-            if (question) setAiPrompt(question);
-        });
-    }
-  }, [transcript, userProfile]);
-
-
-  const getCanvasDimensions = () => {
+  const getCanvasDimensions = useCallback(() => {
       // Base height 1080p roughly
       const height = 1080;
       let width = 1920;
@@ -134,57 +39,175 @@ export const VideoInterviewModal: React.FC<VideoInterviewModalProps> = ({ isOpen
           case '1/1': width = height; break;
       }
       return { width, height };
-  };
+  }, [aspectRatio]);
 
-  const drawToCanvas = () => {
+  const drawToCanvas = useCallback(() => {
       if (!videoRef.current || !canvasRef.current) return;
       
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       
+      if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+      }
+      
       const { width, height } = getCanvasDimensions();
       canvas.width = width;
       canvas.height = height;
 
       const render = () => {
-          if (!video || video.paused || video.ended) return;
-          
-          if (ctx) {
-            // Calculate crop to 'cover' the canvas
-            const vRatio = video.videoWidth / video.videoHeight;
-            const cRatio = canvas.width / canvas.height;
-            let sx, sy, sWidth, sHeight;
-
-            if (vRatio > cRatio) {
-                sHeight = video.videoHeight;
-                sWidth = sHeight * cRatio;
-                sx = (video.videoWidth - sWidth) / 2;
-                sy = 0;
-            } else {
-                sWidth = video.videoWidth;
-                sHeight = sWidth / cRatio;
-                sx = 0;
-                sy = (video.videoHeight - sHeight) / 2;
-            }
-            
-            // Draw video frame
-            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-            
-            // Draw Filter overlay (optional luxury look)
-            // ctx.fillStyle = 'rgba(255, 230, 200, 0.05)'; // Very subtle warm tint
-            // ctx.fillRect(0, 0, canvas.width, canvas.height);
+          if (!video || video.paused || video.ended || !ctx) {
+              animationRef.current = requestAnimationFrame(render);
+              return;
           }
+          
+          const vRatio = video.videoWidth / video.videoHeight;
+          const cRatio = canvas.width / canvas.height;
+          let sx, sy, sWidth, sHeight;
+
+          if (vRatio > cRatio) {
+              sHeight = video.videoHeight;
+              sWidth = sHeight * cRatio;
+              sx = (video.videoWidth - sWidth) / 2;
+              sy = 0;
+          } else {
+              sWidth = video.videoWidth;
+              sHeight = sWidth / cRatio;
+              sx = 0;
+              sy = (video.videoHeight - sHeight) / 2;
+          }
+          
+          ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+          
           animationRef.current = requestAnimationFrame(render);
       };
       render();
-  };
+  }, [getCanvasDimensions]);
+
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.onplaying = null;
+    }
+    if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+    }
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" }, 
+        audio: true 
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onplaying = drawToCanvas;
+        videoRef.current.play();
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      alert("Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập.");
+      onClose(); // Close modal if camera fails
+    }
+  }, [drawToCanvas, onClose]);
+
+  const stopSpeechRecognition = useCallback(() => {
+      if (recognitionRef.current) {
+          recognitionRef.current.stop();
+          recognitionRef.current = null;
+      }
+  }, []);
+
+  const setupSpeechRecognition = useCallback(() => {
+    stopSpeechRecognition(); // Ensure any previous instance is stopped
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event: any) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+             finalTranscript += event.results[i][0].transcript + ' ';
+          }
+        }
+        if (finalTranscript.trim()) {
+            setTranscript(prev => (prev + " " + finalTranscript).trim());
+        }
+      };
+
+      recognition.onend = () => {
+          // Restart recognition if it stops unexpectedly while the modal is open
+          if (isOpen && recognitionRef.current) {
+              try { recognition.start(); } catch (e) { /* ignore */ }
+          }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    }
+  }, [isOpen, stopSpeechRecognition]);
+
+  // Main lifecycle effect
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      // Reset all state when opening
+      setIsRecording(false);
+      setRecordedBlob(null);
+      setAiPrompt("Hãy bắt đầu bằng việc giới thiệu về bản thân bạn...");
+      setTranscript("");
+      lastAiUpdateRef.current = 0;
+
+      startCamera();
+      setupSpeechRecognition();
+    } else {
+      document.body.style.overflow = 'auto';
+      stopCamera();
+      stopSpeechRecognition();
+    }
+    return () => {
+        stopCamera();
+        stopSpeechRecognition();
+    };
+  }, [isOpen, startCamera, stopCamera, setupSpeechRecognition, stopSpeechRecognition]);
+  
+  // Effect to handle aspect ratio changes dynamically
+  useEffect(() => {
+      if (isOpen && videoRef.current?.HAVE_METADATA) {
+          drawToCanvas();
+      }
+  }, [aspectRatio, isOpen, drawToCanvas]);
+
+  // AI Question Logic
+  useEffect(() => {
+    if (!transcript || !isOpen) return;
+    
+    const now = Date.now();
+    if (now - lastAiUpdateRef.current > 8000) { // Check every 8 seconds
+        lastAiUpdateRef.current = now;
+        const context = transcript.slice(-200); 
+        generateInterviewQuestion(context, userProfile).then(question => {
+            if (question) setAiPrompt(question);
+        });
+    }
+  }, [transcript, userProfile, isOpen]);
 
   const startRecording = () => {
       if (!canvasRef.current || !streamRef.current) return;
       
-      const canvasStream = canvasRef.current.captureStream(30); // 30 FPS
-      // Merge audio from mic
+      const canvasStream = canvasRef.current.captureStream(30);
       const audioTracks = streamRef.current.getAudioTracks();
       if (audioTracks.length > 0) {
           canvasStream.addTrack(audioTracks[0]);
