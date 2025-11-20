@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { CloseIcon, PuzzlePieceIcon, TicketIcon, CardsIcon, BirdIcon, Pool8BallIcon, ArrowUturnLeftIcon, ChessIcon } from './icons';
 import type { UserProfile } from '../types';
-import TienLenGame from './Games/TienLenGame';
-import FlappyBirdGame from './Games/FlappyBirdGame';
-import EightBallPoolGame from './Games/EightBallPoolGame';
-import ChessGame from './Games/ChessGame';
+import TienLenGame from './games/TienLenGame';
+import FlappyBirdGame from './games/FlappyBirdGame';
+import EightBallPoolGame from './games/EightBallPoolGame';
+import ChessGame from './games/ChessGame';
 import LuckyWheel from './games/LuckyWheel';
 
 interface GamePortalModalProps {
@@ -162,3 +162,4 @@ export const GamePortalModal: React.FC<GamePortalModalProps> = ({ isOpen, onClos
     </div>
   );
 };
+
