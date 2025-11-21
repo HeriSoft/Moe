@@ -700,27 +700,32 @@ const App: React.FC = () => {
     const session = sessionsRef.current.find(s => s.id === activeChatId);
     if (!session || !session.messages[messageIndex]) return;
 
-    // Specifically prevent deleting the very first greeting message.
+    // Prevent deleting the very first greeting message.
     if (messageIndex === 0) {
         setNotifications(prev => ["Cannot delete the initial greeting message.", ...prev.slice(0, 19)]);
         return;
     }
     
-    // Safeguard to ensure this handler is only for bot messages.
-    if (session.messages[messageIndex].role === 'user') {
-        console.warn("handleDeleteSingleMessage called on a user message. This shouldn't happen.");
-        return;
+    const messageToDelete = session.messages[messageIndex];
+    let indicesToDelete = [messageIndex];
+
+    // If deleting a user message, also delete the next message if it's from the model.
+    if (messageToDelete.role === 'user') {
+        const nextMessage = session.messages[messageIndex + 1];
+        if (nextMessage && nextMessage.role === 'model') {
+            indicesToDelete.push(messageIndex + 1);
+        }
     }
 
-    const updatedMessages = session.messages.filter((_, index) => index !== messageIndex);
+    const updatedMessages = session.messages.filter((_, index) => !indicesToDelete.includes(index));
     const updatedSession = { ...session, messages: updatedMessages };
 
     try {
         await googleDriveService.saveSession(updatedSession);
         setChatSessions(prev => prev.map(s => s.id === activeChatId ? updatedSession : s));
     } catch (error) {
-        console.error("Failed to delete message:", error);
-        const errorMessage = error instanceof Error ? error.message : "Could not delete message.";
+        console.error("Failed to delete message(s):", error);
+        const errorMessage = error instanceof Error ? error.message : "Could not delete message(s).";
         setNotifications(prev => [errorMessage, ...prev.slice(0, 19)]);
     }
   }, [activeChatId, isLoggedIn, setNotifications]);
@@ -1061,11 +1066,7 @@ const App: React.FC = () => {
           onOpenMusicBox={handleOpenMusicBox}
           onOpenPianoModal={() => setIsPianoModalOpen(true)}
           onOpenVideoInterview={() => {
-              if (!isLoggedIn) {
-                  handleProFeatureBlock();
-                  return;
-              }
-              if (userProfile?.isPro || isAdmin) {
+              if (isLoggedIn) {
                   setIsVideoInterviewOpen(true);
               } else {
                   handleProFeatureBlock();
