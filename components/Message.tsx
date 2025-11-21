@@ -219,9 +219,14 @@ export const MessageComponent: React.FC<MessageProps> = ({ message, onEdit, onRe
                       {isCopied ? <CheckIcon className="w-4 h-4 text-green-500" /> : <CopyIcon className="w-4 h-4" />}
                   </button>
                   {isUser ? (
-                     <button onClick={() => setIsEditing(true)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover-text-slate-300 transition-colors" aria-label="Edit message">
-                          <EditIcon className="w-4 h-4" />
-                      </button>
+                     <>
+                        <button onClick={() => setIsEditing(true)} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" aria-label="Edit message">
+                            <EditIcon className="w-4 h-4" />
+                        </button>
+                        <button onClick={onDelete} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors" aria-label="Delete message">
+                            <TrashIcon className="w-4 h-4" />
+                        </button>
+                     </>
                   ) : (
                       <>
                         {message.sourceDriveFileId && (
