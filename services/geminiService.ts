@@ -176,6 +176,46 @@ export async function streamModelResponse(
 
 // Updated to handle different models and settings
 export async function generateImage(prompt: string, settings: any, user: UserProfile | undefined): Promise<Attachment[]> {
+    // SPECIAL HANDLING: If the model is gemini-3-pro-image-preview, we route it through the 'editImage' 
+    // proxy action (which uses generateContent) because it's technically a text-to-image/text-to-content call
+    // rather than the specific 'generateImages' endpoint used by Imagen/DALL-E.
+    if (settings.model === 'gemini-3-pro-image-preview') {
+        const config: any = {
+            imageConfig: {}
+        };
+        
+        if (settings.aspectRatio) config.imageConfig.aspectRatio = settings.aspectRatio;
+        if (settings.imageSize) config.imageConfig.imageSize = settings.imageSize;
+
+        const response = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'editImage', // Reuse the content generation handler
+                payload: {
+                    model: settings.model,
+                    prompt: prompt,
+                    images: [], // No input images for generation
+                    config: config,
+                    user,
+                }
+            })
+        });
+
+        if (!response.ok) {
+            await handleProxyError(response);
+        }
+
+        const data = await response.json();
+        // The editImage endpoint returns { text, attachments }. We just want attachments.
+        if (data.attachments && data.attachments.length > 0) {
+            return data.attachments;
+        } else {
+            throw new Error("No image generated.");
+        }
+    }
+
+    // Standard logic for Imagen / DALL-E
     const response = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -220,19 +260,35 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
     const config: any = { ...settings };
     delete config.model; // model is passed separately.
 
-    // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images (e.g. when applying outfits).
-    // The Gemini API expects an `output` object within the `config`.
-    if (settings?.outputSize?.width && settings?.outputSize?.height) {
-        config.output = {
-            width: settings.outputSize.width,
-            height: settings.outputSize.height,
-        };
-    }
-    delete config.outputSize; // clean up
+    // Handle Gemini 3 Pro Image specific configs
+    if (settings.model === 'gemini-3-pro-image-preview') {
+        config.imageConfig = {};
+        if (settings.aspectRatio && settings.aspectRatio !== 'auto') {
+            config.imageConfig.aspectRatio = settings.aspectRatio;
+        }
+        if (settings.imageSize) {
+            config.imageConfig.imageSize = settings.imageSize;
+        }
+        // Cleanup top-level properties not compatible with imageConfig
+        delete config.aspectRatio; 
+        delete config.imageSize;
+        delete config.outputSize; 
+    } else {
+        // Fallback or specific handling for gemini-2.5-flash-image
+        
+        // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images.
+        if (settings?.outputSize?.width && settings?.outputSize?.height) {
+            config.output = {
+                width: settings.outputSize.width,
+                height: settings.outputSize.height,
+            };
+        }
+        delete config.outputSize; // clean up
 
-    // Let's also handle the 'auto' aspect ratio here on the client-side to be safe.
-    if (config.aspectRatio === 'auto' || !config.aspectRatio) {
-        delete config.aspectRatio;
+        // Let's also handle the 'auto' aspect ratio here on the client-side to be safe.
+        if (config.aspectRatio === 'auto' || !config.aspectRatio) {
+            delete config.aspectRatio;
+        }
     }
 
     const response = await fetch('/api/proxy', {
