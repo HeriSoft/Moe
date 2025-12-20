@@ -141,6 +141,10 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [selectedPose, setSelectedPose] = useState<string | null>(null);
     const [selectedExpression, setSelectedExpression] = useState<string | null>(null);
     
+    // NEW: Multi-image reference for basic edit (max 15)
+    const [editReferenceImages, setEditReferenceImages] = useState<Attachment[]>([]);
+    const editRefInputRef = useRef<HTMLInputElement>(null);
+
     // --- Studio Pixshop State ---
     const [pixshopImage, setPixshopImage] = useState<Attachment | null>(null);
     const [pixshopOutput, setPixshopOutput] = useState<Attachment | null>(null);
@@ -261,6 +265,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             setPixshopImage(null); setPixshopOutput(null); setPixshopAdjustments({ vibrance: 0, warmth: 0, contrast: 0, isBW: false });
             setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
             setToolPrompt(null);
+            setEditReferenceImages([]);
         } else {
             document.body.style.overflow = 'auto';
         }
@@ -271,9 +276,10 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
       setIsAdvancedStyle(false); setPixshopImage(null); setPixshopOutput(null);
       setPixshopMode('idle'); setCropRect(null); setCropStartPoint(null);
       setToolPrompt(null);
+      setEditReferenceImages([]);
     }, [activeMode]);
     
-    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt && !usePoseRefImage) || (isCustomPose && usePoseRefImage && poseRefImage) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt), [selectedPose, isCustomPose, customPosePrompt, usePoseRefImage, poseRefImage, selectedExpression, selectedOutfits, backgroundPrompt]);
+    const isAnyStyleSelected = useMemo(() => !!(selectedPose || (isCustomPose && customPosePrompt && !usePoseRefImage) || (isCustomPose && usePoseRefImage && poseRefImage) || selectedExpression || selectedOutfits.length > 0 || backgroundPrompt || editReferenceImages.length > 0), [selectedPose, isCustomPose, customPosePrompt, usePoseRefImage, poseRefImage, selectedExpression, selectedOutfits, backgroundPrompt, editReferenceImages]);
 
     const handleGenericApiCall = async (apiCall: () => Promise<Attachment[]>) => {
         setIsLoading(true);
@@ -336,7 +342,9 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         if (!inputImage1) { setError("An image is required."); return; }
         handleGenericApiCall(async () => {
             const finalEditSettings = getOriginalOutputSettings();
-            const { attachments } = await editImage(prompt, [inputImage1], finalEditSettings, userProfile);
+            // Pass the base image AND any reference images
+            const imagesToSend = [inputImage1, ...editReferenceImages];
+            const { attachments } = await editImage(prompt, imagesToSend, finalEditSettings, userProfile);
             return attachments;
         });
     };
@@ -353,6 +361,11 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         const promptParts: string[] = [];
         const additionalImages: Attachment[] = [];
         
+        // Include manually added reference images
+        if (editReferenceImages.length > 0) {
+            additionalImages.push(...editReferenceImages);
+        }
+
         // 1. Xác định rõ vai trò của các ảnh
         let basePrompt = "Using the FIRST image as the main SUBJECT (preserve face and body structure).";
 
@@ -390,7 +403,7 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
         }
 
         // Combine everything
-        if (promptParts.length === 0 && outfitsToApply.length === 0) { setError("Please select at least one style to apply."); return; }
+        if (promptParts.length === 0 && outfitsToApply.length === 0 && editReferenceImages.length === 0) { setError("Please select at least one style or upload reference images to apply."); return; }
         
         let constructedPrompt = `${basePrompt} ${promptParts.join(' ')}`;
         
@@ -432,6 +445,46 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
             handlePixshopEdit("Apply the following adjustments: " + parts.join(', '));
         }
     };
+
+    // --- Add/Remove Reference Images Handlers ---
+    const handleAddEditReference = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const files = Array.from(e.target.files);
+            if (editReferenceImages.length + files.length > 15) {
+                setNotifications(p => ["You can only upload up to 15 reference images.", ...p]);
+                return;
+            }
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const base64 = (ev.target?.result as string).split(',')[1];
+                    setEditReferenceImages(prev => [...prev, { data: base64, mimeType: file.type, fileName: file.name }]);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+    };
+
+    const handleDriveAddEditReference = () => {
+        if (!userProfile) { setNotifications(prev => ["Sign in required.", ...prev]); return; }
+        googleDriveService.showPicker(async (files) => {
+            if (files && files.length > 0) {
+                if (editReferenceImages.length + files.length > 15) {
+                    setNotifications(p => ["You can only upload up to 15 reference images.", ...p]);
+                    return;
+                }
+                for (const file of files) {
+                    const base64Data = await googleDriveService.downloadDriveFile(file.id);
+                    setEditReferenceImages(prev => [...prev, { data: base64Data, mimeType: file.mimeType, fileName: file.name, driveFileId: file.id }]);
+                }
+            }
+        }, { mimeTypes: "image/png,image/jpeg,image/webp" });
+    };
+
+    const removeEditReference = (index: number) => {
+        setEditReferenceImages(prev => prev.filter((_, i) => i !== index));
+    };
+
 
     const handleApplyCrop = () => {
         if (!cropRect || !pixshopImage || !pixshopImageRef.current) return;
@@ -745,17 +798,17 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     };
 
     const handleAddOutfit = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (userOutfits.length >= 6) { setNotifications(p => ["Maximum of 6 outfits saved.", ...p]); return; }
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64String = (reader.result as string).split(',')[1];
-            const newOutfit = { data: base64String, mimeType: file.type, fileName: `${Date.now()}_${file.name}` };
-            saveOutfits([...userOutfits, newOutfit]);
-        };
-        reader.readAsDataURL(file);
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (userOutfits.length >= 6) { setNotifications(p => ["Maximum of 6 outfits saved.", ...p]); return; }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = (reader.result as string).split(',')[1];
+                const newOutfit = { data: base64String, mimeType: file.type, fileName: `${Date.now()}_${file.name}` };
+                saveOutfits([...userOutfits, newOutfit]);
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
     const handleAddOutfitFromDrive = () => {
@@ -994,6 +1047,34 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 </div>
                                 {activeMode === 'edit' && (
                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                        <div className="mb-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Reference Images (Max 15)</label>
+                                                <span className="text-xs text-slate-500">{editReferenceImages.length}/15</span>
+                                            </div>
+                                            <div className="flex gap-2 overflow-x-auto pb-2 items-center">
+                                                <div className="flex-shrink-0 w-16 h-16 border border-dashed border-gray-400 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 gap-1 bg-slate-50 dark:bg-slate-800" onClick={() => editRefInputRef.current?.click()}>
+                                                    <PlusIcon className="w-5 h-5 text-gray-500" />
+                                                    <span className="text-[10px] text-gray-500">Add</span>
+                                                    <input type="file" ref={editRefInputRef} className="hidden" onChange={handleAddEditReference} accept="image/*" multiple />
+                                                </div>
+                                                <div className="flex-shrink-0 w-16 h-16 border border-dashed border-gray-400 rounded-lg flex items-center justify-center cursor-pointer hover:border-indigo-500 bg-slate-50 dark:bg-slate-800" onClick={handleDriveAddEditReference}>
+                                                    <GoogleDriveIcon className="w-5 h-5 text-gray-500" />
+                                                </div>
+                                                {editReferenceImages.map((img, idx) => (
+                                                    <div key={idx} className="flex-shrink-0 w-16 h-16 rounded-lg relative border border-slate-300 dark:border-slate-600">
+                                                        <img src={`data:${img.mimeType};base64,${img.data}`} alt="reference" className="w-full h-full object-cover rounded-lg" />
+                                                        <button 
+                                                            onClick={() => removeEditReference(idx)} 
+                                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 shadow-sm"
+                                                        >
+                                                            <CloseIcon className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         <div className="flex items-center justify-between mb-4"><label htmlFor="adv-toggle" className="font-semibold text-slate-600 dark:text-slate-300">Advanced Style</label><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" id="adv-toggle" checked={isAdvancedStyle} onChange={e => setIsAdvancedStyle(e.target.checked)} className="sr-only peer"/><div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></label></div>
                                         {!isAdvancedStyle && <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Enter your editing prompt (e.g., 'add a hat')..." className="w-full h-24 p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent resize-none input-style text-slate-900 dark:text-slate-100"/>}
                                         {isAdvancedStyle && (
