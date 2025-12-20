@@ -855,7 +855,7 @@ export default async function handler(req, res) {
                 }
                 await logAction(userEmail, `edited an image (cost: ${EDIT_COST} credits)`);
                 if (!ai) throw new Error("Gemini API key not configured.");
-                const { prompt, images, config: payloadConfig } = payload;
+                const { prompt, images, config: payloadConfig, model } = payload;
                 const imageParts = images.map(img => ({
                     inlineData: { data: img.data, mimeType: img.mimeType }
                 }));
@@ -867,7 +867,7 @@ export default async function handler(req, res) {
                 };
 
                 const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash-image',
+                    model: model || 'gemini-2.5-flash-image', // Use payload model if available, fallback to flash
                     contents: { parts: [...imageParts, textPart] },
                     config: finalConfig,
                 });
