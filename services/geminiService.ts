@@ -109,23 +109,30 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
 
     if (settings.model === 'gemini-3-pro-image-preview') {
         config.imageConfig = {};
+        
+        // FIX: Ensure aspectRatio is correctly set and 'auto' does not break it.
         if (settings.aspectRatio && settings.aspectRatio !== 'auto') {
             config.imageConfig.aspectRatio = settings.aspectRatio;
         }
+        
         if (settings.imageSize) {
             config.imageConfig.imageSize = settings.imageSize;
         }
+        
+        // Cleanup top-level properties not compatible with imageConfig or this model
         delete config.aspectRatio; 
         delete config.imageSize;
-        delete config.outputSize;
+        delete config.outputSize; // Gemini 3 Pro does not use pixel outputSize for this endpoint
     } else {
+        // Fallback or specific handling for gemini-2.5-flash-image
         if (settings?.outputSize?.width && settings?.outputSize?.height) {
             config.output = {
                 width: settings.outputSize.width,
                 height: settings.outputSize.height,
             };
         }
-        delete config.outputSize;
+        delete config.outputSize; // clean up
+
         if (config.aspectRatio === 'auto' || !config.aspectRatio) {
             delete config.aspectRatio;
         }
