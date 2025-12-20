@@ -32,13 +32,14 @@ const Slider: React.FC<SliderProps> = ({ label, value, min, max, step, onChange,
 );
 
 export interface ImageEditingSettings {
-    model: 'gemini-2.5-flash-image-preview' | 'flux-kontext';
+    model: 'gemini-2.5-flash-image-preview' | 'flux-kontext' | 'gemini-3-pro-image-preview';
     safetyTolerance: number;
     guidanceScale: number;
     inferenceSteps: number;
     numImages: number;
     seed: string;
     aspectRatio: string;
+    imageSize?: '1K' | '2K' | '4K';
 }
 
 export interface ImageGenerationSettings {
@@ -72,7 +73,8 @@ export const ImageSettingsModal: React.FC<ImageSettingsModalProps> = ({ isOpen, 
     inferenceSteps: 30,
     numImages: 1,
     seed: '',
-    aspectRatio: 'Default',
+    aspectRatio: 'auto',
+    imageSize: '1K',
   });
 
   useEffect(() => {
@@ -108,6 +110,7 @@ export const ImageSettingsModal: React.FC<ImageSettingsModalProps> = ({ isOpen, 
   };
 
   const isFluxKontext = editingSettings.model === 'flux-kontext';
+  const isGeminiPro = editingSettings.model === 'gemini-3-pro-image-preview';
 
   const renderGenerationSettings = () => {
     const isImagen = generationSettings.model === 'imagen-4.0-generate-001';
@@ -198,43 +201,76 @@ export const ImageSettingsModal: React.FC<ImageSettingsModalProps> = ({ isOpen, 
                 className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500"
             >
                 <option value="gemini-2.5-flash-image-preview">Gemini 2.5 Flash Image Preview</option>
+                <option value="gemini-3-pro-image-preview">Gemini 3 Pro Image (High Quality)</option>
                 <option value="flux-kontext" disabled>Flux Kontext (Coming soon)</option>
             </select>
         </div>
 
-        <fieldset disabled={!isFluxKontext} className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4 space-y-4">
-            <legend className="text-md font-semibold mb-2 text-slate-500 dark:text-slate-400">Flux Kontext Settings</legend>
-            <Slider label="Safety Tolerance" value={editingSettings.safetyTolerance} min={1} max={5} step={1} onChange={v => setEditingSettings(s => ({ ...s, safetyTolerance: v }))} disabled={!isFluxKontext} />
-            <Slider label="Guidance Scale" value={editingSettings.guidanceScale} min={0.0} max={20.0} step={0.1} onChange={v => setEditingSettings(s => ({ ...s, guidanceScale: v }))} disabled={!isFluxKontext} />
-            <Slider label="Number of Inference Steps" value={editingSettings.inferenceSteps} min={10} max={100} step={1} onChange={v => setEditingSettings(s => ({ ...s, inferenceSteps: v }))} disabled={!isFluxKontext} />
-            <Slider label="Number of Images (output)" value={editingSettings.numImages} min={1} max={4} step={1} onChange={v => setEditingSettings(s => ({ ...s, numImages: v }))} disabled={!isFluxKontext} />
-            <div>
-                 <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1" htmlFor="seed">Seed (empty for random)</label>
-                 <div className="relative">
-                    <input 
-                        id="seed"
-                        type="number"
-                        placeholder="e.g. 12345"
-                        value={editingSettings.seed}
-                        onChange={e => setEditingSettings(s => ({...s, seed: e.target.value}))}
-                        className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 pr-10 focus:ring-indigo-500 focus:border-indigo-500"
-                        disabled={!isFluxKontext}
-                    />
-                    <button 
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500" 
-                        onClick={() => setEditingSettings(s => ({...s, seed: Math.floor(Math.random() * 100000000).toString()}))}
-                        disabled={!isFluxKontext}
+        <fieldset className="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4 space-y-4">
+            <legend className="text-md font-semibold mb-2 text-slate-500 dark:text-slate-400">Settings</legend>
+            
+            {isFluxKontext && (
+                <>
+                    <Slider label="Safety Tolerance" value={editingSettings.safetyTolerance} min={1} max={5} step={1} onChange={v => setEditingSettings(s => ({ ...s, safetyTolerance: v }))} />
+                    <Slider label="Guidance Scale" value={editingSettings.guidanceScale} min={0.0} max={20.0} step={0.1} onChange={v => setEditingSettings(s => ({ ...s, guidanceScale: v }))} />
+                    <Slider label="Number of Inference Steps" value={editingSettings.inferenceSteps} min={10} max={100} step={1} onChange={v => setEditingSettings(s => ({ ...s, inferenceSteps: v }))} />
+                    <Slider label="Number of Images" value={editingSettings.numImages} min={1} max={4} step={1} onChange={v => setEditingSettings(s => ({ ...s, numImages: v }))} />
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1" htmlFor="seed">Seed (empty for random)</label>
+                        <div className="relative">
+                            <input 
+                                id="seed"
+                                type="number"
+                                placeholder="e.g. 12345"
+                                value={editingSettings.seed}
+                                onChange={e => setEditingSettings(s => ({...s, seed: e.target.value}))}
+                                className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 pr-10 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                            <button 
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-500" 
+                                onClick={() => setEditingSettings(s => ({...s, seed: Math.floor(Math.random() * 100000000).toString()}))}
+                            >
+                                <RefreshIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {(isGeminiPro || isFluxKontext) && (
+                <div>
+                    <label htmlFor="aspect-ratio" className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Aspect Ratio</label>
+                    <select 
+                        id="aspect-ratio" 
+                        value={editingSettings.aspectRatio || 'auto'} 
+                        onChange={e => setEditingSettings(s => ({ ...s, aspectRatio: e.target.value }))} 
+                        className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
-                        <RefreshIcon className="w-5 h-5" />
-                    </button>
-                 </div>
-            </div>
-            <div>
-                <label htmlFor="aspect-ratio" className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Aspect Ratio</label>
-                <select id="aspect-ratio" value={editingSettings.aspectRatio} onChange={e => setEditingSettings(s => ({ ...s, aspectRatio: e.target.value }))} className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500" disabled={!isFluxKontext}>
-                    <option>Default</option>
-                </select>
-            </div>
+                        <option value="auto">Auto (Input Size)</option>
+                        <option value="1:1">1:1 (Square)</option>
+                        <option value="16:9">16:9 (Landscape)</option>
+                        <option value="9:16">9:16 (Portrait)</option>
+                        <option value="4:3">4:3 (Standard)</option>
+                        <option value="3:4">3:4 (Vertical)</option>
+                    </select>
+                </div>
+            )}
+            
+            {isGeminiPro && (
+                <div>
+                    <label htmlFor="resolution" className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Resolution</label>
+                    <select 
+                        id="resolution" 
+                        value={editingSettings.imageSize || '1K'} 
+                        onChange={e => setEditingSettings(s => ({ ...s, imageSize: e.target.value as '1K'|'2K'|'4K' }))} 
+                        className="w-full bg-white dark:bg-[#171725] border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                        <option value="1K">1K</option>
+                        <option value="2K">2K</option>
+                        <option value="4K">4K</option>
+                    </select>
+                </div>
+            )}
         </fieldset>
     </>
   );
