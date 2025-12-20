@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { CloseIcon, ImageIcon, EditIcon, FaceSwapIcon, VideoIcon, SparklesIcon, PhotoIcon, DownloadIcon, ArrowPathIcon, TrashIcon, PlusIcon, FaceSmileIcon, FaceFrownIcon, FaceSadTearIcon, FaceLaughIcon, FacePoutingIcon, FaceAngryIcon, FaceGrinStarsIcon, GoogleDriveIcon, ArrowUpTrayIcon, CropIcon, PaintBrushIcon, AdjustmentsVerticalIcon, CheckIcon, EraserIcon, TypeIcon } from './icons';
 import { generateImage, editImage, swapFace } from '../services/geminiService';
@@ -6,17 +7,19 @@ import * as googleDriveService from '../services/googleDriveService';
 
 // Interfaces from the old ImageSettingsModal
 export interface ImageGenerationSettings {
-    model: 'imagen-4.0-generate-001' | 'dall-e-3';
+    model: 'imagen-4.0-generate-001' | 'dall-e-3' | 'gemini-3-pro-image-preview';
     aspectRatio: string;
     numImages: number;
     quality?: 'standard' | 'hd';
     style?: 'vivid' | 'natural';
+    imageSize?: '1K' | '2K' | '4K'; // New resolution option for Gemini models
 }
 
 export interface ImageEditingSettings {
-    model: 'gemini-2.5-flash-image';
+    model: 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview';
     aspectRatio?: 'auto' | '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
     outputSize?: { width: number; height: number };
+    imageSize?: '1K' | '2K' | '4K'; // New resolution option for Gemini models
 }
 
 const Slider: React.FC<{ label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; disabled?: boolean; }> = ({ label, value, min, max, step, onChange, disabled }) => (
@@ -122,8 +125,8 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const [genSettings, setGenSettings] = useState<ImageGenerationSettings>({ model: 'imagen-4.0-generate-001', aspectRatio: '1:1', numImages: 1, quality: 'standard', style: 'vivid' });
-    const [editSettings, setEditSettings] = useState<ImageEditingSettings>({ model: 'gemini-2.5-flash-image', aspectRatio: 'auto' });
+    const [genSettings, setGenSettings] = useState<ImageGenerationSettings>({ model: 'imagen-4.0-generate-001', aspectRatio: '1:1', numImages: 1, quality: 'standard', style: 'vivid', imageSize: '1K' });
+    const [editSettings, setEditSettings] = useState<ImageEditingSettings>({ model: 'gemini-2.5-flash-image', aspectRatio: 'auto', imageSize: '1K' });
     const [inputImageDimensions, setInputImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
     // Advanced Editing State
@@ -760,9 +763,15 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
 
     const isDalle = genSettings.model === 'dall-e-3';
     const isImagen = genSettings.model === 'imagen-4.0-generate-001';
+    const isGeminiProPreview = genSettings.model === 'gemini-3-pro-image-preview';
+    const isEditGeminiProPreview = editSettings.model === 'gemini-3-pro-image-preview';
+
     const imagenRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
     const dalleRatios = ["1:1", "16:9", "9:16"];
-    const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : []);
+    const geminiRatios = ["1:1", "16:9", "9:16", "4:3", "3:4"];
+    
+    const availableRatios = isImagen ? imagenRatios : (isDalle ? dalleRatios : (isGeminiProPreview ? geminiRatios : []));
+    
     const canGenerate = (activeMode === 'image' && !!prompt) || (activeMode === 'faceSwap' && !!inputImage1 && !!inputImage2) || (activeMode === 'edit' && !!inputImage1 && !isAdvancedStyle && !!prompt);
     
     const pixshopColorFilters = [
@@ -810,10 +819,28 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 <label className="label-style mb-1">Model</label>
                                 <select value={genSettings.model} onChange={(e) => setGenSettings(s => ({ ...s, model: e.target.value as ImageGenerationSettings['model'] }))} className="w-full input-style text-slate-900 dark:text-slate-100">
                                     <option value="imagen-4.0-generate-001">Imagen 4 (Google)</option>
+                                    <option value="gemini-3-pro-image-preview">Gemini 3 Pro Image (Google)</option>
                                     <option value="dall-e-3">DALL·E 3 (OpenAI)</option>
                                 </select>
                             </div>
-                            <Slider label="Number of Images" value={genSettings.numImages} min={1} max={4} step={1} onChange={v => setGenSettings(s => ({ ...s, numImages: v }))} />
+                            
+                            {isGeminiProPreview && (
+                                <div>
+                                    <label className="label-style mb-1">Output Resolution</label>
+                                    <select 
+                                        value={genSettings.imageSize || '1K'} 
+                                        onChange={(e) => setGenSettings(s => ({ ...s, imageSize: e.target.value as '1K' | '2K' | '4K' }))} 
+                                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100"
+                                    >
+                                        <option value="1K">1K</option>
+                                        <option value="2K">2K</option>
+                                        <option value="4K">4K</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {!isGeminiProPreview && <Slider label="Number of Images" value={genSettings.numImages} min={1} max={4} step={1} onChange={v => setGenSettings(s => ({ ...s, numImages: v }))} />}
+                            
                             <div>
                                 <label className="label-style mb-1">Aspect Ratio</label>
                                 <select value={genSettings.aspectRatio} onChange={e => setGenSettings(s => ({ ...s, aspectRatio: e.target.value }))} className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100">
@@ -842,8 +869,25 @@ export const GenerationModal: React.FC<GenerationModalProps> = ({ isOpen, onClos
                                 <label className="label-style mb-1">Model</label>
                                 <select value={editSettings.model} onChange={(e) => setEditSettings(s => ({ ...s, model: e.target.value as ImageEditingSettings['model'] }))} className="w-full input-style text-slate-900 dark:text-slate-100">
                                     <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
+                                    <option value="gemini-3-pro-image-preview">Gemini 3 Pro Image</option>
                                 </select>
                             </div>
+                            
+                            {isEditGeminiProPreview && (
+                                <div>
+                                    <label className="label-style mb-1">Output Resolution</label>
+                                    <select 
+                                        value={editSettings.imageSize || '1K'} 
+                                        onChange={(e) => setEditSettings(s => ({ ...s, imageSize: e.target.value as '1K' | '2K' | '4K' }))} 
+                                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100"
+                                    >
+                                        <option value="1K">1K</option>
+                                        <option value="2K">2K</option>
+                                        <option value="4K">4K</option>
+                                    </select>
+                                </div>
+                            )}
+
                             <div>
                                 <label className="label-style mb-1">Aspect Ratio</label>
                                 <select 
