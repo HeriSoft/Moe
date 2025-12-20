@@ -273,6 +273,7 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
         delete config.aspectRatio; 
         delete config.imageSize;
         delete config.outputSize; 
+        // Gemini 3 Pro uses 'imageConfig', it does not support 'output' dimensions directly in the same way 2.5 Flash does.
     } else {
         // Fallback or specific handling for gemini-2.5-flash-image
         
