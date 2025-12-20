@@ -822,13 +822,19 @@ export default async function handler(req, res) {
                 }
                 await logAction(userEmail, `generated an image with ${payload.model} (cost: ${GENERATE_COST} credits)`);
                 const { model, prompt, config } = payload;
+                
+                // FIX: Extract and standardize the number of images. 
+                // Frontend uses 'numImages', SDK expects 'numberOfImages'.
+                const count = config.numImages || config.numberOfImages || 1;
+
                 if (model === 'dall-e-3') {
                     if (!OPENAI_API_KEY) throw new Error("OpenAI API key not configured.");
                     const size = { '1:1': '1024x1024', '16:9': '1792x1024', '9:16': '1024x1792' }[config.aspectRatio] || '1024x1024';
                     const response = await fetch(OPENAI_IMAGE_API_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-                        body: JSON.stringify({ model: 'dall-e-3', prompt, n: config.numberOfImages || 1, size, response_format: 'b64_json', quality: config.quality || 'standard', style: config.style || 'vivid' }),
+                        // FIX: Use the extracted count
+                        body: JSON.stringify({ model: 'dall-e-3', prompt, n: count, size, response_format: 'b64_json', quality: config.quality || 'standard', style: config.style || 'vivid' }),
                     });
                     if (!response.ok) {
                         const error = await response.json();
@@ -840,7 +846,20 @@ export default async function handler(req, res) {
                     result = { generatedImages: data.data.map(img => ({ image: { imageBytes: img.b64_json } })) };
                 } else {
                     if (!ai) throw new Error("Gemini API key not configured for image generation.");
-                    result = await ai.models.generateImages(payload);
+                    
+                    // FIX: Explicitly map config parameters for Google GenAI SDK
+                    // The SDK ignores 'numImages', it requires 'numberOfImages'.
+                    const genAIConfig = {
+                        numberOfImages: count,
+                        aspectRatio: config.aspectRatio,
+                        // Add other allowed config props here if needed, but strip unknown ones to be safe
+                    };
+
+                    result = await ai.models.generateImages({
+                        model: model,
+                        prompt: prompt,
+                        config: genAIConfig
+                    });
                 }
                 break;
             }
