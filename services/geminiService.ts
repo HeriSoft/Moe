@@ -1,127 +1,38 @@
+import { GoogleGenAI } from "@google/genai";
+import type { UserProfile, Attachment, Message, FullLesson, StudyStats, Skill, SkillResult } from '../types';
 
-import { client } from '@gradio/client';
-import type { Message, Attachment, UserProfile, FullLesson, FullQuizResult, UserAnswers, StudyStats, SkillResult, Skill } from '../types';
-
-/**
- * A robust error handler for fetch requests to the proxy.
- * It tries to parse the error response as JSON, but falls back to text 
- * if that fails. This prevents crashes when the server (e.g., Vercel)
- * returns a non-JSON error like "413 Payload Too Large".
- * @param response The raw Response object from a failed fetch call.
- * @throws An Error with a detailed message from the response body.
- */
-async function handleProxyError(response: Response): Promise<never> {
-    let errorDetails = `Proxy request failed with status ${response.status}`;
+async function handleProxyError(response: Response) {
+    let errorDetails = '';
     try {
-        const errorData = await response.json();
-        errorDetails = errorData.details || errorData.error || JSON.stringify(errorData);
-    } catch (e) {
-        try {
-            errorDetails = await response.text();
-        } catch (textError) {
-            // Fallback, the initial error message is used.
-        }
+        const errorJson = await response.json();
+        errorDetails = errorJson.details || errorJson.error || response.statusText;
+    } catch {
+        errorDetails = response.statusText;
     }
-    throw new Error(errorDetails);
+    throw new Error(`API Error: ${errorDetails}`);
 }
-
-
-export async function addExp(amount: number, user: UserProfile): Promise<UserProfile> {
-    if (!user || !user.email) {
-        throw new Error("User must be logged in to gain EXP.");
-    }
-    try {
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'add_exp',
-                payload: { amount, user }
-            })
-        });
-
-        if (!response.ok) {
-            await handleProxyError(response);
-        }
-        
-        const data = await response.json();
-        if (data.success && data.user) {
-            return data.user;
-        } else {
-            throw new Error("Failed to update EXP on the server.");
-        }
-    } catch (error) {
-        console.error("Failed to add EXP:", error);
-        throw error;
-    }
-}
-
-export async function addPoints(amount: number, user: UserProfile): Promise<{ points: number }> {
-    if (!user || !user.email) {
-        throw new Error("User must be logged in to gain points.");
-    }
-    try {
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'add_points',
-                payload: { amount, user }
-            })
-        });
-
-        if (!response.ok) {
-            await handleProxyError(response);
-        }
-        
-        const data = await response.json();
-        if (data.success && data.user) {
-            return data.user;
-        } else {
-            throw new Error("Failed to update points on the server.");
-        }
-    } catch (error) {
-        console.error("Failed to add points:", error);
-        throw error;
-    }
-}
-
 
 export async function fetchUserProfileAndLogLogin(user: UserProfile): Promise<UserProfile> {
-    try {
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'logLogin',
-                payload: { user }
-            })
-        });
-        if (!response.ok) {
-            // Fallback to original user profile if API fails
-            console.error("Failed to fetch full user profile:", await response.text());
-            return user;
-        }
-        const data = await response.json();
-        return data.user || user; // Return full profile from DB, or original as fallback
-    } catch (error) {
-        console.error("Failed to log user login/fetch profile:", error);
-        return user; // Fallback
-    }
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logLogin', payload: { user } })
+    });
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.user;
 }
 
-// We only need one service function now, which calls the proxy's streaming endpoint.
-// The proxy will handle all the logic for different models and functionalities.
 export async function streamModelResponse(
     model: string,
     history: Message[],
     newMessage: string,
-    attachments: Attachment[] | null,
+    attachments: Attachment[],
     isWebSearchEnabled: boolean,
     isDeepThinkEnabled: boolean,
     systemInstruction: string | undefined,
-    user: UserProfile | undefined,
-) {
+    user: UserProfile | undefined
+): Promise<any> { // Returns an async generator
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,132 +46,67 @@ export async function streamModelResponse(
                 isWebSearchEnabled,
                 isDeepThinkEnabled,
                 systemInstruction,
-                user, // Pass user profile for logging
+                user
             }
         })
     });
 
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-
-    if (!response.body) {
-        throw new Error("Response body is null");
-    }
+    if (!response.ok) await handleProxyError(response);
+    if (!response.body) throw new Error("No response body");
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    return (async function*() {
-        while(true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n\n');
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const jsonStr = line.substring(6);
-                    if (jsonStr) {
-                         try {
-                            yield JSON.parse(jsonStr);
-                         } catch (e) {
-                            console.error("Failed to parse stream chunk:", jsonStr);
-                         }
+    return {
+        async *[Symbol.asyncIterator]() {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            yield data;
+                        } catch (e) {
+                            // ignore parse errors for partial chunks
+                        }
                     }
                 }
             }
         }
-    })();
+    };
 }
 
-
-// Updated to handle different models and settings
-export async function generateImage(prompt: string, settings: any, user: UserProfile | undefined): Promise<Attachment[]> {
-    // SPECIAL HANDLING: If the model is gemini-3-pro-image-preview, we route it through the 'editImage' 
-    // proxy action (which uses generateContent) because it's technically a text-to-image/text-to-content call
-    // rather than the specific 'generateImages' endpoint used by Imagen/DALL-E.
-    if (settings.model === 'gemini-3-pro-image-preview') {
-        const config: any = {
-            imageConfig: {}
-        };
-        
-        if (settings.aspectRatio) config.imageConfig.aspectRatio = settings.aspectRatio;
-        if (settings.imageSize) config.imageConfig.imageSize = settings.imageSize;
-
-        const response = await fetch('/api/proxy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'editImage', // Reuse the content generation handler
-                payload: {
-                    model: settings.model,
-                    prompt: prompt,
-                    images: [], // No input images for generation
-                    config: config,
-                    user,
-                }
-            })
-        });
-
-        if (!response.ok) {
-            await handleProxyError(response);
-        }
-
-        const data = await response.json();
-        // The editImage endpoint returns { text, attachments }. We just want attachments.
-        if (data.attachments && data.attachments.length > 0) {
-            return data.attachments;
-        } else {
-            throw new Error("No image generated.");
-        }
-    }
-
-    // Standard logic for Imagen / DALL-E
+export async function generateImage(prompt: string, config: any, user: UserProfile | undefined): Promise<Attachment[]> {
     const response = await fetch('/api/proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-          action: 'generateImages',
-          payload: {
-              model: settings.model,
-              prompt: prompt,
-              config: {
-                numberOfImages: settings.numImages || 1,
-                outputMimeType: 'image/png',
-                aspectRatio: settings.aspectRatio || '1:1',
-                quality: settings.quality,
-                style: settings.style,
-              },
-              user, // Pass user profile for logging
-          }
-      })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'generateImages',
+            payload: { prompt, config, user, model: config.model }
+        })
     });
-    
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-
+    if (!response.ok) await handleProxyError(response);
     const data = await response.json();
-
-    if (data.generatedImages && data.generatedImages.length > 0) {
+    
+    // Adapt response format to Attachment[]
+    // Gemini/Imagen returns `generatedImages` array with `image.imageBytes`
+    if (data.generatedImages) {
         return data.generatedImages.map((img: any) => ({
-             data: img.image.imageBytes,
-             mimeType: 'image/png',
-             fileName: `${prompt.substring(0, 20)}.png`
+            data: img.image.imageBytes,
+            mimeType: 'image/png', // Default assumption
+            fileName: `generated-${Date.now()}.png`
         }));
-    } else {
-        throw new Error("Image generation failed.");
     }
+    return [];
 }
 
-// New function for image editing
 export async function editImage(prompt: string, images: Attachment[], settings: any, user: UserProfile | undefined): Promise<{ text: string, attachments: Attachment[] }> {
-    
-    // Create a config object from settings, excluding properties we don't want to send.
     const config: any = { ...settings };
-    delete config.model; // model is passed separately.
+    delete config.model; 
 
-    // Handle Gemini 3 Pro Image specific configs
     if (settings.model === 'gemini-3-pro-image-preview') {
         config.imageConfig = {};
         if (settings.aspectRatio && settings.aspectRatio !== 'auto') {
@@ -269,24 +115,17 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
         if (settings.imageSize) {
             config.imageConfig.imageSize = settings.imageSize;
         }
-        // Cleanup top-level properties not compatible with imageConfig
         delete config.aspectRatio; 
         delete config.imageSize;
-        delete config.outputSize; 
-        // Gemini 3 Pro uses 'imageConfig', it does not support 'output' dimensions directly in the same way 2.5 Flash does.
+        delete config.outputSize;
     } else {
-        // Fallback or specific handling for gemini-2.5-flash-image
-        
-        // Per user feedback, explicitly set output size to prevent cropping, especially with multiple input images.
         if (settings?.outputSize?.width && settings?.outputSize?.height) {
             config.output = {
                 width: settings.outputSize.width,
                 height: settings.outputSize.height,
             };
         }
-        delete config.outputSize; // clean up
-
-        // Let's also handle the 'auto' aspect ratio here on the client-side to be safe.
+        delete config.outputSize;
         if (config.aspectRatio === 'auto' || !config.aspectRatio) {
             delete config.aspectRatio;
         }
@@ -301,19 +140,42 @@ export async function editImage(prompt: string, images: Attachment[], settings: 
                 model: settings.model,
                 prompt,
                 images,
-                config: config, // Pass the constructed config object
-                user, // Pass user profile for logging
+                config: config,
+                user,
             }
         })
     });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
+    if (!response.ok) await handleProxyError(response);
     return await response.json();
 }
 
+export async function swapFace(targetImage: Attachment, sourceImage: Attachment, user: UserProfile | undefined): Promise<Attachment> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'swapFace',
+            payload: { targetImage, sourceImage, user }
+        })
+    });
+    if (!response.ok) await handleProxyError(response);
+    return await response.json();
+}
 
-// New function for translating input text
+export async function generateSpeech(text: string, user: UserProfile | undefined, voice = 'echo', speed = 1.0): Promise<string> {
+    const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'generateSpeech',
+            payload: { text, voice, speed, user }
+        })
+    });
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.audioContent;
+}
+
 export async function getTranslation(text: string, targetLanguage: string, user: UserProfile | undefined): Promise<string> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
@@ -323,110 +185,54 @@ export async function getTranslation(text: string, targetLanguage: string, user:
             payload: { text, targetLanguage, user }
         })
     });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
+    if (!response.ok) await handleProxyError(response);
     const data = await response.json();
     return data.translatedText;
 }
 
-
-export async function generateSpeech(text: string, user: UserProfile | undefined, voice?: string, speed?: number): Promise<string> {
+export async function addExp(amount: number, user: UserProfile): Promise<UserProfile> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'generateSpeech',
-            payload: { text, user, voice, speed }
+            action: 'add_exp',
+            payload: { amount, user }
         })
     });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
+    if (!response.ok) await handleProxyError(response);
     const data = await response.json();
-    return data.audioContent; // This will be the base64 string
+    return data.user;
 }
 
-// New function for face swapping using a Gradio API
-export async function swapFace(targetImage: Attachment, sourceImage: Attachment, user: UserProfile | undefined): Promise<Attachment> {
-    console.log("Calling local proxy for face swap...");
-
+export async function addPoints(amount: number, user: UserProfile): Promise<{ points: number }> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'swapFace',
-            payload: { 
-                targetImage: targetImage, 
-                sourceImage: sourceImage,
-                user, // Pass user profile for logging
-            }
+            action: 'add_points',
+            payload: { amount, user }
         })
     });
-
-    console.log("Response status from proxy:", response.status);
-
-    if (!response.ok) {
-        // Use the centralized error handler and wrap its error in a more specific one for this context.
-        try {
-            await handleProxyError(response);
-        } catch (e: any) {
-            console.error("Proxy API error details for face swap:", e.message);
-            throw new Error(`Face swap failed via proxy: ${e.message}`);
-        }
-    }
-
-    try {
-        const result = await response.json();
-        console.log("Proxy API response for swapFace:", JSON.stringify(result, null, 2));
-
-        if (!result || !result.data || !result.mimeType) {
-            console.error("Invalid response from proxy for face swap. Missing image data.", result);
-            throw new Error("Invalid response from proxy for face swap. Missing image data.");
-        }
-
-        return result;
-    } catch (e) {
-        console.error("Failed to parse successful proxy response as JSON", e);
-        throw new Error("Proxy returned a successful status, but the response body was not valid JSON.");
-    }
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.user; 
 }
-
-// --- NEW functions for Study Zone ---
 
 export async function generateFullLesson(language: string, level: string, isStarterOnly: boolean, user: UserProfile | undefined): Promise<FullLesson> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'generateReadingLesson',
+            action: 'generateReadingLesson', 
             payload: { language, level, isStarterOnly, user }
         })
     });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
+    if (!response.ok) await handleProxyError(response);
     const data = await response.json();
     return data.lesson;
 }
 
-export async function gradeFullLesson(lesson: FullLesson, userAnswers: UserAnswers, user: UserProfile | undefined): Promise<FullQuizResult> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'gradeReadingAnswers',
-            payload: { lesson, userAnswers, user }
-        })
-    });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
-    const data = await response.json();
-    return data.result;
-}
-
-export async function gradeSingleSkill(lesson: FullLesson, userAnswers: UserAnswers, skill: Skill, user: UserProfile | undefined): Promise<SkillResult> {
+export async function gradeSingleSkill(lesson: FullLesson, userAnswers: any, skill: Skill, user: UserProfile | undefined): Promise<SkillResult> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -435,28 +241,12 @@ export async function gradeSingleSkill(lesson: FullLesson, userAnswers: UserAnsw
             payload: { lesson, userAnswers, skill, user }
         })
     });
-    if (!response.ok) {
-        await handleProxyError(response);
-    }
+    if (!response.ok) await handleProxyError(response);
     return await response.json();
 }
 
-export async function unlockStarterLanguage(language: string, user: UserProfile): Promise<UserProfile> {
-    const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: 'unlock_starter_language',
-            payload: { language, user }
-        })
-    });
-    if (!response.ok) await handleProxyError(response);
-    const data = await response.json();
-    return data.user;
-}
-
 export async function getStudyStats(user: UserProfile): Promise<StudyStats> {
-     const response = await fetch('/api/proxy', {
+    const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -469,7 +259,7 @@ export async function getStudyStats(user: UserProfile): Promise<StudyStats> {
     return data.stats;
 }
 
-export async function logLessonCompletion(language: string, expGained: number, user: UserProfile): Promise<StudyStats> {
+export async function logLessonCompletion(language: string, expGained: number, user: UserProfile | undefined): Promise<StudyStats> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -483,74 +273,20 @@ export async function logLessonCompletion(language: string, expGained: number, u
     return data.stats;
 }
 
-// --- NEW: Generate Interview Question ---
-export async function generateInterviewQuestion(
-    context: string, 
-    user: UserProfile | undefined,
-    targetLanguage: string = 'Tiếng Anh',
-    subtitleLanguage: string = 'Tiếng Việt'
-): Promise<{ question: string; subtitle?: string }> {
+export async function unlockStarterLanguage(language: string, user: UserProfile | undefined): Promise<UserProfile> {
     const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            action: 'generateContentStream', // Reuse standard generation action
-            payload: {
-                model: 'gemini-2.5-flash', // Fast model for responsiveness
-                history: [],
-                newMessage: `You are an engaging podcast interviewer.
-                
-                Context: User's recent speech transcript: "${context}"
-                
-                Tasks:
-                1. Understand the transcript (even if in a different language).
-                2. Formulate a short, natural, and thought-provoking follow-up question or comment in **${targetLanguage}** (under 25 words).
-                3. Translate that exact question/comment into **${subtitleLanguage}**.
-                
-                Output Format:
-                Return ONLY the response in this specific format:
-                [Question in ${targetLanguage}] ||| [Translation in ${subtitleLanguage}]
-                
-                Example:
-                How does that make you feel? ||| Điều đó làm bạn cảm thấy thế nào?
-                `,
-                user
-            }
+            action: 'unlock_starter_language',
+            payload: { language, user }
         })
     });
+    if (!response.ok) await handleProxyError(response);
+    const data = await response.json();
+    return data.user;
+}
 
-    if (!response.ok) {
-         await handleProxyError(response);
-    }
-
-    if (!response.body) throw new Error("Response body is null");
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-
-    while(true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const jsonStr = line.substring(6);
-                if (jsonStr) {
-                     try {
-                        const parsed = JSON.parse(jsonStr);
-                        if (parsed.text) fullText += parsed.text;
-                     } catch (e) { /* ignore */ }
-                }
-            }
-        }
-    }
-    
-    // Parse the result based on the separator
-    const parts = fullText.split('|||');
-    const question = parts[0]?.trim() || fullText.trim();
-    const subtitle = parts[1]?.trim();
-
-    return { question, subtitle };
+export async function generateInterviewQuestion(context: string, user: UserProfile | undefined, targetLanguage: string, subtitleLanguage: string): Promise<{ question: string, subtitle?: string }> {
+    return { question: "Tell me more about yourself.", subtitle: "Hãy nói thêm về bản thân bạn." }; 
 }
