@@ -8,7 +8,18 @@ const ADMIN_EMAIL = 'heripixiv@gmail.com';
 // Khởi tạo Redis client
 let redis = null;
 if (process.env.REDIS_URL) {
-    redis = new IORedis(process.env.REDIS_URL);
+    try {
+        redis = new IORedis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 1,
+            enableOfflineQueue: false
+        });
+        redis.on('error', (err) => {
+            console.error('Redis Error in /api/admin:', err.message);
+        });
+    } catch (error) {
+        console.error('Redis initialization failed in /api/admin:', error);
+        redis = null;
+    }
 }
 
 // --- Database Connection Setup (with SSL fix) ---
