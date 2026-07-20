@@ -16,7 +16,18 @@ const require = createRequire(import.meta.url);
 // --- Redis Setup ---
 let redis = null;
 if (process.env.REDIS_URL) {
-    redis = new IORedis(process.env.REDIS_URL);
+    try {
+        redis = new IORedis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 1,
+            enableOfflineQueue: false
+        });
+        redis.on('error', (err) => {
+            console.error('Redis Error in /api/proxy:', err.message);
+        });
+    } catch (error) {
+        console.error('Redis initialization failed in /api/proxy:', error);
+        redis = null;
+    }
 }
 const isRedisConfigured = !!redis;
 
