@@ -31,7 +31,18 @@ const ADMIN_EMAIL = 'heripixiv@gmail.com';
 // Setup Redis for caching if available
 let redis = null;
 if (process.env.REDIS_URL) {
-    redis = new IORedis(process.env.REDIS_URL);
+    try {
+        redis = new IORedis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 1,
+            enableOfflineQueue: false
+        });
+        redis.on('error', (err) => {
+            console.error('Redis Error in /api/movies:', err.message);
+        });
+    } catch (error) {
+        console.error('Redis initialization failed in /api/movies:', error);
+        redis = null;
+    }
 }
 
 // --- Helper Functions ---
