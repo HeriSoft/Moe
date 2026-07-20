@@ -21,7 +21,18 @@ const ADMIN_EMAIL = 'heripixiv@gmail.com';
 // --- Redis Setup ---
 let redis = null;
 if (process.env.REDIS_URL) {
-    redis = new IORedis(process.env.REDIS_URL);
+    try {
+        redis = new IORedis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 1,
+            enableOfflineQueue: false
+        });
+        redis.on('error', (err) => {
+            console.error('Redis Error in /api/music:', err.message);
+        });
+    } catch (error) {
+        console.error('Redis initialization failed in /api/music:', error);
+        redis = null;
+    }
 }
 
 // --- Database Table Initialization ---
