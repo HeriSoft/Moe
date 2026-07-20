@@ -19,20 +19,24 @@ if (process.env.REDIS_URL) {
     try {
         redis = new IORedis(process.env.REDIS_URL, {
             maxRetriesPerRequest: 1,
-            enableOfflineQueue: false
+            enableOfflineQueue: false, // Giữ nguyên để tránh treo Serverless Function
+            connectTimeout: 5000       // Giới hạn thời gian kết nối 5s
         });
         redis.on('error', (err) => {
-            console.error('Redis Error in /api/proxy:', err.message);
+            // Chỉ log lỗi, không làm sập ứng dụng
+            console.error('Redis Connection Error:', err.message);
         });
     } catch (error) {
-        console.error('Redis initialization failed in /api/proxy:', error);
+        console.error('Redis initialization failed:', error);
         redis = null;
     }
 }
-const isRedisConfigured = !!redis;
-function isRedisConnected() {
+
+// Hàm kiểm tra Redis có thực sự sẵn sàng không
+function isRedisReady() {
     return redis && redis.status === 'ready';
 }
+const isRedisConfigured = !!redis;
 // --- API Key Configuration ---
 const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
