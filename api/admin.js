@@ -21,7 +21,9 @@ if (process.env.REDIS_URL) {
         redis = null;
     }
 }
-
+function isRedisConnected() {
+    return redis && redis.status === 'ready';
+}
 // --- Database Connection Setup (with SSL fix) ---
 const { Pool } = pg;
 let connectionString = process.env.POSTGRES_URL;
