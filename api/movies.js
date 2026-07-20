@@ -44,7 +44,9 @@ if (process.env.REDIS_URL) {
         redis = null;
     }
 }
-
+function isRedisConnected() {
+    return redis && redis.status === 'ready';
+}
 // --- Helper Functions ---
 
 async function createTables() {
