@@ -30,7 +30,9 @@ if (process.env.REDIS_URL) {
     }
 }
 const isRedisConfigured = !!redis;
-
+function isRedisConnected() {
+    return redis && redis.status === 'ready';
+}
 // --- API Key Configuration ---
 const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
