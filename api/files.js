@@ -34,7 +34,9 @@ if (process.env.REDIS_URL) {
         redis = null;
     }
 }
-
+function isRedisConnected() {
+    return redis && redis.status === 'ready';
+}
 // --- Pro User Check ---
 async function isUserPro(email) {
     if (!email) return false;
