@@ -10,7 +10,7 @@ import moviesHandler from './movies.js';
 import filesHandler from './files.js';
 import musicHandler from './music.js'; // Import the new music handler
 
-const PORT = 3001;
+const PORT = 3000;
 
 // This function adapts a Node.js request/response to the Vercel handler signature
 async function callVercelHandler(handler, req, res) {
