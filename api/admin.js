@@ -5,23 +5,27 @@ import pg from 'pg';
 
 const ADMIN_EMAIL = 'heripixiv@gmail.com';
 
-// Khởi tạo Redis client
+// --- Redis Setup ---
 let redis = null;
 if (process.env.REDIS_URL) {
     try {
         redis = new IORedis(process.env.REDIS_URL, {
             maxRetriesPerRequest: 1,
-            enableOfflineQueue: false
+            enableOfflineQueue: false, // Giữ nguyên để tránh treo Serverless Function
+            connectTimeout: 5000       // Giới hạn thời gian kết nối 5s
         });
         redis.on('error', (err) => {
-            console.error('Redis Error in /api/admin:', err.message);
+            // Chỉ log lỗi, không làm sập ứng dụng
+            console.error('Redis Connection Error:', err.message);
         });
     } catch (error) {
-        console.error('Redis initialization failed in /api/admin:', error);
+        console.error('Redis initialization failed:', error);
         redis = null;
     }
 }
-function isRedisConnected() {
+
+// Hàm kiểm tra Redis có thực sự sẵn sàng không
+function isRedisReady() {
     return redis && redis.status === 'ready';
 }
 // --- Database Connection Setup (with SSL fix) ---
